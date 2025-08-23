@@ -1,4 +1,4 @@
-# Ai-Driver
+# CStrike (Formally Ai-Driver)
 
 An elite, modular offensive security automation framework with full TUI integration, OpenAI-enhanced command chaining, real-time recon, exploitation, and pivoting. Built for serious red team operations with support for split-VPN routing, ZAP/Burp Suite integration, Metasploit RPC automation, and interactive dashboards.
 
@@ -87,7 +87,9 @@ Includes:
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/culpur/ai_driver.git
+mkdir /opt/ai_driver
+cd /opt
+git clone https://github.com/culpur/cstrike.git
 cd ai_driver
 cp .env.example .env
 ```

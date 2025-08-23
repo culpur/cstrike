@@ -78,7 +78,7 @@ def draw_dashboard(stdscr):
         thoughts = get_thoughts()
 
         # Header
-        stdscr.addstr(1, 2, "AI Driver - Status Dashboard", curses.A_BOLD | curses.color_pair(6))
+        stdscr.addstr(1, 2, "CStrike - Status Dashboard", curses.A_BOLD | curses.color_pair(6))
         stdscr.addstr(1, 42, f"VPN IP: {vpn_ip}", curses.color_pair(1))
 
         # System stats
