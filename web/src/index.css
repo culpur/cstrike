@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+:root {
+  /* Grok Dark Theme Variables */
+  --grok-void: #000000;
+  --grok-surface-1: #111111;
+  --grok-surface-2: #1E1E1E;
+  --grok-surface-3: #2A2A2A;
+  --grok-border: #333333;
+  --grok-text-heading: #FFFFFF;
+  --grok-text-body: #E0E0E0;
+  --grok-text-muted: #888888;
+  --grok-hover: #2A2A2A;
+  --grok-rail-bg: #0A0A0A;
+
+  /* Status colors */
+  --grok-success: #10B981;
+  --grok-warning: #F59E0B;
+  --grok-error: #EF4444;
+  --grok-info: #3B82F6;
+
+  /* Offensive security themed */
+  --grok-exploit-red: #DC2626;
+  --grok-recon-blue: #2563EB;
+  --grok-loot-green: #059669;
+  --grok-ai-purple: #7C3AED;
+
+  /* Typography */
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Rendering optimizations */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background-color: var(--grok-void);
+  color: var(--grok-text-body);
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--grok-surface-1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--grok-surface-3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--grok-border);
+}
+
+/* Selection styling */
+::selection {
+  background-color: var(--grok-recon-blue);
+  color: var(--grok-text-heading);
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: 2px solid var(--grok-recon-blue);
+  outline-offset: 2px;
+}
+
+/* Monospace font for code/logs */
+code,
+pre,
+.font-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
+}
