@@ -97,7 +97,7 @@ dnspython==2.7.0
 docopt==0.6.2
 donut-shellcode==1.1
 # dploot==3.1.2  # Incompatible dependency: requires pyasn1<0.5.0 but certipy-ad requires ~=0.6.1
-dropbox==12.0.2
+# dropbox==12.0.2  # Incompatible dependency: requires stone<3.3.3 but stone==3.3.8 present
 dsinternals==1.2.4
 ecdsa==0.19.1
 elastic-transport==8.17.1
