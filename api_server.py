@@ -20,7 +20,12 @@ import time
 # Import CStrike modules
 from modules.recon import run_recon_layered
 from modules.exploitation import run_exploitation_chain
-from modules.loot_tracker import get_loot, add_loot
+from modules.loot_tracker import (
+    get_loot, add_loot, generate_credential_heatmap,
+    get_credentials, get_all_credentials, get_credential_by_id,
+    update_credential_validation
+)
+from modules.credential_validator import validate_credential, validate_credentials_batch
 from modules.ai_assistant import ask_ai, get_thoughts
 
 app = Flask(__name__)
@@ -39,6 +44,8 @@ TARGETS = CONFIG.get("target_scope", [])
 
 # Global state
 active_scans = {}
+active_scans_lock = threading.Lock()  # Thread safety for concurrent scans
+scan_threads = {}  # Track running threads for cancellation
 system_metrics = {
     'cpu': 0,
     'ram': 0,
@@ -205,20 +212,20 @@ def remove_target(target_id):
 
 @app.route('/api/v1/recon/start', methods=['POST'])
 def start_recon():
-    """Start reconnaissance scan"""
+    """Start reconnaissance scan - supports concurrent scanning"""
     target = request.json.get('target')
     tools = request.json.get('tools', [])
 
     if not target:
         return jsonify({'error': 'Target required'}), 400
 
-    scan_id = f"scan_{int(time.time())}"
+    # Generate unique scan ID with timestamp and target hash
+    scan_id = f"scan_{int(time.time() * 1000)}_{hash(target) % 10000}"
+
+    # Create stop event for this scan
+    stop_event = threading.Event()
 
     def run_scan():
-        global current_phase
-        current_phase = 'recon'
-        socketio.emit('phase_change', {'phase': 'recon', 'target': target, 'scan_id': scan_id})
-
         try:
             # Emit scan start
             socketio.emit('recon_output', {
@@ -229,7 +236,20 @@ def start_recon():
                 'timestamp': datetime.now(timezone.utc).isoformat()
             })
 
+            # Update scan status to running with tools info
+            with active_scans_lock:
+                active_scans[scan_id]['running_tools'] = tools
+                active_scans[scan_id]['stop_event'] = stop_event
+
+            # Check for cancellation before starting
+            if stop_event.is_set():
+                raise Exception("Scan cancelled before execution")
+
             results = run_recon_layered(target)
+
+            # Check for cancellation after completion
+            if stop_event.is_set():
+                raise Exception("Scan cancelled")
 
             # Emit scan completion
             socketio.emit('recon_output', {
@@ -240,12 +260,16 @@ def start_recon():
                 'timestamp': datetime.now(timezone.utc).isoformat()
             })
 
-            active_scans[scan_id] = {
-                'status': 'completed',
-                'target': target,
-                'results': results,
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            }
+            with active_scans_lock:
+                active_scans[scan_id].update({
+                    'status': 'completed',
+                    'results': results,
+                    'completed_at': datetime.now(timezone.utc).isoformat()
+                })
+                # Clean up thread reference
+                if scan_id in scan_threads:
+                    del scan_threads[scan_id]
+
         except Exception as e:
             logging.error(f"Scan {scan_id} failed: {e}")
             socketio.emit('recon_output', {
@@ -255,33 +279,234 @@ def start_recon():
                 'error': str(e),
                 'timestamp': datetime.now(timezone.utc).isoformat()
             })
-            active_scans[scan_id] = {
-                'status': 'failed',
-                'error': str(e)
-            }
 
-        current_phase = 'idle'
-        socketio.emit('phase_change', {'phase': 'idle', 'target': target, 'scan_id': scan_id})
+            with active_scans_lock:
+                active_scans[scan_id].update({
+                    'status': 'failed' if 'cancelled' not in str(e).lower() else 'cancelled',
+                    'error': str(e),
+                    'completed_at': datetime.now(timezone.utc).isoformat()
+                })
+                # Clean up thread reference
+                if scan_id in scan_threads:
+                    del scan_threads[scan_id]
 
+    # Create and start thread
     thread = threading.Thread(target=run_scan, daemon=True)
     thread.start()
 
-    active_scans[scan_id] = {
-        'status': 'running',
-        'target': target,
-        'tools': tools,
-        'started': datetime.now(timezone.utc).isoformat()
-    }
+    # Store scan info and thread reference with thread safety
+    with active_scans_lock:
+        active_scans[scan_id] = {
+            'status': 'running',
+            'target': target,
+            'tools': tools,
+            'started_at': datetime.now(timezone.utc).isoformat(),
+            'stop_event': stop_event
+        }
+        scan_threads[scan_id] = thread
 
-    return jsonify({'scan_id': scan_id, 'status': 'started'})
+    return jsonify({'scan_id': scan_id, 'status': 'started', 'target': target})
 
 
 @app.route('/api/v1/recon/status/<scan_id>', methods=['GET'])
 def get_scan_status(scan_id):
     """Get scan status"""
-    if scan_id in active_scans:
-        return jsonify(active_scans[scan_id])
+    with active_scans_lock:
+        if scan_id in active_scans:
+            # Return copy without stop_event (not JSON serializable)
+            scan_info = {k: v for k, v in active_scans[scan_id].items() if k != 'stop_event'}
+            return jsonify(scan_info)
     return jsonify({'error': 'Scan not found'}), 404
+
+
+@app.route('/api/v1/recon/active', methods=['GET'])
+def get_active_scans():
+    """Get all currently active (running) scans"""
+    with active_scans_lock:
+        active = []
+        for scan_id, scan_info in active_scans.items():
+            if scan_info.get('status') == 'running':
+                # Create clean copy without stop_event
+                clean_info = {
+                    'scan_id': scan_id,
+                    'target': scan_info.get('target'),
+                    'tools': scan_info.get('tools', []),
+                    'running_tools': scan_info.get('running_tools', []),
+                    'started_at': scan_info.get('started_at'),
+                    'status': scan_info.get('status')
+                }
+                active.append(clean_info)
+
+    return jsonify({
+        'active_scans': active,
+        'count': len(active)
+    })
+
+
+@app.route('/api/v1/recon/batch', methods=['POST'])
+def start_batch_recon():
+    """Start reconnaissance scans on multiple targets simultaneously"""
+    targets = request.json.get('targets', [])
+    tools = request.json.get('tools', [])
+
+    if not targets or not isinstance(targets, list):
+        return jsonify({'error': 'targets array required'}), 400
+
+    if len(targets) == 0:
+        return jsonify({'error': 'At least one target required'}), 400
+
+    # Limit concurrent scans for safety
+    MAX_CONCURRENT_SCANS = 10
+    if len(targets) > MAX_CONCURRENT_SCANS:
+        return jsonify({
+            'error': f'Maximum {MAX_CONCURRENT_SCANS} concurrent scans allowed'
+        }), 400
+
+    scan_ids = []
+    failed_targets = []
+
+    for target in targets:
+        if not target or not isinstance(target, str):
+            failed_targets.append({'target': target, 'reason': 'Invalid target format'})
+            continue
+
+        try:
+            # Generate unique scan ID
+            scan_id = f"scan_{int(time.time() * 1000)}_{hash(target) % 10000}"
+            stop_event = threading.Event()
+
+            def run_scan(target_url=target, sid=scan_id, stop_evt=stop_event):
+                try:
+                    # Emit scan start
+                    socketio.emit('recon_output', {
+                        'scan_id': sid,
+                        'target': target_url,
+                        'event': 'started',
+                        'message': f'Starting batch reconnaissance on {target_url}',
+                        'timestamp': datetime.now(timezone.utc).isoformat()
+                    })
+
+                    # Update scan status
+                    with active_scans_lock:
+                        active_scans[sid]['running_tools'] = tools
+
+                    if stop_evt.is_set():
+                        raise Exception("Scan cancelled before execution")
+
+                    results = run_recon_layered(target_url)
+
+                    if stop_evt.is_set():
+                        raise Exception("Scan cancelled")
+
+                    # Emit completion
+                    socketio.emit('recon_output', {
+                        'scan_id': sid,
+                        'target': target_url,
+                        'event': 'completed',
+                        'results': results,
+                        'timestamp': datetime.now(timezone.utc).isoformat()
+                    })
+
+                    with active_scans_lock:
+                        active_scans[sid].update({
+                            'status': 'completed',
+                            'results': results,
+                            'completed_at': datetime.now(timezone.utc).isoformat()
+                        })
+                        if sid in scan_threads:
+                            del scan_threads[sid]
+
+                except Exception as e:
+                    logging.error(f"Batch scan {sid} failed: {e}")
+                    socketio.emit('recon_output', {
+                        'scan_id': sid,
+                        'target': target_url,
+                        'event': 'failed',
+                        'error': str(e),
+                        'timestamp': datetime.now(timezone.utc).isoformat()
+                    })
+
+                    with active_scans_lock:
+                        active_scans[sid].update({
+                            'status': 'failed' if 'cancelled' not in str(e).lower() else 'cancelled',
+                            'error': str(e),
+                            'completed_at': datetime.now(timezone.utc).isoformat()
+                        })
+                        if sid in scan_threads:
+                            del scan_threads[sid]
+
+            # Create and start thread
+            thread = threading.Thread(target=run_scan, daemon=True)
+            thread.start()
+
+            # Store scan info
+            with active_scans_lock:
+                active_scans[scan_id] = {
+                    'status': 'running',
+                    'target': target,
+                    'tools': tools,
+                    'started_at': datetime.now(timezone.utc).isoformat(),
+                    'stop_event': stop_event,
+                    'batch': True
+                }
+                scan_threads[scan_id] = thread
+
+            scan_ids.append(scan_id)
+
+        except Exception as e:
+            logging.error(f"Failed to start scan for {target}: {e}")
+            failed_targets.append({'target': target, 'reason': str(e)})
+
+    response = {
+        'status': 'started',
+        'scan_ids': scan_ids,
+        'successful': len(scan_ids),
+        'total': len(targets)
+    }
+
+    if failed_targets:
+        response['failed'] = failed_targets
+
+    return jsonify(response), 200 if len(scan_ids) > 0 else 400
+
+
+@app.route('/api/v1/recon/scans/<scan_id>', methods=['DELETE'])
+def cancel_scan(scan_id):
+    """Cancel a running scan and clean up resources"""
+    with active_scans_lock:
+        if scan_id not in active_scans:
+            return jsonify({'error': 'Scan not found'}), 404
+
+        scan_info = active_scans[scan_id]
+
+        if scan_info.get('status') != 'running':
+            return jsonify({
+                'error': f'Scan is not running (status: {scan_info.get("status")})'
+            }), 400
+
+        # Set stop event to signal cancellation
+        stop_event = scan_info.get('stop_event')
+        if stop_event:
+            stop_event.set()
+
+        # Update status
+        scan_info['status'] = 'cancelling'
+        scan_info['cancel_requested_at'] = datetime.now(timezone.utc).isoformat()
+
+    # Emit cancellation event
+    socketio.emit('recon_output', {
+        'scan_id': scan_id,
+        'target': scan_info.get('target'),
+        'event': 'cancelled',
+        'message': 'Scan cancellation requested',
+        'timestamp': datetime.now(timezone.utc).isoformat()
+    })
+
+    return jsonify({
+        'scan_id': scan_id,
+        'status': 'cancelling',
+        'message': 'Scan cancellation requested. The scan will stop shortly.'
+    })
 
 
 @app.route('/api/v1/loot/<target>', methods=['GET'])
@@ -301,6 +526,264 @@ def get_target_loot(target):
         }
 
     return jsonify(loot)
+
+
+@app.route('/api/v1/loot/heatmap', methods=['GET'])
+def get_loot_heatmap():
+    """
+    Get credential heatmap with priority scoring.
+
+    Query parameters:
+        limit (int): Maximum number of credentials to return (default: 50)
+        min_score (float): Minimum score threshold (default: 0)
+
+    Returns:
+        JSON array of scored credentials sorted by priority (highest first)
+    """
+    try:
+        limit = request.args.get('limit', 50, type=int)
+        min_score = request.args.get('min_score', 0, type=float)
+
+        # Limit bounds checking
+        limit = max(1, min(limit, 500))  # Between 1 and 500
+
+        # Generate heatmap
+        heatmap = generate_credential_heatmap(limit=limit)
+
+        # Filter by minimum score if specified
+        if min_score > 0:
+            heatmap = [cred for cred in heatmap if cred['score'] >= min_score]
+
+        return jsonify({
+            'credentials': heatmap,
+            'count': len(heatmap),
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+
+    except Exception as e:
+        logging.error(f"Heatmap generation failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/loot/credentials', methods=['GET'])
+def get_all_creds():
+    """Get all credentials across all targets"""
+    try:
+        target = request.args.get('target')
+
+        if target:
+            credentials = get_credentials(target)
+        else:
+            credentials = get_all_credentials()
+
+        return jsonify({
+            'credentials': credentials,
+            'count': len(credentials),
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+
+    except Exception as e:
+        logging.error(f"Failed to retrieve credentials: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/loot/credentials/validate', methods=['POST'])
+def validate_single_credential():
+    """
+    Validate a single credential against target service
+
+    Request body:
+        {
+            "credential_id": "cred_123",
+            "target": "192.168.1.10",
+            "username": "admin",
+            "password": "password123",
+            "service": "ssh",
+            "port": 22  // optional
+        }
+
+    Returns:
+        {
+            "credential_id": "cred_123",
+            "valid": true/false,
+            "service": "ssh",
+            "target": "192.168.1.10",
+            "username": "admin",
+            "tested_at": "2025-12-25T10:00:00Z",
+            "error": null,
+            "details": {...}
+        }
+    """
+    try:
+        data = request.json
+
+        # Validate required fields
+        required_fields = ['credential_id', 'target', 'username', 'password', 'service']
+        missing_fields = [field for field in required_fields if field not in data]
+
+        if missing_fields:
+            return jsonify({
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
+            }), 400
+
+        # Extract credential data
+        credential_id = data['credential_id']
+        target = data['target']
+        username = data['username']
+        password = data['password']
+        service = data['service']
+        port = data.get('port')
+
+        # Perform validation in background thread to avoid blocking
+        def run_validation():
+            try:
+                result = validate_credential(
+                    credential_id=credential_id,
+                    target=target,
+                    username=username,
+                    password=password,
+                    service=service,
+                    port=port
+                )
+
+                # Update loot tracker with result
+                update_credential_validation(credential_id, result)
+
+                # Emit WebSocket event for real-time updates
+                socketio.emit('loot_item', {
+                    'event': 'credential_validated',
+                    'credential_id': credential_id,
+                    'result': result,
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                })
+
+                logging.info(
+                    f"Credential {credential_id} validated: "
+                    f"{result['valid']} ({service}://{username}@{target})"
+                )
+
+            except Exception as e:
+                logging.error(f"Validation thread error for {credential_id}: {e}")
+
+        # Start validation in background
+        thread = threading.Thread(target=run_validation, daemon=True)
+        thread.start()
+
+        return jsonify({
+            'status': 'started',
+            'message': 'Credential validation initiated',
+            'credential_id': credential_id
+        })
+
+    except Exception as e:
+        logging.error(f"Credential validation request failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/loot/credentials/validate/batch', methods=['POST'])
+def validate_batch_credentials():
+    """
+    Validate multiple credentials in batch
+
+    Request body:
+        {
+            "credentials": [
+                {
+                    "credential_id": "cred_1",
+                    "target": "192.168.1.10",
+                    "username": "admin",
+                    "password": "password123",
+                    "service": "ssh",
+                    "port": 22  // optional
+                },
+                ...
+            ]
+        }
+
+    Returns:
+        {
+            "status": "started",
+            "count": 5,
+            "message": "Batch validation initiated for 5 credentials"
+        }
+    """
+    try:
+        data = request.json
+        credentials = data.get('credentials', [])
+
+        if not credentials or not isinstance(credentials, list):
+            return jsonify({'error': 'credentials array required'}), 400
+
+        if len(credentials) == 0:
+            return jsonify({'error': 'At least one credential required'}), 400
+
+        # Limit batch size for safety
+        MAX_BATCH_SIZE = 50
+        if len(credentials) > MAX_BATCH_SIZE:
+            return jsonify({
+                'error': f'Maximum {MAX_BATCH_SIZE} credentials allowed per batch'
+            }), 400
+
+        # Validate all credentials have required fields
+        for i, cred in enumerate(credentials):
+            required_fields = ['credential_id', 'target', 'username', 'password', 'service']
+            missing = [f for f in required_fields if f not in cred]
+
+            if missing:
+                return jsonify({
+                    'error': f'Credential at index {i} missing fields: {", ".join(missing)}'
+                }), 400
+
+        # Process batch validation in background
+        def run_batch_validation():
+            try:
+                results = validate_credentials_batch(credentials)
+
+                # Update loot tracker and emit events for each result
+                for result in results:
+                    credential_id = result['credential_id']
+
+                    # Update storage
+                    update_credential_validation(credential_id, result)
+
+                    # Emit WebSocket event
+                    socketio.emit('loot_item', {
+                        'event': 'credential_validated',
+                        'credential_id': credential_id,
+                        'result': result,
+                        'timestamp': datetime.now(timezone.utc).isoformat()
+                    })
+
+                # Emit batch completion event
+                valid_count = sum(1 for r in results if r['valid'])
+                socketio.emit('loot_item', {
+                    'event': 'batch_validation_complete',
+                    'total': len(results),
+                    'valid': valid_count,
+                    'invalid': len(results) - valid_count,
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                })
+
+                logging.info(
+                    f"Batch validation complete: {valid_count}/{len(results)} valid"
+                )
+
+            except Exception as e:
+                logging.error(f"Batch validation thread error: {e}")
+
+        # Start batch validation in background
+        thread = threading.Thread(target=run_batch_validation, daemon=True)
+        thread.start()
+
+        return jsonify({
+            'status': 'started',
+            'count': len(credentials),
+            'message': f'Batch validation initiated for {len(credentials)} credentials'
+        })
+
+    except Exception as e:
+        logging.error(f"Batch validation request failed: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/v1/ai/thoughts', methods=['GET'])

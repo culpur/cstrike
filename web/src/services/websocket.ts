@@ -71,6 +71,39 @@ class WebSocketService {
     this.socket.on('phase_change', (data) => {
       this.handleServerMessage('phase_change', data);
     });
+
+    // Listen for exploitation events
+    this.socket.on('exploit_result', (data) => {
+      this.handleServerMessage('exploit_result', data);
+    });
+
+    this.socket.on('exploit_started', (data) => {
+      this.handleServerMessage('exploit_started', data);
+    });
+
+    this.socket.on('exploit_completed', (data) => {
+      this.handleServerMessage('exploit_completed', data);
+    });
+
+    this.socket.on('exploit_failed', (data) => {
+      this.handleServerMessage('exploit_failed', data);
+    });
+
+    this.socket.on('vulnerability_discovered', (data) => {
+      this.handleServerMessage('vulnerability_discovered', data);
+    });
+
+    this.socket.on('shell_obtained', (data) => {
+      this.handleServerMessage('shell_obtained', data);
+    });
+
+    this.socket.on('credential_extracted', (data) => {
+      this.handleServerMessage('credential_extracted', data);
+    });
+
+    this.socket.on('file_downloaded', (data) => {
+      this.handleServerMessage('file_downloaded', data);
+    });
   }
 
   /**

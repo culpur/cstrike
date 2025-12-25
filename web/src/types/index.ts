@@ -90,6 +90,84 @@ export interface ReconOutput {
 }
 
 // ============================================================================
+// Comprehensive Scan Result Types
+// ============================================================================
+
+export interface HttpEndpoint {
+  url: string;
+  statusCode: number;
+  title?: string;
+  contentLength?: number;
+  technologies?: string[];
+  headers?: Record<string, string>;
+}
+
+export interface DetectedTechnology {
+  name: string;
+  version?: string;
+  category: string;
+  confidence: number;
+}
+
+export interface VulnerabilityFinding {
+  id: string;
+  title: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  description: string;
+  cvss?: number;
+  cve?: string;
+  affectedComponent?: string;
+  remediation?: string;
+  references?: string[];
+}
+
+export interface DetailedPortScanResult extends PortScanResult {
+  banner?: string;
+  scripts?: Record<string, string>;
+  cpe?: string[];
+}
+
+export interface DetailedSubdomainResult extends SubdomainResult {
+  ipAddresses?: string[];
+  alive?: boolean;
+  httpStatus?: number;
+}
+
+export interface CompleteScanResults {
+  scanId: string;
+  target: string;
+  startTime: number;
+  endTime: number;
+  status: 'completed' | 'failed' | 'partial';
+  toolsUsed: ReconToolType[];
+
+  // Detailed results by category
+  ports: DetailedPortScanResult[];
+  subdomains: DetailedSubdomainResult[];
+  httpEndpoints: HttpEndpoint[];
+  technologies: DetectedTechnology[];
+  vulnerabilities: VulnerabilityFinding[];
+
+  // Statistics
+  stats: {
+    totalPorts: number;
+    openPorts: number;
+    totalSubdomains: number;
+    aliveSubdomains: number;
+    totalEndpoints: number;
+    totalVulnerabilities: number;
+    criticalVulns: number;
+    highVulns: number;
+    mediumVulns: number;
+    lowVulns: number;
+  };
+
+  // Raw output for reference
+  rawOutput?: string[];
+  errors?: string[];
+}
+
+// ============================================================================
 // AI Thought Stream Types
 // ============================================================================
 
@@ -171,6 +249,7 @@ export interface CredentialPair {
   password: string;
   source: string;
   target: string;
+  port?: number;
   validated: boolean;
   timestamp: number;
 }
@@ -180,6 +259,30 @@ export interface LootStats {
   byCategory: Record<LootCategory, number>;
   uniqueTargets: number;
   validatedCredentials: number;
+}
+
+export interface ScoreBreakdown {
+  reuse_count: number;
+  reuse_score: number;
+  username_weight: number;
+  service_weight: number;
+  complexity_score: number;
+  complexity_penalty: number;
+}
+
+export interface ScoredCredential {
+  username: string;
+  password: string;
+  service: string;
+  target: string;
+  score: number;
+  breakdown: ScoreBreakdown;
+}
+
+export interface HeatmapResponse {
+  credentials: ScoredCredential[];
+  count: number;
+  timestamp: string;
 }
 
 // ============================================================================
@@ -216,6 +319,13 @@ export type WSMessageType =
   | 'recon_output'
   | 'ai_thought'
   | 'exploit_result'
+  | 'exploit_started'
+  | 'exploit_completed'
+  | 'exploit_failed'
+  | 'vulnerability_discovered'
+  | 'shell_obtained'
+  | 'credential_extracted'
+  | 'file_downloaded'
   | 'loot_item'
   | 'log_entry'
   | 'tool_update';

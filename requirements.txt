@@ -33,6 +33,10 @@ rich>=13.9.4
 PyYAML>=6.0.2
 beautifulsoup4>=4.13.4
 
+# Credential Validation System
+paramiko>=3.5.0  # SSH client for credential validation
+ftplib  # Standard library, no installation needed
+
 # Common dependencies
 certifi>=2025.1.31
 charset-normalizer>=3.4.2

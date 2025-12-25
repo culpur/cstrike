@@ -10,6 +10,7 @@ import type {
   LootItem,
   CredentialPair,
   LogEntry,
+  HeatmapResponse,
 } from '@/types';
 
 class ApiService {
@@ -124,9 +125,37 @@ class ApiService {
     return data;
   }
 
-  async stopRecon(_targetId: string): Promise<void> {
-    // TODO: Backend doesn't have a stop endpoint yet
-    throw new Error('Stop reconnaissance not implemented in backend');
+  async stopRecon(scanId: string): Promise<void> {
+    // Backend expects DELETE /recon/scans/<scan_id>
+    await this.client.delete(`/recon/scans/${scanId}`);
+  }
+
+  async getActiveScans(): Promise<{
+    active_scans: Array<{
+      scan_id: string;
+      target: string;
+      tools: string[];
+      running_tools?: string[];
+      started_at: string;
+      status: string;
+    }>;
+    count: number;
+  }> {
+    // Backend: GET /recon/active
+    const { data } = await this.client.get('/recon/active');
+    return data;
+  }
+
+  async startBatchRecon(targets: string[], tools: string[]): Promise<{
+    status: string;
+    scan_ids: string[];
+    successful: number;
+    total: number;
+    failed?: Array<{ target: string; reason: string }>;
+  }> {
+    // Backend: POST /recon/batch with {targets, tools}
+    const { data } = await this.client.post('/recon/batch', { targets, tools });
+    return data;
   }
 
   // ============================================================================
@@ -182,15 +211,56 @@ class ApiService {
     return items;
   }
 
-  async getCredentials(): Promise<CredentialPair[]> {
-    // TODO: Backend doesn't have a dedicated credentials endpoint
-    // Would need to combine usernames and passwords from /loot/<target>
-    throw new Error('Get credentials not implemented in backend');
+  async getCredentials(target?: string): Promise<CredentialPair[]> {
+    // Backend: GET /loot/credentials?target=<target>
+    const params = target ? { target } : {};
+    const { data } = await this.client.get('/loot/credentials', { params });
+    return data.credentials || [];
   }
 
-  async validateCredential(_id: string): Promise<boolean> {
-    // TODO: Backend doesn't have credential validation endpoint
-    throw new Error('Credential validation not implemented in backend');
+  async validateCredential(
+    credentialId: string,
+    target: string,
+    username: string,
+    password: string,
+    service: string,
+    port?: number
+  ): Promise<{status: string; message: string; credential_id: string}> {
+    // Backend: POST /loot/credentials/validate
+    const { data } = await this.client.post('/loot/credentials/validate', {
+      credential_id: credentialId,
+      target,
+      username,
+      password,
+      service,
+      port,
+    });
+    return data;
+  }
+
+  async validateCredentialsBatch(
+    credentials: Array<{
+      credential_id: string;
+      target: string;
+      username: string;
+      password: string;
+      service: string;
+      port?: number;
+    }>
+  ): Promise<{status: string; count: number; message: string}> {
+    // Backend: POST /loot/credentials/validate/batch
+    const { data } = await this.client.post('/loot/credentials/validate/batch', {
+      credentials,
+    });
+    return data;
+  }
+
+  async getLootHeatmap(limit = 50, minScore = 0): Promise<HeatmapResponse> {
+    // Backend: GET /loot/heatmap?limit=N&min_score=X
+    const { data } = await this.client.get('/loot/heatmap', {
+      params: { limit, min_score: minScore },
+    });
+    return data;
   }
 
   // ============================================================================

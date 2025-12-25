@@ -10,6 +10,7 @@ import type {
   SubdomainResult,
   ReconOutput,
   ReconToolType,
+  CompleteScanResults,
 } from '@/types';
 import { generateId } from '@utils/index';
 
@@ -21,6 +22,7 @@ interface ReconStore {
   subdomainResults: SubdomainResult[];
   reconOutputs: ReconOutput[];
   activeScans: Set<string>;
+  completedScans: Map<string, CompleteScanResults>; // scanId -> results
 
   // Actions
   addTarget: (url: string) => void;
@@ -36,6 +38,8 @@ interface ReconStore {
 
   startScan: (targetId: string) => void;
   completeScan: (targetId: string) => void;
+  storeScanResults: (scanId: string, results: CompleteScanResults) => void;
+  getScanResults: (scanId: string) => CompleteScanResults | undefined;
 
   clearResults: () => void;
   reset: () => void;
@@ -52,7 +56,7 @@ const defaultTools: ReconTool[] = [
   { name: 'dnsenum', enabled: false, running: false },
 ];
 
-export const useReconStore = create<ReconStore>((set) => ({
+export const useReconStore = create<ReconStore>((set, get) => ({
   // Initial state
   targets: [],
   tools: defaultTools,
@@ -60,6 +64,7 @@ export const useReconStore = create<ReconStore>((set) => ({
   subdomainResults: [],
   reconOutputs: [],
   activeScans: new Set(),
+  completedScans: new Map(),
 
   // Actions
   addTarget: (url) =>
@@ -142,6 +147,17 @@ export const useReconStore = create<ReconStore>((set) => ({
       };
     }),
 
+  storeScanResults: (scanId, results) =>
+    set((state) => {
+      const completedScans = new Map(state.completedScans);
+      completedScans.set(scanId, results);
+      return { completedScans };
+    }),
+
+  getScanResults: (scanId) => {
+    return get().completedScans.get(scanId);
+  },
+
   clearResults: () =>
     set({
       portScanResults: [],
@@ -157,5 +173,6 @@ export const useReconStore = create<ReconStore>((set) => ({
       subdomainResults: [],
       reconOutputs: [],
       activeScans: new Set(),
+      completedScans: new Map(),
     }),
 }));

@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Play, Square } from 'lucide-react';
+import { Plus, Trash2, Play, Square, PlayCircle, XCircle } from 'lucide-react';
 import { Button, Panel, Input, StatusBadge } from '@components/ui';
 import { useReconStore } from '@stores/reconStore';
 import { useUIStore } from '@stores/uiStore';
@@ -12,11 +12,22 @@ import { wsService } from '@services/websocket';
 import { formatTime, isValidUrl } from '@utils/index';
 import type { ReconOutput, PortScanResult, SubdomainResult } from '@/types';
 
+interface ActiveScan {
+  scan_id: string;
+  target: string;
+  tools: string[];
+  running_tools?: string[];
+  started_at: string;
+  status: string;
+}
+
 export function ReconnaissanceView() {
   const [targetUrl, setTargetUrl] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [activeScanId, setActiveScanId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [activeScans, setActiveScans] = useState<ActiveScan[]>([]);
+  const [isBatchScanning, setIsBatchScanning] = useState(false);
 
   const {
     targets,
@@ -32,7 +43,6 @@ export function ReconnaissanceView() {
     addSubdomainResult,
     addReconOutput,
     startScan,
-    completeScan,
   } = useReconStore();
 
   const { addToast } = useUIStore();
@@ -56,6 +66,24 @@ export function ReconnaissanceView() {
     loadTargets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
+
+  // Poll active scans periodically
+  useEffect(() => {
+    const pollActiveScans = async () => {
+      try {
+        const response = await apiService.getActiveScans();
+        setActiveScans(response.active_scans);
+      } catch (error) {
+        console.error('Failed to fetch active scans:', error);
+      }
+    };
+
+    // Poll immediately and then every 3 seconds
+    pollActiveScans();
+    const interval = setInterval(pollActiveScans, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Poll scan status when active scan
   useEffect(() => {
@@ -189,20 +217,69 @@ export function ReconnaissanceView() {
     }
   };
 
-  const handleStopScan = async (targetId: string) => {
+  const handleStopScan = async (scanId: string) => {
     try {
-      await apiService.stopRecon(targetId);
-      completeScan(targetId);
-      tools.forEach((tool) => setToolRunning(tool.name, false));
+      await apiService.stopRecon(scanId);
       addToast({
         type: 'info',
-        message: 'Reconnaissance stopped',
+        message: 'Scan cancellation requested',
       });
+      // Refresh active scans list
+      const response = await apiService.getActiveScans();
+      setActiveScans(response.active_scans);
     } catch (error) {
       addToast({
         type: 'error',
-        message: 'Failed to stop reconnaissance',
+        message: 'Failed to stop scan',
       });
+    }
+  };
+
+  const handleBatchScan = async () => {
+    const targetUrls = targets.map((t) => t.url);
+    const enabledTools = tools.filter((t) => t.enabled).map((t) => t.name);
+
+    if (targetUrls.length === 0) {
+      addToast({
+        type: 'warning',
+        message: 'No targets available for batch scanning',
+      });
+      return;
+    }
+
+    if (enabledTools.length === 0) {
+      addToast({
+        type: 'warning',
+        message: 'Please enable at least one tool',
+      });
+      return;
+    }
+
+    setIsBatchScanning(true);
+    try {
+      const response = await apiService.startBatchRecon(targetUrls, enabledTools);
+      addToast({
+        type: 'success',
+        message: `Batch scan started: ${response.successful}/${response.total} targets`,
+      });
+
+      if (response.failed && response.failed.length > 0) {
+        addToast({
+          type: 'warning',
+          message: `${response.failed.length} targets failed to start`,
+        });
+      }
+
+      // Refresh active scans list
+      const activeResponse = await apiService.getActiveScans();
+      setActiveScans(activeResponse.active_scans);
+    } catch (error) {
+      addToast({
+        type: 'error',
+        message: 'Failed to start batch scan',
+      });
+    } finally {
+      setIsBatchScanning(false);
     }
   };
 
@@ -228,28 +305,92 @@ export function ReconnaissanceView() {
 
       {/* Tool Selection */}
       <Panel title="Reconnaissance Tools">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {tools.map((tool) => (
-            <button
-              key={tool.name}
-              onClick={() => toggleTool(tool.name)}
-              className={cn(
-                'p-3 rounded-lg border transition-all text-left',
-                tool.enabled
-                  ? 'bg-grok-recon-blue/10 border-grok-recon-blue text-grok-recon-blue'
-                  : 'bg-grok-surface-2 border-grok-border text-grok-text-muted hover:border-grok-text-muted'
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">{tool.name}</span>
-                {tool.running && (
-                  <span className="w-2 h-2 bg-current rounded-full animate-pulse" />
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {tools.map((tool) => (
+              <button
+                key={tool.name}
+                onClick={() => toggleTool(tool.name)}
+                className={cn(
+                  'p-3 rounded-lg border transition-all text-left',
+                  tool.enabled
+                    ? 'bg-grok-recon-blue/10 border-grok-recon-blue text-grok-recon-blue'
+                    : 'bg-grok-surface-2 border-grok-border text-grok-text-muted hover:border-grok-text-muted'
                 )}
-              </div>
-            </button>
-          ))}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{tool.name}</span>
+                  {tool.running && (
+                    <span className="w-2 h-2 bg-current rounded-full animate-pulse" />
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-end">
+            <Button
+              onClick={handleBatchScan}
+              isLoading={isBatchScanning}
+              disabled={targets.length === 0 || tools.filter(t => t.enabled).length === 0}
+              variant="primary"
+            >
+              <PlayCircle className="w-4 h-4 mr-2" />
+              Scan All Targets ({targets.length})
+            </Button>
+          </div>
         </div>
       </Panel>
+
+      {/* Active Scans */}
+      {activeScans.length > 0 && (
+        <Panel title={`Active Scans (${activeScans.length})`}>
+          <div className="space-y-3">
+            {activeScans.map((scan) => (
+              <div
+                key={scan.scan_id}
+                className="flex items-center justify-between p-3 bg-grok-surface-2 rounded-lg border border-grok-border"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-grok-recon-blue rounded-full animate-pulse" />
+                    <p className="text-sm font-medium text-grok-text-heading truncate">
+                      {scan.target}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <p className="text-xs text-grok-text-muted font-mono">
+                      {scan.scan_id}
+                    </p>
+                    <p className="text-xs text-grok-text-muted">
+                      Started {new Date(scan.started_at).toLocaleTimeString()}
+                    </p>
+                  </div>
+                  {scan.running_tools && scan.running_tools.length > 0 && (
+                    <div className="flex gap-1 mt-2">
+                      {scan.running_tools.map((tool) => (
+                        <span
+                          key={tool}
+                          className="text-xs px-2 py-0.5 bg-grok-recon-blue/10 text-grok-recon-blue rounded"
+                        >
+                          {tool}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() => handleStopScan(scan.scan_id)}
+                >
+                  <XCircle className="w-3 h-3 mr-1" />
+                  Cancel
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
 
       {/* Targets List */}
       <Panel title={`Targets (${targets.length})`}>
@@ -274,26 +415,30 @@ export function ReconnaissanceView() {
                 </div>
                 <div className="flex items-center gap-2 ml-4">
                   <StatusBadge status={target.status} />
-                  {target.status === 'scanning' ? (
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => handleStopScan(target.id)}
-                    >
-                      <Square className="w-3 h-3 mr-1" />
-                      Stop
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      onClick={() => handleStartScan(target.id)}
-                      disabled={isScanning}
-                    >
-                      <Play className="w-3 h-3 mr-1" />
-                      Scan
-                    </Button>
-                  )}
+                  {/* Check if this target has an active scan */}
+                  {(() => {
+                    const activeScan = activeScans.find((s) => s.target === target.url);
+                    return activeScan ? (
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => handleStopScan(activeScan.scan_id)}
+                      >
+                        <Square className="w-3 h-3 mr-1" />
+                        Stop
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => handleStartScan(target.url)}
+                        disabled={isScanning}
+                      >
+                        <Play className="w-3 h-3 mr-1" />
+                        Scan
+                      </Button>
+                    );
+                  })()}
                   <Button
                     size="sm"
                     variant="ghost"

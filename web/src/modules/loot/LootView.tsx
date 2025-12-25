@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Download, Check } from 'lucide-react';
+import { Download, Check, X, Clock, Target } from 'lucide-react';
 import { Button, Panel, Input } from '@components/ui';
 import { useLootStore } from '@stores/lootStore';
 import { useReconStore } from '@stores/reconStore';
@@ -17,6 +17,7 @@ export function LootView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<LootCategory | 'all'>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [validating, setValidating] = useState<Set<string>>(new Set());
 
   const { items, credentials, stats, addLootItem, validateCredential } =
     useLootStore();
@@ -50,6 +51,15 @@ export function LootView() {
         allLoot.flat().forEach((item) => {
           addLootItem(item);
         });
+
+        // Load credentials
+        try {
+          const creds = await apiService.getCredentials();
+          // Add credentials to store if needed
+          console.log('Loaded credentials:', creds);
+        } catch (error) {
+          console.error('Failed to load credentials:', error);
+        }
       } catch (error) {
         console.error('Failed to load loot:', error);
       } finally {
@@ -62,14 +72,43 @@ export function LootView() {
 
   // Setup WebSocket listeners
   useEffect(() => {
-    const unsubLoot = wsService.on<LootItem>('loot_item', (data) => {
-      addLootItem(data);
+    const unsubLoot = wsService.on<LootItem>('loot_item', (data: any) => {
+      // Handle different loot_item events
+      if (data.event === 'credential_validated') {
+        const { credential_id, result } = data;
+
+        // Update credential validation state
+        validateCredential(credential_id, result.valid);
+
+        // Remove from validating set
+        setValidating((prev) => {
+          const next = new Set(prev);
+          next.delete(credential_id);
+          return next;
+        });
+
+        // Show toast notification
+        addToast({
+          type: result.valid ? 'success' : 'warning',
+          message: result.valid
+            ? `Credential validated: ${result.username}@${result.target}`
+            : `Invalid credential: ${result.username}@${result.target}`,
+        });
+      } else if (data.event === 'batch_validation_complete') {
+        addToast({
+          type: 'success',
+          message: `Batch validation complete: ${data.valid}/${data.total} valid`,
+        });
+      } else {
+        // Regular loot item
+        addLootItem(data);
+      }
     });
 
     return () => {
       unsubLoot();
     };
-  }, [addLootItem]);
+  }, [addLootItem, validateCredential, addToast]);
 
   const handleExportJson = () => {
     exportAsJson({ items, credentials, stats }, `cstrike-loot-${Date.now()}`);
@@ -95,18 +134,109 @@ export function LootView() {
     });
   };
 
-  const handleValidateCredential = async (id: string) => {
+  const handleValidateCredential = async (cred: any) => {
     try {
-      const isValid = await apiService.validateCredential(id);
-      validateCredential(id, isValid);
+      // Add to validating set
+      setValidating((prev) => new Set(prev).add(cred.id));
+
+      // Infer service from port if available, otherwise default to SSH
+      let service = 'ssh';
+      if (cred.port) {
+        const portMap: Record<number, string> = {
+          22: 'ssh',
+          21: 'ftp',
+          23: 'telnet',
+          3389: 'rdp',
+          445: 'smb',
+          80: 'http',
+          443: 'https',
+        };
+        service = portMap[cred.port] || 'ssh';
+      }
+
+      await apiService.validateCredential(
+        cred.id,
+        cred.target,
+        cred.username,
+        cred.password,
+        service,
+        cred.port
+      );
+
       addToast({
-        type: isValid ? 'success' : 'warning',
-        message: isValid ? 'Credential is valid' : 'Credential is invalid',
+        type: 'info',
+        message: 'Credential validation started',
+      });
+    } catch (error) {
+      // Remove from validating set on error
+      setValidating((prev) => {
+        const next = new Set(prev);
+        next.delete(cred.id);
+        return next;
+      });
+
+      addToast({
+        type: 'error',
+        message: 'Failed to start credential validation',
+      });
+    }
+  };
+
+  const handleValidateAll = async () => {
+    try {
+      const credentialsToValidate = credentials
+        .filter((cred) => !cred.validated)
+        .map((cred) => {
+          // Infer service from port if available
+          let service = 'ssh';
+          if (cred.port) {
+            const portMap: Record<number, string> = {
+              22: 'ssh',
+              21: 'ftp',
+              23: 'telnet',
+              3389: 'rdp',
+              445: 'smb',
+              80: 'http',
+              443: 'https',
+            };
+            service = portMap[cred.port as number] || 'ssh';
+          }
+
+          return {
+            credential_id: cred.id,
+            target: cred.target,
+            username: cred.username,
+            password: cred.password,
+            service,
+            port: cred.port as number | undefined,
+          };
+        });
+
+      if (credentialsToValidate.length === 0) {
+        addToast({
+          type: 'info',
+          message: 'No credentials to validate',
+        });
+        return;
+      }
+
+      // Add all to validating set
+      setValidating((prev) => {
+        const next = new Set(prev);
+        credentialsToValidate.forEach((c) => next.add(c.credential_id));
+        return next;
+      });
+
+      await apiService.validateCredentialsBatch(credentialsToValidate);
+
+      addToast({
+        type: 'success',
+        message: `Batch validation started for ${credentialsToValidate.length} credentials`,
       });
     } catch (error) {
       addToast({
         type: 'error',
-        message: 'Failed to validate credential',
+        message: 'Failed to start batch validation',
       });
     }
   };
@@ -139,6 +269,8 @@ export function LootView() {
     { key: 'port', label: 'Ports' },
     { key: 'file', label: 'Files' },
   ];
+
+  const unvalidatedCount = credentials.filter((c) => !c.validated).length;
 
   return (
     <div className="h-full overflow-auto p-6 space-y-6">
@@ -206,7 +338,22 @@ export function LootView() {
 
       {/* Credentials Table */}
       {credentials.length > 0 && (
-        <Panel title={`Credentials (${credentials.length})`}>
+        <Panel
+          title={`Credentials (${credentials.length})`}
+          action={
+            unvalidatedCount > 0 && (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={handleValidateAll}
+                disabled={validating.size > 0}
+              >
+                <Target className="w-4 h-4 mr-1" />
+                Test All ({unvalidatedCount})
+              </Button>
+            )
+          }
+        >
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-grok-border">
@@ -220,37 +367,51 @@ export function LootView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-grok-border">
-                {credentials.slice(-50).reverse().map((cred) => (
-                  <tr key={cred.id} className="text-grok-text-body">
-                    <td className="py-2 pr-4 font-mono">{cred.username}</td>
-                    <td className="py-2 pr-4 font-mono">
-                      {'*'.repeat(Math.min(cred.password.length, 12))}
-                    </td>
-                    <td className="py-2 pr-4">{cred.target}</td>
-                    <td className="py-2 pr-4 text-grok-text-muted">{cred.source}</td>
-                    <td className="py-2 pr-4">
-                      {cred.validated ? (
-                        <span className="flex items-center gap-1 text-grok-success">
-                          <Check className="w-3 h-3" />
-                          Valid
-                        </span>
-                      ) : (
-                        <span className="text-grok-text-muted">Not tested</span>
-                      )}
-                    </td>
-                    <td className="py-2">
-                      {!cred.validated && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleValidateCredential(cred.id)}
-                        >
-                          Test
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {credentials.slice(-50).reverse().map((cred) => {
+                  const isValidating = validating.has(cred.id);
+
+                  return (
+                    <tr key={cred.id} className="text-grok-text-body">
+                      <td className="py-2 pr-4 font-mono">{cred.username}</td>
+                      <td className="py-2 pr-4 font-mono">
+                        {'*'.repeat(Math.min(cred.password.length, 12))}
+                      </td>
+                      <td className="py-2 pr-4">{cred.target}</td>
+                      <td className="py-2 pr-4 text-grok-text-muted">{cred.source}</td>
+                      <td className="py-2 pr-4">
+                        {isValidating ? (
+                          <span className="flex items-center gap-1 text-grok-warning">
+                            <Clock className="w-3 h-3 animate-spin" />
+                            Testing...
+                          </span>
+                        ) : cred.validated ? (
+                          <span className="flex items-center gap-1 text-grok-success">
+                            <Check className="w-3 h-3" />
+                            Valid
+                          </span>
+                        ) : cred.validated === false ? (
+                          <span className="flex items-center gap-1 text-grok-error">
+                            <X className="w-3 h-3" />
+                            Invalid
+                          </span>
+                        ) : (
+                          <span className="text-grok-text-muted">Not tested</span>
+                        )}
+                      </td>
+                      <td className="py-2">
+                        {!cred.validated && !isValidating && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleValidateCredential(cred)}
+                          >
+                            Test
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
