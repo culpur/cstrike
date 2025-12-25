@@ -49,8 +49,8 @@ binwalk==2.1.0
 bitstruct==8.20.0
 bleach==6.2.0
 blinker==1.9.0
-bloodhound==1.8.0
-bluepy==1.3.0
+# bloodhound==1.8.0  # Install separately - pentesting tool
+# bluepy==1.3.0  # Requires Bluetooth system libraries
 bottle==0.13.2
 Bottleneck==1.4.2
 # Brlapi==0.8.6  # System package - install via apt
@@ -107,11 +107,11 @@ ephem==4.2
 et_xmlfile==2.0.0
 executing==2.2.0
 ExifRead==3.0.0
-faraday-agent-dispatcher==3.2.1
-faraday-cli==2.1.8
-faraday_agent_parameters_types==1.8.1
-faraday_plugins==1.25.0
-faradaysec==5.15.3
+# faraday-agent-dispatcher==3.2.1  # Faraday pentesting platform
+# faraday-cli==2.1.8  # Faraday pentesting platform
+# faraday_agent_parameters_types==1.8.1  # Faraday pentesting platform
+# faraday_plugins==1.25.0  # Faraday pentesting platform
+# faradaysec==5.15.3  # Faraday pentesting platform
 fastapi==0.115.11
 feedparser==6.0.11
 fierce==1.6.0
@@ -142,7 +142,7 @@ gevent-websocket==0.10.1
 gitdb==4.0.12
 GitPython==3.1.44
 # gpg==1.24.2  # System package - install via apt
-greenbone-feed-sync==25.1.0
+# greenbone-feed-sync==25.1.0  # OpenVAS/GVM tool
 greenlet==3.1.0
 gssapi==1.9.0
 h11==0.14.0
@@ -236,10 +236,10 @@ neo4j>=5.1.0
 neobolt==1.7.17
 neotime==1.7.4
 netaddr==1.3.0
-netexec==1.4.0
+# netexec==1.4.0  # Install via pipx (pipx install netexec) or apt
 netifaces==0.11.0
 networkx==3.2.1
-notus-scanner==22.6.5
+# notus-scanner==22.6.5  # OpenVAS/GVM tool
 nplusone==1.0.0
 numba==0.61.2
 numexpr==2.11.0
@@ -251,7 +251,7 @@ openai==1.101.0
 openpyxl==3.1.5
 ordered-set==4.1.0
 oscrypto==1.3.0
-ospd-openvas==22.9.0
+# ospd-openvas==22.9.0  # OpenVAS/GVM tool
 packaging==25.0
 paho-mqtt==2.1.0
 pandas==2.2.3
@@ -273,7 +273,7 @@ pipx==1.7.1
 plaster==1.1.2
 plaster-pastedeploy==0.5
 platformdirs==4.3.7
-playwright==0.0.0
+# playwright==0.0.0  # Invalid version - install with: pip install playwright
 pluggy==1.6.0
 pluginbase==1.0.1
 ply==3.11
@@ -287,7 +287,7 @@ psutil==7.0.0
 psycogreen==1.0.1
 psycopg==3.2.6
 psycopg-c==3.2.6
-psycopg2==2.9.10
+# psycopg2==2.9.10  # Requires libpq-dev - use psycopg instead
 ptyprocess==0.7.0
 publicsuffix2==2.20191221
 publicsuffixlist==0.9.3
@@ -299,7 +299,7 @@ py-ubjson==0.16.1
 pyasn1==0.6.1
 pyasn1_modules==0.4.1
 pyasyncore==1.0.2
-pycairo==1.27.0
+# pycairo==1.27.0  # Requires cairo system libraries
 pycares==4.4.0
 pycparser==2.22
 pycryptodomex==3.20.0
@@ -313,11 +313,11 @@ pydyf==0.11.0
 pyee==13.0.0
 pyExploitDb==0.2.93
 pyfiglet==1.0.3
-pygame==2.6.1
+# pygame==2.6.1  # Requires SDL system libraries
 pygexf==0.2.2
 Pygments==2.18.0
 # PyGObject==3.50.0  # System package - install via apt
-pygraphviz==1.14
+# pygraphviz==1.14  # Requires graphviz-dev system package
 PyHamcrest==2.1.0
 pyinotify==0.9.6
 pyinstaller==6.13.0
@@ -326,7 +326,7 @@ PyJWT==2.10.1
 pylnk3==0.4.2
 pylsqpack==0.3.18
 pymetasploit3==1.0.6
-pymssql==2.3.2
+# pymssql==2.3.2  # Requires FreeTDS system libraries
 PyMySQL==1.1.1
 PyNaCl==1.5.0
 pyNfsClient==0.1.5
@@ -341,11 +341,11 @@ pypng==0.20231004.0
 pypsrp==0.8.1
 pypykatz==0.6.10
 PyQRCode==1.2.1
-PyQt5==5.15.11
-PyQt5_sip==12.17.0
-PyQt6==6.9.0
-PyQt6_sip==13.10.0
-pyqtgraph==0.13.7
+# PyQt5==5.15.11  # Requires Qt5 system libraries
+# PyQt5_sip==12.17.0  # Requires Qt5 system libraries
+# PyQt6==6.9.0  # Requires Qt6 system libraries
+# PyQt6_sip==13.10.0  # Requires Qt6 system libraries
+# pyqtgraph==0.13.7  # Requires PyQt - GUI tool
 pyramid==2.0.2
 PySecretSOCKS==0.9.1
 pyserial==3.5
@@ -434,13 +434,13 @@ stix2-patterns==2.0.0
 stone==3.3.8
 sympy==1.13.3
 syslog-rfc5424-formatter==1.2.3
-tables==3.10.2
+# tables==3.10.2  # Requires HDF5 system libraries
 tabulate==0.9.0
 Tempita==0.6.0
 tempora==5.7.0
 termcolor==2.4.0
 terminaltables==3.1.10
-theHarvester==4.8.2
+# theHarvester==4.8.2  # Install separately - OSINT tool
 tinycss2==1.4.0
 tld==0.13
 tldextract==5.1.2
@@ -640,8 +640,8 @@ validators==0.20.0
 venusian==3.1.1
 vine==5.1.0
 virtualenv==20.31.2
-wafw00f==2.3.1
-wapiti3==3.0.4
+# wafw00f==2.3.1  # Install separately - WAF detection
+# wapiti3==3.0.4  # Install separately - web scanner
 watchdog==6.0.0
 wcwidth==0.2.13
 weasyprint==62.3
@@ -655,8 +655,8 @@ websockify==0.12.0
 Werkzeug==3.1.3
 wfuzz==3.1.0
 wheel==0.46.1
-wifite==2.7.0
-winacl==0.1.9
+# wifite==2.7.0  # Install separately - WiFi tool
+# winacl==0.1.9  # Windows-only package
 wrapt==1.15.0
 wsaccel==0.6.3
 wsproto==1.2.0
@@ -667,7 +667,7 @@ XlsxWriter==3.1.9
 xlutils==2.0.0
 xlwt==1.3.0
 xmltodict==0.13.0
-yara-python==4.5.4
+# yara-python==4.5.4  # Requires libyara system library
 yarl==1.19.0
 yaswfp==0.9.3
 zc.lockfile==3.0.post1
