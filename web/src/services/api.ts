@@ -115,12 +115,13 @@ class ApiService {
     await this.client.delete(`/targets/${id}`);
   }
 
-  async startRecon(target: string, tools: string[]): Promise<void> {
+  async startRecon(target: string, tools: string[]): Promise<{scan_id: string; status: string}> {
     // Backend expects POST /recon/start with {target, tools}
     const { data } = await this.client.post('/recon/start', { target, tools });
     if (!data.scan_id) {
       throw new Error('Failed to start reconnaissance');
     }
+    return data;
   }
 
   async stopRecon(_targetId: string): Promise<void> {
@@ -132,14 +133,34 @@ class ApiService {
   // Exploitation
   // ============================================================================
 
-  async startWebExploit(_targetId: string, _config: Record<string, unknown>): Promise<void> {
-    // TODO: Backend doesn't have exploitation endpoints yet
-    throw new Error('Web exploitation not implemented in backend');
+  async startExploitation(target: string): Promise<{exploit_id: string; status: string}> {
+    // Backend: POST /exploit/start with {target}
+    const { data } = await this.client.post('/exploit/start', { target });
+    return data;
   }
 
-  async startBruteforce(_config: Record<string, unknown>): Promise<void> {
-    // TODO: Backend doesn't have exploitation endpoints yet
-    throw new Error('Bruteforce not implemented in backend');
+  async analyzeWithAI(target: string, phase: 'recon' | 'exploitation' = 'recon'): Promise<{status: string; message: string}> {
+    // Backend: POST /ai/analyze with {target, phase}
+    const { data } = await this.client.post('/ai/analyze', { target, phase });
+    return data;
+  }
+
+  async getAIThoughts(): Promise<string[]> {
+    // Backend: GET /ai/thoughts
+    const { data } = await this.client.get('/ai/thoughts');
+    return data.thoughts || [];
+  }
+
+  async getScanStatus(scanId: string): Promise<{status: string; target?: string; results?: unknown; error?: string}> {
+    // Backend: GET /recon/status/<scan_id>
+    const { data } = await this.client.get(`/recon/status/${scanId}`);
+    return data;
+  }
+
+  async getTargets(): Promise<string[]> {
+    // Backend: GET /targets
+    const { data } = await this.client.get('/targets');
+    return data.targets || [];
   }
 
   // ============================================================================

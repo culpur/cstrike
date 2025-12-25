@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { Download, Check } from 'lucide-react';
 import { Button, Panel, Input } from '@components/ui';
 import { useLootStore } from '@stores/lootStore';
+import { useReconStore } from '@stores/reconStore';
 import { useUIStore } from '@stores/uiStore';
 import { wsService } from '@services/websocket';
 import { apiService } from '@services/api';
@@ -15,10 +16,49 @@ import type { LootItem, LootCategory } from '@/types';
 export function LootView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<LootCategory | 'all'>('all');
+  const [isLoading, setIsLoading] = useState(true);
 
   const { items, credentials, stats, addLootItem, validateCredential } =
     useLootStore();
+  const { targets } = useReconStore();
   const { addToast } = useUIStore();
+
+  // Load existing loot for all targets on mount
+  useEffect(() => {
+    const loadLoot = async () => {
+      setIsLoading(true);
+      try {
+        // Load loot for all known targets
+        const lootPromises = targets.map((target) =>
+          apiService.getLoot(target.url).catch((err) => {
+            console.error(`Failed to load loot for ${target.url}:`, err);
+            return [];
+          })
+        );
+
+        // Also load loot for 'all' (global loot)
+        lootPromises.push(
+          apiService.getLoot('all').catch((err) => {
+            console.error('Failed to load global loot:', err);
+            return [];
+          })
+        );
+
+        const allLoot = await Promise.all(lootPromises);
+
+        // Flatten and add all loot items
+        allLoot.flat().forEach((item) => {
+          addLootItem(item);
+        });
+      } catch (error) {
+        console.error('Failed to load loot:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadLoot();
+  }, [targets, addLootItem]);
 
   // Setup WebSocket listeners
   useEffect(() => {
@@ -219,7 +259,11 @@ export function LootView() {
 
       {/* Loot Items */}
       <Panel title={`Items (${filteredItems.length})`}>
-        {filteredItems.length === 0 ? (
+        {isLoading ? (
+          <p className="text-sm text-grok-text-muted text-center py-8">
+            Loading loot...
+          </p>
+        ) : filteredItems.length === 0 ? (
           <p className="text-sm text-grok-text-muted text-center py-8">
             No loot items found
           </p>

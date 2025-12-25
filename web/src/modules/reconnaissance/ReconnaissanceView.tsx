@@ -15,6 +15,8 @@ import type { ReconOutput, PortScanResult, SubdomainResult } from '@/types';
 export function ReconnaissanceView() {
   const [targetUrl, setTargetUrl] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [activeScanId, setActiveScanId] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   const {
     targets,
@@ -34,6 +36,51 @@ export function ReconnaissanceView() {
   } = useReconStore();
 
   const { addToast } = useUIStore();
+
+  // Load existing targets on mount
+  useEffect(() => {
+    const loadTargets = async () => {
+      try {
+        const existingTargets = await apiService.getTargets();
+        // Add each target individually (store doesn't have setTargets)
+        existingTargets.forEach((url) => {
+          // Only add if not already in targets
+          if (!targets.some((t) => t.url === url)) {
+            addTarget(url);
+          }
+        });
+      } catch (error) {
+        console.error('Failed to load targets:', error);
+      }
+    };
+    loadTargets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
+
+  // Poll scan status when active scan
+  useEffect(() => {
+    if (!activeScanId) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const status = await apiService.getScanStatus(activeScanId);
+        if (status.status === 'completed' || status.status === 'failed') {
+          setIsScanning(false);
+          setActiveScanId(null);
+          clearInterval(pollInterval);
+
+          addToast({
+            type: status.status === 'completed' ? 'success' : 'error',
+            message: status.status === 'completed' ? 'Scan completed!' : `Scan failed: ${status.error}`,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to poll scan status:', error);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [activeScanId, addToast]);
 
   // Setup WebSocket listeners
   useEffect(() => {
@@ -117,15 +164,24 @@ export function ReconnaissanceView() {
       return;
     }
 
+    setIsScanning(true);
     try {
-      await apiService.startRecon(targetId, enabledTools);
+      // Start recon and capture scan_id for polling
+      const response = await apiService.startRecon(targetId, enabledTools);
+      const scanId = response?.scan_id || null;
+
+      if (scanId) {
+        setActiveScanId(scanId);
+      }
+
       startScan(targetId);
       enabledTools.forEach((tool) => setToolRunning(tool, true));
       addToast({
         type: 'success',
-        message: 'Reconnaissance started',
+        message: `Reconnaissance started (scan_id: ${scanId})`,
       });
     } catch (error) {
+      setIsScanning(false);
       addToast({
         type: 'error',
         message: 'Failed to start reconnaissance',
@@ -232,6 +288,7 @@ export function ReconnaissanceView() {
                       size="sm"
                       variant="primary"
                       onClick={() => handleStartScan(target.id)}
+                      disabled={isScanning}
                     >
                       <Play className="w-3 h-3 mr-1" />
                       Scan
