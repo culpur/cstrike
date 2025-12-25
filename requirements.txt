@@ -347,7 +347,7 @@ PyQRCode==1.2.1
 # PyQt6_sip==13.10.0  # Requires Qt6 system libraries
 # pyqtgraph==0.13.7  # Requires PyQt - GUI tool
 pyramid==2.0.2
-PySecretSOCKS==0.9.1
+# PySecretSOCKS==0.9.1  # Package does not exist in PyPI
 pyserial==3.5
 pyserial-asyncio==0.6
 pyShodan==0.2.6
@@ -367,7 +367,7 @@ python-gvm==26.2.0
 python-libnmap==0.7.3
 python-magic==0.4.27
 python-memcached==1.60
-python-obfuscator==0.0.2
+# python-obfuscator==0.0.2  # Package does not exist in PyPI
 python-owasp-zap-v2.4==0.0.20
 # python-pptx==0.6.18  # Office document tools - not core dependency
 python-slugify==8.0.4
@@ -377,7 +377,7 @@ python-status==1.0.1
 python-whois==0.9.3
 PyTrie==0.4.0
 pytz==2025.2
-pyVNC==0.1
+# pyVNC==0.1  # Package does not exist in PyPI
 pyxdg==0.28
 PyYAML==6.0.2
 pyzipper==0.3.6
