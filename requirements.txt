@@ -156,7 +156,7 @@ httpcore==1.0.7
 httpx==0.28.1
 humanize==4.12.1
 hupper==1.12
-hyperframe==6.0.0
+hyperframe>=6.1,<7
 hyperlink==21.0.0
 idna==3.10
 impacket>=0.12.0
