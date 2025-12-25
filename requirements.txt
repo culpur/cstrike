@@ -54,8 +54,8 @@ blinker==1.9.0
 bottle==0.13.2
 Bottleneck==1.4.2
 # Brlapi==0.8.6  # System package - install via apt
-Brotli==1.1.0
-capstone==5.0.6
+# Brotli==1.1.0  # May have Python 3.13 compilation issues
+# capstone==5.0.6  # May have Python 3.13 compilation issues
 cbor==1.0.0
 celery==5.5.3
 censys==2.2.18
@@ -78,7 +78,7 @@ configobj==5.0.9
 constantly==23.10.4
 contourpy==1.3.1
 croniter==2.0.7
-cryptography==43.0.0
+# cryptography==43.0.0  # May have Python 3.13 compilation issues
 cssselect==1.3.0
 cssselect2==0.7.0
 # cupshelpers==1.0  # System package - install via apt
@@ -91,7 +91,7 @@ Deprecated==1.2.18
 dicttoxml==1.7.16
 distlib==0.3.9
 distro==1.9.0
-Django==4.2.23
+# Django==4.2.23  # Not used by CStrike
 dnslib==0.9.25
 dnspython==2.7.0
 docopt==0.6.2
@@ -104,7 +104,7 @@ elastic-transport==8.17.1
 elasticsearch==8.17.2
 email_validator==2.2.0
 ephem==4.2
-et_xmlfile==2.0.0
+# et_xmlfile==2.0.0  # Office document tools - not core dependency
 executing==2.2.0
 ExifRead==3.0.0
 # faraday-agent-dispatcher==3.2.1  # Faraday pentesting platform
@@ -143,8 +143,8 @@ gitdb==4.0.12
 GitPython==3.1.44
 # gpg==1.24.2  # System package - install via apt
 # greenbone-feed-sync==25.1.0  # OpenVAS/GVM tool
-greenlet==3.1.0
-gssapi==1.9.0
+# greenlet==3.1.0  # May have Python 3.13 compilation issues
+# gssapi==1.9.0  # Requires Kerberos system libraries
 h11==0.14.0
 h2==4.2.0
 hashID==3.1.4
@@ -198,11 +198,11 @@ legacycrypt==0.3
 # lightdm-gtk-greeter-settings==1.2.3  # Kali-specific - install via apt
 limits==4.4.1
 linkify-it-py==2.0.3
-llvmlite==0.44.0
+# llvmlite==0.44.0  # May not support Python 3.13 yet
 log_symbols==0.0.14
 # louis==3.33.0  # System package - install via apt
 lsassy==3.1.11
-lxml==5.4.0
+# lxml==5.4.0  # May have Python 3.13 compilation issues
 lz4==4.4.5
 macholib==1.16.3
 Mako>=1.3.0
@@ -213,9 +213,9 @@ MarkupSafe==2.1.5
 marshmallow==3.26.1
 marshmallow-sqlalchemy==1.4.1
 masky==0.2.0
-matplotlib==3.10.1
+# matplotlib==3.10.1  # May have Python 3.13 compilation issues
 matplotlib-inline==0.1.7
-md2pdf==1.0.1
+# md2pdf==1.0.1  # PDF tools - not core dependency
 mdurl==0.1.2
 mechanize==0.4.10
 minidump==0.0.21
@@ -241,20 +241,20 @@ netifaces==0.11.0
 networkx==3.2.1
 # notus-scanner==22.6.5  # OpenVAS/GVM tool
 nplusone==1.0.0
-numba==0.61.2
+# numba==0.61.2  # May not support Python 3.13 yet
 numexpr==2.11.0
-numpy==2.2.4
+# numpy==2.2.4  # May have Python 3.13 compilation issues
 odfpy==1.4.1
 olefile==0.47
 # onboard==1.4.1  # Kali-specific - install via apt
 openai==1.101.0
-openpyxl==3.1.5
+# openpyxl==3.1.5  # Office document tools - not core dependency
 ordered-set==4.1.0
 oscrypto==1.3.0
 # ospd-openvas==22.9.0  # OpenVAS/GVM tool
 packaging==25.0
 paho-mqtt==2.1.0
-pandas==2.2.3
+# pandas==2.2.3  # May have Python 3.13 compilation issues
 paramiko==3.5.1
 parso==0.8.4
 passlib==1.7.4
@@ -268,7 +268,7 @@ pexpect==4.9.0
 pgcli==4.3.0
 pgspecial==2.2.1
 phonenumbers==8.12.57
-pillow==11.1.0
+# pillow==11.1.0  # May have Python 3.13 compilation issues
 pipx==1.7.1
 plaster==1.1.2
 plaster-pastedeploy==0.5
@@ -300,9 +300,9 @@ pyasn1==0.6.1
 pyasn1_modules==0.4.1
 pyasyncore==1.0.2
 # pycairo==1.27.0  # Requires cairo system libraries
-pycares==4.4.0
+# pycares==4.4.0  # May have Python 3.13 compilation issues
 pycparser==2.22
-pycryptodomex==3.20.0
+# pycryptodomex==3.20.0  # May have Python 3.13 compilation issues
 # pycups==2.0.4  # System package - install via apt
 # pycurl==7.45.6  # System package - install via apt
 pydantic==2.10.6
@@ -320,24 +320,24 @@ Pygments==2.18.0
 # pygraphviz==1.14  # Requires graphviz-dev system package
 PyHamcrest==2.1.0
 pyinotify==0.9.6
-pyinstaller==6.13.0
-pyinstaller-hooks-contrib==2025.1
+# pyinstaller==6.13.0  # Build tool - not runtime dependency
+# pyinstaller-hooks-contrib==2025.1  # Build tool - not runtime dependency
 PyJWT==2.10.1
 pylnk3==0.4.2
 pylsqpack==0.3.18
 pymetasploit3==1.0.6
 # pymssql==2.3.2  # Requires FreeTDS system libraries
 PyMySQL==1.1.1
-PyNaCl==1.5.0
+# PyNaCl==1.5.0  # May have Python 3.13 compilation issues
 pyNfsClient==0.1.5
 PyOpenGL==3.1.9
 pyOpenSSL==25.1.0
 pyotp==2.9.0
 pyparsing==3.1.2
-pypdf==5.4.0
+# pypdf==5.4.0  # PDF tools - not core dependency
 pyperclip==1.8.2
 pyphen==0.16.0
-pypng==0.20231004.0
+# pypng==0.20231004.0  # Use pypng==0.20220715.0 instead
 pypsrp==0.8.1
 pypykatz==0.6.10
 PyQRCode==1.2.1
@@ -359,7 +359,7 @@ pyspnego==0.10.2
 pytest==8.3.5
 # python-apt==3.0.0  # System package - install via apt
 python-dateutil==2.9.0
-python-docx==1.1.2
+# python-docx==1.1.2  # Office document tools - not core dependency
 python-dotenv==1.0.1
 python-engineio==4.12.1
 python-gnupg==0.5.4
@@ -369,7 +369,7 @@ python-magic==0.4.27
 python-memcached==1.60
 python-obfuscator==0.0.2
 python-owasp-zap-v2.4==0.0.20
-python-pptx==0.6.18
+# python-pptx==0.6.18  # Office document tools - not core dependency
 python-slugify==8.0.4
 python-snappy==0.5.3
 python-socketio==5.13.0
@@ -401,7 +401,7 @@ rq==2.3.3
 ruamel.yaml==0.18.10
 ruamel.yaml.clib==0.2.12
 scapy==2.6.1
-scipy==1.15.3
+# scipy==1.15.3  # May require downgrade for Python 3.13
 secure==0.3.0
 service-identity==24.2.0
 setuptools==78.1.1
@@ -427,7 +427,7 @@ SQLAlchemy-Utc==0.14.0
 sqlparse==0.5.3
 sslyze==6.2.0
 stack-data==0.6.3
-standard-imghdr==3.13.0
+# standard-imghdr==3.13.0  # Backport not needed for Python 3.13
 starlette==0.46.1
 stix2==3.0.1
 stix2-patterns==2.0.0
@@ -452,174 +452,174 @@ translationstring==1.4
 Twisted==24.11.0
 txaio==23.1.1
 typeguard==4.4.2
-types-aiofiles==24.1
-types-antlr4-python3-runtime==4.13
-types-assertpy==1.1
-types-atheris==2.3
-types-aws-xray-sdk==2.14
-types-beautifulsoup4==4.12
-types-bleach==6.2
-types-boltons==24.1
-types-braintree==4.31
-types-cachetools==5.5
-types-caldav==1.3
-types-capturer==3.0
-types-cffi==1.16
-types-chevron==0.14
-types-click-default-group==1.2
-types-click-spinner==0.1
-types-colorama==0.4
-types-commonmark==0.9
-types-console-menu==0.8
-types-corus==0.10
-types-croniter==5.0.1
-types-dateparser==1.2
-types-decorator==5.1
-types-defusedxml==0.7
-types-Deprecated==1.2.15
-types-docker==7.1
-types-dockerfile-parse==2.0
-types-docutils==0.21
-types-editdistance==0.8
-types-entrypoints==0.4
-types-ExifRead==3.0
-types-fanstatic==1.4
-types-first==2.0
-types-flake8==7.1
-types-flake8-bugbear==24.12.12
-types-flake8-builtins==2.5
-types-flake8-docstrings==1.7
-types-flake8-rst-docstrings==0.3
-types-flake8-simplify==0.21
-types-flake8-typing-imports==1.16
-types-Flask-Cors==5.0
-types-Flask-Migrate==4.0
-types-Flask-SocketIO==5.4
-types-fpdf2==2.8.2
-types-gdb==15.0
-types-gevent==24.11
-types-google-cloud-ndb==2.3
-types-greenlet==3.1
-types-hdbcli==2.23
-types-html5lib==1.1
-types-httplib2==0.22
-types-humanfriendly==10.0
-types-hvac==2.3
-types-ibm-db==3.2.4
-types-icalendar==6.1
-types-influxdb-client==1.45
-types-inifile==0.4
-types-JACK-Client==0.5
-types-Jetson.GPIO==2.1
-types-jmespath==1.0
-types-jsonschema==4.23
-types-jwcrypto==1.5
-types-keyboard==0.13
-types-ldap3==2.9
-types-libsass==0.23
-types-lupa==2.2
-types-lzstring==1.0
-types-m3u8==6.0
-types-Markdown==3.7
-types-mock==5.1
-types-mypy-extensions==1.0
-types-mysqlclient==2.2
-types-nanoid==2.0.0
-types-netaddr==1.3
-types-netifaces==0.11
-types-networkx==3.4.2
-types-oauthlib==3.2
-types-objgraph==3.6
-types-olefile==0.47
-types-openpyxl==3.1.5
-types-opentracing==2.4
-types-paramiko==3.5
-types-parsimonious==0.10
-types-passlib==1.7
-types-passpy==1.0
-types-peewee==3.17.8
-types-pep8-naming==0.14
-types-pexpect==4.9
-types-pika-ts==1.3
-types-polib==1.2
-types-portpicker==1.6
-types-protobuf==5.29.1
-types-psutil==6.1
-types-psycopg2==2.9.10
-types-pyasn1==0.6
-types-pyaudio==0.2
-types-PyAutoGUI==0.9
-types-pycocotools==2.0
-types-pycurl==7.45.4
-types-pyfarmhash==0.4
-types-pyflakes==3.2
-types-pygit2==1.15
-types-Pygments==2.18
-types-pyinstaller==6.11
-types-pyjks==20.0
-types-PyMySQL==1.1
-types-pynput==1.7.7
-types-pyOpenSSL==24.1
-types-pyRFC3339==2.0.1
-types-PyScreeze==1.0.1
-types-pyserial==3.5
-types-pysftp==0.2
-types-pytest-lazy-fixture==0.6
-types-python-crontab==3.2
-types-python-datemath==3.0.1
-types-python-dateutil==2.9
-types-python-http-client==3.3.7
-types-python-jenkins==1.8
-types-python-jose==3.3
-types-python-nmap==0.7
-types-python-xlib==0.33
-types-pytz==2024.2
-types-pywin32==308
-types-pyxdg==0.28
-types-PyYAML==6.0
-types-qrbill==1.1
-types-qrcode==8.0
-types-regex==2024.11.6
-types-reportlab==4.2.5
-types-requests==2.32
-types-requests-oauthlib==2.0
-types-retry==0.9
-types-RPi.GPIO==0.7
-types-s2clientprotocol==5
-types-seaborn==0.13.2
-types-Send2Trash==1.8
-types-setuptools==75.6
-types-shapely==2.0
-types-simplejson==3.19
-types-singledispatch==4.1
-types-six==1.17
-types-slumber==0.7
-types-str2bool==1.1
-types-tabulate==0.9
-types-tensorflow==2.18.0
-types-TgCrypto==1.2
-types-toml==0.10
-types-toposort==1.10
-types-tqdm==4.67
-types-translationstring==1.4
-types-tree-sitter-languages==1.10
-types-ttkthemes==3.2
-types-ujson==5.10
-types-unidiff==0.7
-types-untangle==1.2
-types-usersettings==1.1
-types-uWSGI==2.0
-types-vobject==0.9.9
-types-waitress==3.0.1
-types-WebOb==1.8
-types-whatthepatch==1.0
-types-workalendar==17.0
-types-WTForms==3.2.1
-types-wurlitzer==3.1
-types-xdgenvpy==3.0
-types-xmltodict==0.14
-types-zstd==1.5
-types-zxcvbn==4.4
+# types-aiofiles==24.1  # Type stub - not runtime dependency
+# types-antlr4-python3-runtime==4.13  # Type stub - not runtime dependency
+# types-assertpy==1.1  # Type stub - not runtime dependency
+# types-atheris==2.3  # Type stub - not runtime dependency
+# types-aws-xray-sdk==2.14  # Type stub - not runtime dependency
+# types-beautifulsoup4==4.12  # Type stub - not runtime dependency
+# types-bleach==6.2  # Type stub - not runtime dependency
+# types-boltons==24.1  # Type stub - not runtime dependency
+# types-braintree==4.31  # Type stub - not runtime dependency
+# types-cachetools==5.5  # Type stub - not runtime dependency
+# types-caldav==1.3  # Type stub - not runtime dependency
+# types-capturer==3.0  # Type stub - not runtime dependency
+# types-cffi==1.16  # Type stub - not runtime dependency
+# types-chevron==0.14  # Type stub - not runtime dependency
+# types-click-default-group==1.2  # Type stub - not runtime dependency
+# types-click-spinner==0.1  # Type stub - not runtime dependency
+# types-colorama==0.4  # Type stub - not runtime dependency
+# types-commonmark==0.9  # Type stub - not runtime dependency
+# types-console-menu==0.8  # Type stub - not runtime dependency
+# types-corus==0.10  # Type stub - not runtime dependency
+# types-croniter==5.0.1  # Type stub - not runtime dependency
+# types-dateparser==1.2  # Type stub - not runtime dependency
+# types-decorator==5.1  # Type stub - not runtime dependency
+# types-defusedxml==0.7  # Type stub - not runtime dependency
+# types-Deprecated==1.2.15  # Type stub - not runtime dependency
+# types-docker==7.1  # Type stub - not runtime dependency
+# types-dockerfile-parse==2.0  # Type stub - not runtime dependency
+# types-docutils==0.21  # Type stub - not runtime dependency
+# types-editdistance==0.8  # Type stub - not runtime dependency
+# types-entrypoints==0.4  # Type stub - not runtime dependency
+# types-ExifRead==3.0  # Type stub - not runtime dependency
+# types-fanstatic==1.4  # Type stub - not runtime dependency
+# types-first==2.0  # Type stub - not runtime dependency
+# types-flake8==7.1  # Type stub - not runtime dependency
+# types-flake8-bugbear==24.12.12  # Type stub - not runtime dependency
+# types-flake8-builtins==2.5  # Type stub - not runtime dependency
+# types-flake8-docstrings==1.7  # Type stub - not runtime dependency
+# types-flake8-rst-docstrings==0.3  # Type stub - not runtime dependency
+# types-flake8-simplify==0.21  # Type stub - not runtime dependency
+# types-flake8-typing-imports==1.16  # Type stub - not runtime dependency
+# types-Flask-Cors==5.0  # Type stub - not runtime dependency
+# types-Flask-Migrate==4.0  # Type stub - not runtime dependency
+# types-Flask-SocketIO==5.4  # Type stub - not runtime dependency
+# types-fpdf2==2.8.2  # Type stub - not runtime dependency
+# types-gdb==15.0  # Type stub - not runtime dependency
+# types-gevent==24.11  # Type stub - not runtime dependency
+# types-google-cloud-ndb==2.3  # Type stub - not runtime dependency
+# types-greenlet==3.1  # Type stub - not runtime dependency
+# types-hdbcli==2.23  # Type stub - not runtime dependency
+# types-html5lib==1.1  # Type stub - not runtime dependency
+# types-httplib2==0.22  # Type stub - not runtime dependency
+# types-humanfriendly==10.0  # Type stub - not runtime dependency
+# types-hvac==2.3  # Type stub - not runtime dependency
+# types-ibm-db==3.2.4  # Type stub - not runtime dependency
+# types-icalendar==6.1  # Type stub - not runtime dependency
+# types-influxdb-client==1.45  # Type stub - not runtime dependency
+# types-inifile==0.4  # Type stub - not runtime dependency
+# types-JACK-Client==0.5  # Type stub - not runtime dependency
+# types-Jetson.GPIO==2.1  # Type stub - not runtime dependency
+# types-jmespath==1.0  # Type stub - not runtime dependency
+# types-jsonschema==4.23  # Type stub - not runtime dependency
+# types-jwcrypto==1.5  # Type stub - not runtime dependency
+# types-keyboard==0.13  # Type stub - not runtime dependency
+# types-ldap3==2.9  # Type stub - not runtime dependency
+# types-libsass==0.23  # Type stub - not runtime dependency
+# types-lupa==2.2  # Type stub - not runtime dependency
+# types-lzstring==1.0  # Type stub - not runtime dependency
+# types-m3u8==6.0  # Type stub - not runtime dependency
+# types-Markdown==3.7  # Type stub - not runtime dependency
+# types-mock==5.1  # Type stub - not runtime dependency
+# types-mypy-extensions==1.0  # Type stub - not runtime dependency
+# types-mysqlclient==2.2  # Type stub - not runtime dependency
+# types-nanoid==2.0.0  # Type stub - not runtime dependency
+# types-netaddr==1.3  # Type stub - not runtime dependency
+# types-netifaces==0.11  # Type stub - not runtime dependency
+# types-networkx==3.4.2  # Type stub - not runtime dependency
+# types-oauthlib==3.2  # Type stub - not runtime dependency
+# types-objgraph==3.6  # Type stub - not runtime dependency
+# types-olefile==0.47  # Type stub - not runtime dependency
+# types-openpyxl==3.1.5  # Type stub - not runtime dependency
+# types-opentracing==2.4  # Type stub - not runtime dependency
+# types-paramiko==3.5  # Type stub - not runtime dependency
+# types-parsimonious==0.10  # Type stub - not runtime dependency
+# types-passlib==1.7  # Type stub - not runtime dependency
+# types-passpy==1.0  # Type stub - not runtime dependency
+# types-peewee==3.17.8  # Type stub - not runtime dependency
+# types-pep8-naming==0.14  # Type stub - not runtime dependency
+# types-pexpect==4.9  # Type stub - not runtime dependency
+# types-pika-ts==1.3  # Type stub - not runtime dependency
+# types-polib==1.2  # Type stub - not runtime dependency
+# types-portpicker==1.6  # Type stub - not runtime dependency
+# types-protobuf==5.29.1  # Type stub - not runtime dependency
+# types-psutil==6.1  # Type stub - not runtime dependency
+# types-psycopg2==2.9.10  # Type stub - not runtime dependency
+# types-pyasn1==0.6  # Type stub - not runtime dependency
+# types-pyaudio==0.2  # Type stub - not runtime dependency
+# types-PyAutoGUI==0.9  # Type stub - not runtime dependency
+# types-pycocotools==2.0  # Type stub - not runtime dependency
+# types-pycurl==7.45.4  # Type stub - not runtime dependency
+# types-pyfarmhash==0.4  # Type stub - not runtime dependency
+# types-pyflakes==3.2  # Type stub - not runtime dependency
+# types-pygit2==1.15  # Type stub - not runtime dependency
+# types-Pygments==2.18  # Type stub - not runtime dependency
+# types-pyinstaller==6.11  # Type stub - not runtime dependency
+# types-pyjks==20.0  # Type stub - not runtime dependency
+# types-PyMySQL==1.1  # Type stub - not runtime dependency
+# types-pynput==1.7.7  # Type stub - not runtime dependency
+# types-pyOpenSSL==24.1  # Type stub - not runtime dependency
+# types-pyRFC3339==2.0.1  # Type stub - not runtime dependency
+# types-PyScreeze==1.0.1  # Type stub - not runtime dependency
+# types-pyserial==3.5  # Type stub - not runtime dependency
+# types-pysftp==0.2  # Type stub - not runtime dependency
+# types-pytest-lazy-fixture==0.6  # Type stub - not runtime dependency
+# types-python-crontab==3.2  # Type stub - not runtime dependency
+# types-python-datemath==3.0.1  # Type stub - not runtime dependency
+# types-python-dateutil==2.9  # Type stub - not runtime dependency
+# types-python-http-client==3.3.7  # Type stub - not runtime dependency
+# types-python-jenkins==1.8  # Type stub - not runtime dependency
+# types-python-jose==3.3  # Type stub - not runtime dependency
+# types-python-nmap==0.7  # Type stub - not runtime dependency
+# types-python-xlib==0.33  # Type stub - not runtime dependency
+# types-pytz==2024.2  # Type stub - not runtime dependency
+# types-pywin32==308  # Type stub - not runtime dependency
+# types-pyxdg==0.28  # Type stub - not runtime dependency
+# types-PyYAML==6.0  # Type stub - not runtime dependency
+# types-qrbill==1.1  # Type stub - not runtime dependency
+# types-qrcode==8.0  # Type stub - not runtime dependency
+# types-regex==2024.11.6  # Type stub - not runtime dependency
+# types-reportlab==4.2.5  # Type stub - not runtime dependency
+# types-requests==2.32  # Type stub - not runtime dependency
+# types-requests-oauthlib==2.0  # Type stub - not runtime dependency
+# types-retry==0.9  # Type stub - not runtime dependency
+# types-RPi.GPIO==0.7  # Type stub - not runtime dependency
+# types-s2clientprotocol==5  # Type stub - not runtime dependency
+# types-seaborn==0.13.2  # Type stub - not runtime dependency
+# types-Send2Trash==1.8  # Type stub - not runtime dependency
+# types-setuptools==75.6  # Type stub - not runtime dependency
+# types-shapely==2.0  # Type stub - not runtime dependency
+# types-simplejson==3.19  # Type stub - not runtime dependency
+# types-singledispatch==4.1  # Type stub - not runtime dependency
+# types-six==1.17  # Type stub - not runtime dependency
+# types-slumber==0.7  # Type stub - not runtime dependency
+# types-str2bool==1.1  # Type stub - not runtime dependency
+# types-tabulate==0.9  # Type stub - not runtime dependency
+# types-tensorflow==2.18.0  # Type stub - not runtime dependency
+# types-TgCrypto==1.2  # Type stub - not runtime dependency
+# types-toml==0.10  # Type stub - not runtime dependency
+# types-toposort==1.10  # Type stub - not runtime dependency
+# types-tqdm==4.67  # Type stub - not runtime dependency
+# types-translationstring==1.4  # Type stub - not runtime dependency
+# types-tree-sitter-languages==1.10  # Type stub - not runtime dependency
+# types-ttkthemes==3.2  # Type stub - not runtime dependency
+# types-ujson==5.10  # Type stub - not runtime dependency
+# types-unidiff==0.7  # Type stub - not runtime dependency
+# types-untangle==1.2  # Type stub - not runtime dependency
+# types-usersettings==1.1  # Type stub - not runtime dependency
+# types-uWSGI==2.0  # Type stub - not runtime dependency
+# types-vobject==0.9.9  # Type stub - not runtime dependency
+# types-waitress==3.0.1  # Type stub - not runtime dependency
+# types-WebOb==1.8  # Type stub - not runtime dependency
+# types-whatthepatch==1.0  # Type stub - not runtime dependency
+# types-workalendar==17.0  # Type stub - not runtime dependency
+# types-WTForms==3.2.1  # Type stub - not runtime dependency
+# types-wurlitzer==3.1  # Type stub - not runtime dependency
+# types-xdgenvpy==3.0  # Type stub - not runtime dependency
+# types-xmltodict==0.14  # Type stub - not runtime dependency
+# types-zstd==1.5  # Type stub - not runtime dependency
+# types-zxcvbn==4.4  # Type stub - not runtime dependency
 typing_extensions==4.13.2
 tzlocal==5.3.1
 u-msgpack-python==2.8.0
@@ -644,7 +644,7 @@ virtualenv==20.31.2
 # wapiti3==3.0.4  # Install separately - web scanner
 watchdog==6.0.0
 wcwidth==0.2.13
-weasyprint==62.3
+# weasyprint==62.3  # PDF tools - not core dependency
 webargs==8.7.0
 webcolors==1.13
 webencodings==0.5.1
@@ -662,10 +662,10 @@ wsaccel==0.6.3
 wsproto==1.2.0
 WTForms==3.2.1
 xdg==5
-xlrd==2.0.1
-XlsxWriter==3.1.9
-xlutils==2.0.0
-xlwt==1.3.0
+# xlrd==2.0.1  # Office document tools - not core dependency
+# XlsxWriter==3.1.9  # Office document tools - not core dependency
+# xlutils==2.0.0  # Office document tools - not core dependency
+# xlwt==1.3.0  # Office document tools - not core dependency
 xmltodict==0.13.0
 # yara-python==4.5.4  # Requires libyara system library
 yarl==1.19.0
