@@ -1,4 +1,5 @@
-# /opt/ai_driver/ai_driver.py
+#!/usr/bin/env python3
+# CStrike AI Driver - Autonomous penetration testing orchestrator
 
 import os
 import json
