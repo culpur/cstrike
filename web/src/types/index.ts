@@ -211,6 +211,8 @@ export type WSMessageType =
   | 'system_metrics'
   | 'service_status'
   | 'phase_update'
+  | 'status_update'
+  | 'phase_change'
   | 'recon_output'
   | 'ai_thought'
   | 'exploit_result'

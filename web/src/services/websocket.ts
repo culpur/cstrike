@@ -3,7 +3,7 @@
  */
 
 import { io, Socket } from 'socket.io-client';
-import type { WSMessage, WSMessageType } from '@/types';
+import type { WSMessageType } from '@/types';
 
 type MessageHandler<T = unknown> = (data: T) => void;
 

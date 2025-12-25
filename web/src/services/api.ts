@@ -4,7 +4,6 @@
 
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
 import type {
-  ApiResponse,
   Target,
   SystemMetrics,
   ServiceState,
@@ -104,7 +103,7 @@ class ApiService {
         id: Date.now().toString(),
         url: data.target,
         status: 'pending',
-        addedAt: new Date().toISOString(),
+        addedAt: Date.now(),
       };
     }
     throw new Error(data.error || 'Failed to add target');
@@ -124,7 +123,7 @@ class ApiService {
     }
   }
 
-  async stopRecon(targetId: string): Promise<void> {
+  async stopRecon(_targetId: string): Promise<void> {
     // TODO: Backend doesn't have a stop endpoint yet
     throw new Error('Stop reconnaissance not implemented in backend');
   }
@@ -133,12 +132,12 @@ class ApiService {
   // Exploitation
   // ============================================================================
 
-  async startWebExploit(targetId: string, config: Record<string, unknown>): Promise<void> {
+  async startWebExploit(_targetId: string, _config: Record<string, unknown>): Promise<void> {
     // TODO: Backend doesn't have exploitation endpoints yet
     throw new Error('Web exploitation not implemented in backend');
   }
 
-  async startBruteforce(config: Record<string, unknown>): Promise<void> {
+  async startBruteforce(_config: Record<string, unknown>): Promise<void> {
     // TODO: Backend doesn't have exploitation endpoints yet
     throw new Error('Bruteforce not implemented in backend');
   }
@@ -168,7 +167,7 @@ class ApiService {
     throw new Error('Get credentials not implemented in backend');
   }
 
-  async validateCredential(id: string): Promise<boolean> {
+  async validateCredential(_id: string): Promise<boolean> {
     // TODO: Backend doesn't have credential validation endpoint
     throw new Error('Credential validation not implemented in backend');
   }
