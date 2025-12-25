@@ -217,10 +217,29 @@ def start_recon():
     def run_scan():
         global current_phase
         current_phase = 'recon'
-        socketio.emit('phase_change', {'phase': 'recon', 'target': target})
+        socketio.emit('phase_change', {'phase': 'recon', 'target': target, 'scan_id': scan_id})
 
         try:
+            # Emit scan start
+            socketio.emit('recon_output', {
+                'scan_id': scan_id,
+                'target': target,
+                'event': 'started',
+                'message': f'Starting reconnaissance on {target}',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
             results = run_recon_layered(target)
+
+            # Emit scan completion
+            socketio.emit('recon_output', {
+                'scan_id': scan_id,
+                'target': target,
+                'event': 'completed',
+                'results': results,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
             active_scans[scan_id] = {
                 'status': 'completed',
                 'target': target,
@@ -228,20 +247,30 @@ def start_recon():
                 'timestamp': datetime.now(timezone.utc).isoformat()
             }
         except Exception as e:
+            logging.error(f"Scan {scan_id} failed: {e}")
+            socketio.emit('recon_output', {
+                'scan_id': scan_id,
+                'target': target,
+                'event': 'failed',
+                'error': str(e),
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
             active_scans[scan_id] = {
                 'status': 'failed',
                 'error': str(e)
             }
 
         current_phase = 'idle'
+        socketio.emit('phase_change', {'phase': 'idle', 'target': target, 'scan_id': scan_id})
 
-    thread = threading.Thread(target=run_scan)
+    thread = threading.Thread(target=run_scan, daemon=True)
     thread.start()
 
     active_scans[scan_id] = {
         'status': 'running',
         'target': target,
-        'tools': tools
+        'tools': tools,
+        'started': datetime.now(timezone.utc).isoformat()
     }
 
     return jsonify({'scan_id': scan_id, 'status': 'started'})
@@ -279,6 +308,113 @@ def get_ai_thoughts():
     """Get recent AI thoughts"""
     thoughts = get_thoughts()
     return jsonify({'thoughts': thoughts})
+
+
+@app.route('/api/v1/ai/analyze', methods=['POST'])
+def analyze_with_ai():
+    """Trigger AI analysis on target data"""
+    target = request.json.get('target')
+    phase = request.json.get('phase', 'recon')  # recon or exploitation
+
+    if not target:
+        return jsonify({'error': 'Target required'}), 400
+
+    def run_ai_analysis():
+        global current_phase
+        current_phase = f'ai_{phase}'
+        socketio.emit('phase_change', {'phase': current_phase, 'target': target})
+
+        try:
+            # Load recon results for the target
+            from pathlib import Path
+            results_file = Path(f'results/{target}/results.json')
+
+            if results_file.exists():
+                with open(results_file, 'r') as f:
+                    recon_data = json.load(f)
+            else:
+                recon_data = {'message': f'No recon data found for {target}'}
+
+            # Ask AI for analysis
+            ai_response = ask_ai(recon_data)
+
+            # Emit AI thoughts via WebSocket
+            socketio.emit('ai_thought', {
+                'target': target,
+                'phase': phase,
+                'response': ai_response,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+            return {'success': True, 'response': ai_response}
+
+        except Exception as e:
+            logging.error(f"AI analysis failed: {e}")
+            return {'error': str(e)}
+
+        finally:
+            current_phase = 'idle'
+            socketio.emit('phase_change', {'phase': 'idle', 'target': target})
+
+    # Run in background thread
+    thread = threading.Thread(target=run_ai_analysis, daemon=True)
+    thread.start()
+
+    return jsonify({'status': 'started', 'message': 'AI analysis initiated'})
+
+
+@app.route('/api/v1/exploit/start', methods=['POST'])
+def start_exploitation():
+    """Start exploitation chain on target"""
+    target = request.json.get('target')
+    if not target:
+        return jsonify({'error': 'Target required'}), 400
+
+    exploit_id = f"exploit_{int(time.time())}"
+
+    def run_exploitation():
+        global current_phase
+        current_phase = 'exploitation'
+        socketio.emit('phase_change', {'phase': 'exploitation', 'target': target})
+
+        try:
+            socketio.emit('exploit_result', {
+                'exploit_id': exploit_id,
+                'target': target,
+                'event': 'started',
+                'message': f'Starting exploitation on {target}',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+            # Run full exploitation chain
+            run_exploitation_chain(target)
+
+            socketio.emit('exploit_result', {
+                'exploit_id': exploit_id,
+                'target': target,
+                'event': 'completed',
+                'message': 'Exploitation chain completed',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+        except Exception as e:
+            logging.error(f"Exploitation {exploit_id} failed: {e}")
+            socketio.emit('exploit_result', {
+                'exploit_id': exploit_id,
+                'target': target,
+                'event': 'failed',
+                'error': str(e),
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+        finally:
+            current_phase = 'idle'
+            socketio.emit('phase_change', {'phase': 'idle', 'target': target})
+
+    thread = threading.Thread(target=run_exploitation, daemon=True)
+    thread.start()
+
+    return jsonify({'exploit_id': exploit_id, 'status': 'started'})
 
 
 @app.route('/api/v1/logs', methods=['GET'])
