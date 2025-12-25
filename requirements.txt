@@ -203,7 +203,7 @@ log_symbols==0.0.14
 # louis==3.33.0  # System package - install via apt
 lsassy==3.1.11
 lxml==5.4.0
-lz4==4.4.0
+lz4==4.4.5
 macholib==1.16.3
 Mako>=1.3.0
 Markdown==3.7
