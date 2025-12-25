@@ -96,7 +96,7 @@ dnslib==0.9.25
 dnspython==2.7.0
 docopt==0.6.2
 donut-shellcode==1.1
-dploot==3.1.2
+# dploot==3.1.2  # Incompatible dependency: requires pyasn1<0.5.0 but certipy-ad requires ~=0.6.1
 dropbox==12.0.2
 dsinternals==1.2.4
 ecdsa==0.19.1
