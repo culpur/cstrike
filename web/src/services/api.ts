@@ -17,8 +17,12 @@ class ApiService {
   private client: AxiosInstance;
 
   constructor() {
+    // Use API URL from environment, fallback to relative path
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    const baseURL = apiUrl ? `${apiUrl}/api` : '/api';
+
     this.client = axios.create({
-      baseURL: '/api',
+      baseURL,
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',

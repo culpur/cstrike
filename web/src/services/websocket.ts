@@ -20,9 +20,11 @@ class WebSocketService {
   }
 
   private getWebSocketUrl(): string {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    return `${protocol}//${host}/ws`;
+    // Use API URL from environment, fallback to current host
+    const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const url = new URL(apiUrl);
+    const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${url.host}/ws`;
   }
 
   /**
