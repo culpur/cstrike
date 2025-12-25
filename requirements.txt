@@ -262,7 +262,7 @@ Paste==3.10.1
 PasteDeploy==3.1.0
 PasteScript==3.7.0
 patator==1.0
-pcapy>=0.11.0
+# pcapy>=0.11.0  # Requires libpcap-dev system libraries + incompatible with Python 3.13
 pefile==2024.8.26
 pexpect==4.9.0
 pgcli==4.3.0
