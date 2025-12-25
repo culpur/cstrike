@@ -48,9 +48,10 @@ active_scans_lock = threading.Lock()  # Thread safety for concurrent scans
 scan_threads = {}  # Track running threads for cancellation
 system_metrics = {
     'cpu': 0,
-    'ram': 0,
-    'vpn_ip': 'Not connected',
-    'uptime': 0
+    'memory': 0,  # Changed from 'ram' to match frontend
+    'vpnIp': None,  # Changed from 'vpn_ip' to camelCase, None instead of string
+    'uptime': 0,
+    'timestamp': 0
 }
 services_status = {
     'metasploit': 'stopped',
@@ -62,22 +63,46 @@ current_phase = 'idle'
 
 def get_vpn_ip():
     """Get VPN IP address from wg0 or tun0"""
-    for iface in ['wg0', 'tun0']:
+    import platform
+
+    for iface in ['wg0', 'tun0', 'utun0', 'utun1', 'utun2']:  # Added macOS utun interfaces
         try:
-            result = subprocess.run(
-                ['ip', 'link', 'show', iface],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            if result.returncode == 0:
-                output = subprocess.check_output(
-                    ['curl', '--interface', iface, '-s', 'https://ifconfig.me'],
+            # Check if interface exists (platform-specific)
+            if platform.system() == 'Darwin':  # macOS
+                result = subprocess.run(
+                    ['ifconfig', iface],
+                    stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL
-                ).decode().strip()
-                return output
+                )
+                if result.returncode == 0:
+                    # Try to get external IP through this interface
+                    try:
+                        output = subprocess.check_output(
+                            ['curl', '--interface', iface, '-s', '--connect-timeout', '2', 'https://ifconfig.me'],
+                            stderr=subprocess.DEVNULL,
+                            timeout=3
+                        ).decode().strip()
+                        if output:
+                            return output
+                    except:
+                        pass
+            else:  # Linux
+                result = subprocess.run(
+                    ['ip', 'link', 'show', iface],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                if result.returncode == 0:
+                    output = subprocess.check_output(
+                        ['curl', '--interface', iface, '-s', '--connect-timeout', '2', 'https://ifconfig.me'],
+                        stderr=subprocess.DEVNULL,
+                        timeout=3
+                    ).decode().strip()
+                    if output:
+                        return output
         except Exception:
             continue
-    return 'Not connected'
+    return None  # Changed from 'Not connected' to None
 
 
 def check_service_status(service_name):
@@ -99,9 +124,10 @@ def update_system_metrics():
         try:
             # Update metrics
             system_metrics['cpu'] = psutil.cpu_percent(interval=1)
-            system_metrics['ram'] = psutil.virtual_memory().percent
-            system_metrics['vpn_ip'] = get_vpn_ip()
+            system_metrics['memory'] = psutil.virtual_memory().percent
+            system_metrics['vpnIp'] = get_vpn_ip()
             system_metrics['uptime'] = int(time.time() - start_time)
+            system_metrics['timestamp'] = int(time.time() * 1000)  # Milliseconds
 
             # Update service status
             services_status['metasploit'] = check_service_status('msfrpcd')
@@ -109,11 +135,15 @@ def update_system_metrics():
             services_status['burp'] = check_service_status('burpsuite')
 
             # Broadcast to WebSocket clients
+            # Legacy event for backward compatibility
             socketio.emit('status_update', {
                 'metrics': system_metrics,
                 'services': services_status,
                 'phase': current_phase
             })
+
+            # New event for dashboard (matches frontend expectations)
+            socketio.emit('system_metrics', system_metrics)
 
         except Exception as e:
             logging.error(f"Error updating metrics: {e}")
