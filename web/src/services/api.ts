@@ -22,11 +22,11 @@ class ApiService {
     let baseURL: string;
     if (import.meta.env.DEV) {
       // Development: use Vite's proxy (configured in vite.config.ts)
-      baseURL = '/api';
+      baseURL = '/api/v1';
     } else {
       // Production: use configured API URL
       const apiUrl = import.meta.env.VITE_API_URL || '';
-      baseURL = apiUrl ? `${apiUrl}/api` : '/api';
+      baseURL = apiUrl ? `${apiUrl}/api/v1` : '/api/v1';
     }
 
     this.client = axios.create({
@@ -70,33 +70,25 @@ class ApiService {
   // ============================================================================
 
   async getSystemMetrics(): Promise<SystemMetrics> {
-    const { data } = await this.client.get<ApiResponse<SystemMetrics>>('/system/metrics');
-    if (!data.success || !data.data) {
-      throw new Error(data.error || 'Failed to fetch system metrics');
-    }
-    return data.data;
+    // Backend returns {metrics, services, phase, timestamp}
+    const { data } = await this.client.get('/status');
+    return data.metrics;
   }
 
   async getServiceStatus(): Promise<ServiceState> {
-    const { data } = await this.client.get<ApiResponse<ServiceState>>('/services/status');
-    if (!data.success || !data.data) {
-      throw new Error(data.error || 'Failed to fetch service status');
-    }
-    return data.data;
+    // Backend returns services object directly
+    const { data } = await this.client.get('/services');
+    return data;
   }
 
   async startService(service: 'metasploit' | 'zap' | 'burp'): Promise<void> {
-    const { data } = await this.client.post<ApiResponse>(`/services/${service}/start`);
-    if (!data.success) {
-      throw new Error(data.error || `Failed to start ${service}`);
-    }
+    // Backend expects POST /services/<service_name> with {action: 'start'}
+    await this.client.post(`/services/${service}`, { action: 'start' });
   }
 
   async stopService(service: 'metasploit' | 'zap' | 'burp'): Promise<void> {
-    const { data } = await this.client.post<ApiResponse>(`/services/${service}/stop`);
-    if (!data.success) {
-      throw new Error(data.error || `Failed to stop ${service}`);
-    }
+    // Backend expects POST /services/<service_name> with {action: 'stop'}
+    await this.client.post(`/services/${service}`, { action: 'stop' });
   }
 
   // ============================================================================
@@ -104,35 +96,37 @@ class ApiService {
   // ============================================================================
 
   async addTarget(url: string): Promise<Target> {
-    const { data } = await this.client.post<ApiResponse<Target>>('/recon/targets', { url });
-    if (!data.success || !data.data) {
-      throw new Error(data.error || 'Failed to add target');
+    // Backend expects POST /targets with {target: "url"}
+    const { data } = await this.client.post('/targets', { target: url });
+    if (data.success) {
+      // Return a Target object with the URL
+      return {
+        id: Date.now().toString(),
+        url: data.target,
+        status: 'pending',
+        addedAt: new Date().toISOString(),
+      };
     }
-    return data.data;
+    throw new Error(data.error || 'Failed to add target');
   }
 
   async removeTarget(id: string): Promise<void> {
-    const { data } = await this.client.delete<ApiResponse>(`/recon/targets/${id}`);
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to remove target');
-    }
+    // Backend expects DELETE /targets/<int:target_id>
+    // ID is the index in the array, not a string ID
+    await this.client.delete(`/targets/${id}`);
   }
 
-  async startRecon(targetId: string, tools: string[]): Promise<void> {
-    const { data } = await this.client.post<ApiResponse>('/recon/start', {
-      targetId,
-      tools,
-    });
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to start reconnaissance');
+  async startRecon(target: string, tools: string[]): Promise<void> {
+    // Backend expects POST /recon/start with {target, tools}
+    const { data } = await this.client.post('/recon/start', { target, tools });
+    if (!data.scan_id) {
+      throw new Error('Failed to start reconnaissance');
     }
   }
 
   async stopRecon(targetId: string): Promise<void> {
-    const { data } = await this.client.post<ApiResponse>('/recon/stop', { targetId });
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to stop reconnaissance');
-    }
+    // TODO: Backend doesn't have a stop endpoint yet
+    throw new Error('Stop reconnaissance not implemented in backend');
   }
 
   // ============================================================================
@@ -140,50 +134,43 @@ class ApiService {
   // ============================================================================
 
   async startWebExploit(targetId: string, config: Record<string, unknown>): Promise<void> {
-    const { data } = await this.client.post<ApiResponse>('/exploit/web/start', {
-      targetId,
-      config,
-    });
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to start web exploitation');
-    }
+    // TODO: Backend doesn't have exploitation endpoints yet
+    throw new Error('Web exploitation not implemented in backend');
   }
 
   async startBruteforce(config: Record<string, unknown>): Promise<void> {
-    const { data } = await this.client.post<ApiResponse>('/exploit/bruteforce/start', config);
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to start bruteforce');
-    }
+    // TODO: Backend doesn't have exploitation endpoints yet
+    throw new Error('Bruteforce not implemented in backend');
   }
 
   // ============================================================================
   // Loot
   // ============================================================================
 
-  async getLoot(): Promise<LootItem[]> {
-    const { data } = await this.client.get<ApiResponse<LootItem[]>>('/loot');
-    if (!data.success || !data.data) {
-      throw new Error(data.error || 'Failed to fetch loot');
-    }
-    return data.data;
+  async getLoot(target: string = 'all'): Promise<LootItem[]> {
+    // Backend expects GET /loot/<target>
+    // Returns {usernames, passwords, urls, ports} when no category specified
+    const { data } = await this.client.get(`/loot/${target}`);
+
+    // Convert backend format to LootItem array
+    const items: LootItem[] = [];
+    if (data.usernames) items.push(...data.usernames.map((u: string) => ({ type: 'username', value: u, timestamp: Date.now() })));
+    if (data.passwords) items.push(...data.passwords.map((p: string) => ({ type: 'password', value: p, timestamp: Date.now() })));
+    if (data.urls) items.push(...data.urls.map((url: string) => ({ type: 'url', value: url, timestamp: Date.now() })));
+    if (data.ports) items.push(...data.ports.map((port: number) => ({ type: 'port', value: port.toString(), timestamp: Date.now() })));
+
+    return items;
   }
 
   async getCredentials(): Promise<CredentialPair[]> {
-    const { data } = await this.client.get<ApiResponse<CredentialPair[]>>('/loot/credentials');
-    if (!data.success || !data.data) {
-      throw new Error(data.error || 'Failed to fetch credentials');
-    }
-    return data.data;
+    // TODO: Backend doesn't have a dedicated credentials endpoint
+    // Would need to combine usernames and passwords from /loot/<target>
+    throw new Error('Get credentials not implemented in backend');
   }
 
   async validateCredential(id: string): Promise<boolean> {
-    const { data } = await this.client.post<ApiResponse<{ valid: boolean }>>(
-      `/loot/credentials/${id}/validate`
-    );
-    if (!data.success || !data.data) {
-      throw new Error(data.error || 'Failed to validate credential');
-    }
-    return data.data.valid;
+    // TODO: Backend doesn't have credential validation endpoint
+    throw new Error('Credential validation not implemented in backend');
   }
 
   // ============================================================================
@@ -191,13 +178,11 @@ class ApiService {
   // ============================================================================
 
   async getLogs(limit = 1000): Promise<LogEntry[]> {
-    const { data } = await this.client.get<ApiResponse<LogEntry[]>>('/logs', {
+    // Backend expects GET /logs?limit=N&level=LEVEL
+    const { data } = await this.client.get('/logs', {
       params: { limit },
     });
-    if (!data.success || !data.data) {
-      throw new Error(data.error || 'Failed to fetch logs');
-    }
-    return data.data;
+    return data.logs || [];
   }
 }
 

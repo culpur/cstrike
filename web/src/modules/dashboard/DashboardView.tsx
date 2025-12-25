@@ -26,21 +26,18 @@ export function DashboardView() {
     // Listen for system metrics updates
     const unsubMetrics = wsService.on<SystemMetrics>('system_metrics', (data) => {
       updateMetrics(data);
+      // Update connection status when we receive data
+      setConnected(true);
     });
 
-    // Listen for connection status
-    const unsubConnection = wsService.on<{ connected: boolean }>(
-      'system_metrics',
-      (data) => {
-        if ('connected' in data) {
-          setConnected(data.connected);
-        }
-      }
-    );
+    // Update connection status when disconnected
+    const checkConnection = setInterval(() => {
+      setConnected(wsService.isConnected());
+    }, 5000);
 
     return () => {
       unsubMetrics();
-      unsubConnection();
+      clearInterval(checkConnection);
     };
   }, [updateMetrics, setConnected]);
 
