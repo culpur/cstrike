@@ -13,6 +13,9 @@ if [ ! -f "api_server.py" ]; then
     exit 1
 fi
 
+# Create logs directory if it doesn't exist
+mkdir -p logs
+
 # Install Python dependencies if needed
 if ! python3 -c "import flask" 2>/dev/null; then
     echo "📦 Installing Python dependencies..."

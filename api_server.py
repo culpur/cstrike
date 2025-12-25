@@ -25,7 +25,7 @@ from modules.ai_assistant import ask_ai, get_thoughts
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000'])
-socketio = SocketIO(app, cors_allowed_origins=['http://localhost:3000'])
+socketio = SocketIO(app, cors_allowed_origins=['http://localhost:3000'], async_mode='gevent')
 
 logging.basicConfig(
     level=logging.INFO,
