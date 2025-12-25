@@ -331,7 +331,7 @@ PyMySQL==1.1.1
 # PyNaCl==1.5.0  # May have Python 3.13 compilation issues
 pyNfsClient==0.1.5
 PyOpenGL==3.1.9
-pyOpenSSL==25.1.0
+pyOpenSSL>=24.0.0,<25.0.0
 pyotp==2.9.0
 pyparsing==3.1.2
 # pypdf==5.4.0  # PDF tools - not core dependency
