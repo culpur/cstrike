@@ -35,7 +35,7 @@ beautifulsoup4>=4.13.4
 
 # Credential Validation System
 paramiko>=3.5.0  # SSH client for credential validation
-ftplib  # Standard library, no installation needed
+# ftplib is a standard library module, no installation needed
 
 # Common dependencies
 certifi>=2025.1.31
