@@ -17,9 +17,17 @@ class ApiService {
   private client: AxiosInstance;
 
   constructor() {
-    // Use API URL from environment, fallback to relative path
-    const apiUrl = import.meta.env.VITE_API_URL || '';
-    const baseURL = apiUrl ? `${apiUrl}/api` : '/api';
+    // In development, use relative URL to go through Vite proxy
+    // In production, use configured API URL
+    let baseURL: string;
+    if (import.meta.env.DEV) {
+      // Development: use Vite's proxy (configured in vite.config.ts)
+      baseURL = '/api';
+    } else {
+      // Production: use configured API URL
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      baseURL = apiUrl ? `${apiUrl}/api` : '/api';
+    }
 
     this.client = axios.create({
       baseURL,

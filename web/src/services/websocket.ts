@@ -20,11 +20,19 @@ class WebSocketService {
   }
 
   private getWebSocketUrl(): string {
-    // Use API URL from environment, fallback to current host
-    const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
-    const url = new URL(apiUrl);
-    const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${url.host}/ws`;
+    // In development, use relative URL to go through Vite proxy
+    // In production, construct absolute URL
+    if (import.meta.env.DEV) {
+      // Development: use Vite's proxy (configured in vite.config.ts)
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${protocol}//${window.location.host}/ws`;
+    } else {
+      // Production: use configured API URL or current host
+      const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
+      const url = new URL(apiUrl);
+      const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${protocol}//${url.host}/ws`;
+    }
   }
 
   /**
