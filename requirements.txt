@@ -183,19 +183,19 @@ jsonschema==4.19.2
 jsonschema-specifications==2023.12.1
 jwcrypto==1.5.6
 kaitaistruct==0.10
-kali-tweaks==2023.3.2
-KismetCaptureBtGeiger==2021.7.1
-KismetCaptureFreaklabsZigbee==2018.7.0
-KismetCaptureRtl433==2020.10.1
-KismetCaptureRtladsb==2020.10.1
-KismetCaptureRtlamr==2020.10.1
+# kali-tweaks==2023.3.2  # Kali-specific system package - install via apt
+# KismetCaptureBtGeiger==2021.7.1  # Kali-specific - install via apt
+# KismetCaptureFreaklabsZigbee==2018.7.0  # Kali-specific - install via apt
+# KismetCaptureRtl433==2020.10.1  # Kali-specific - install via apt
+# KismetCaptureRtladsb==2020.10.1  # Kali-specific - install via apt
+# KismetCaptureRtlamr==2020.10.1  # Kali-specific - install via apt
 kiwisolver==1.4.7
 kombu==5.5.4
 ldap3==2.9.1
 ldapdomaindump==0.9.4
 legacy-cgi==2.6.3
 legacycrypt==0.3
-lightdm-gtk-greeter-settings==1.2.3
+# lightdm-gtk-greeter-settings==1.2.3  # Kali-specific - install via apt
 limits==4.4.1
 linkify-it-py==2.0.3
 llvmlite==0.44.0
@@ -246,7 +246,7 @@ numexpr==2.11.0
 numpy==2.2.4
 odfpy==1.4.2
 olefile==0.47
-onboard==1.4.1
+# onboard==1.4.1  # Kali-specific - install via apt
 openai==1.101.0
 openpyxl==3.1.5
 ordered-set==4.1.0
@@ -351,7 +351,7 @@ PySecretSOCKS==0.9.1
 pyserial==3.5
 pyserial-asyncio==0.6
 pyShodan==0.2.6
-pysmbc==1.0.25.1
+# pysmbc==1.0.25.1  # Kali-specific - install via apt
 pysmi==0.3.4
 pysnmp==4.4.12
 PySocks==1.7.1
@@ -671,7 +671,7 @@ yara-python==4.5.4
 yarl==1.19.0
 yaswfp==0.9.3
 zc.lockfile==3.0.post1
-zenmap==7.95
+# zenmap==7.95  # Kali-specific - install via apt
 zipp==3.21.0
 zlib-wrapper==0.1.3
 zombie-imp==0.0.3
