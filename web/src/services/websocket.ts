@@ -104,6 +104,18 @@ class WebSocketService {
     this.socket.on('file_downloaded', (data) => {
       this.handleServerMessage('file_downloaded', data);
     });
+
+    this.socket.on('loot_item', (data) => {
+      this.handleServerMessage('loot_item', data);
+    });
+
+    this.socket.on('ai_thought', (data) => {
+      this.handleServerMessage('ai_thought', data);
+    });
+
+    this.socket.on('log_entry', (data) => {
+      this.handleServerMessage('log_entry', data);
+    });
   }
 
   /**

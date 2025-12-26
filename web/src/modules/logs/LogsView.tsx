@@ -8,7 +8,8 @@ import { Button, Panel } from '@components/ui';
 import { useLogStore } from '@stores/logStore';
 import { useUIStore } from '@stores/uiStore';
 import { wsService } from '@services/websocket';
-import { formatTime, getLogLevelColor, exportAsJson } from '@utils/index';
+import { formatTime, getLogLevelColor, exportAsJson, exportAsCsv } from '@utils/index';
+import { apiService } from '@services/api';
 import type { LogEntry, LogLevel } from '@/types';
 
 export function LogsView() {
@@ -38,12 +39,34 @@ export function LogsView() {
     };
   }, [addLog]);
 
-  const handleExportLogs = () => {
+  // Load initial logs on mount
+  useEffect(() => {
+    const loadInitialLogs = async () => {
+      try {
+        const logs = await apiService.getLogs(1000);
+        logs.forEach(log => addLog(log));
+      } catch (error) {
+        console.error('Failed to load initial logs:', error);
+      }
+    };
+
+    loadInitialLogs();
+  }, [addLog]);
+
+  const handleExportJson = () => {
     exportAsJson(filteredLogs, `cstrike-logs-${Date.now()}`);
-    addToast({
-      type: 'success',
-      message: 'Logs exported successfully',
-    });
+    addToast({ type: 'success', message: 'Logs exported as JSON' });
+  };
+
+  const handleExportCsv = () => {
+    const csvData = filteredLogs.map(log => ({
+      timestamp: formatTime(log.timestamp),
+      level: log.level,
+      source: log.source,
+      message: log.message,
+    }));
+    exportAsCsv(csvData, `cstrike-logs-${Date.now()}`);
+    addToast({ type: 'success', message: 'Logs exported as CSV' });
   };
 
   const handleClearLogs = () => {
@@ -77,9 +100,13 @@ export function LogsView() {
             />
             Auto-scroll
           </label>
-          <Button variant="secondary" onClick={handleExportLogs}>
+          <Button variant="secondary" onClick={handleExportJson}>
             <Download className="w-4 h-4 mr-1" />
-            Export
+            Export JSON
+          </Button>
+          <Button variant="secondary" onClick={handleExportCsv}>
+            <Download className="w-4 h-4 mr-1" />
+            Export CSV
           </Button>
           <Button variant="danger" onClick={handleClearLogs}>
             <Trash2 className="w-4 h-4 mr-1" />
@@ -122,6 +149,33 @@ export function LogsView() {
               onChange={(e) => setFilter({ searchQuery: e.target.value })}
               className="w-full px-3 py-2 bg-grok-surface-2 border border-grok-border rounded text-sm text-grok-text-body placeholder:text-grok-text-muted focus:outline-none focus:ring-2 focus:ring-grok-recon-blue"
             />
+          </div>
+
+          <div>
+            <p className="text-xs text-grok-text-muted mb-2 uppercase tracking-wide">
+              Sources
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              {['system', 'recon', 'ai', 'exploit', 'metasploit', 'zap'].map((source) => (
+                <button
+                  key={source}
+                  onClick={() => {
+                    const newSources = filter.sources.includes(source)
+                      ? filter.sources.filter((s) => s !== source)
+                      : [...filter.sources, source];
+                    setFilter({ sources: newSources });
+                  }}
+                  className={cn(
+                    'px-3 py-1.5 rounded text-sm font-medium transition-colors border',
+                    filter.sources.length === 0 || filter.sources.includes(source)
+                      ? 'border-grok-recon-blue text-grok-recon-blue'
+                      : 'border-grok-border text-grok-text-muted opacity-40'
+                  )}
+                >
+                  {source}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </Panel>

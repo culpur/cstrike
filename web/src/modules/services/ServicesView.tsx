@@ -2,16 +2,37 @@
  * Services View - Control Metasploit, ZAP, and Burp Suite
  */
 
+import { useEffect } from 'react';
 import { Play, Square, RefreshCw } from 'lucide-react';
 import { Button, Panel, StatusBadge } from '@components/ui';
 import { useSystemStore } from '@stores/systemStore';
 import { useUIStore } from '@stores/uiStore';
 import { apiService } from '@services/api';
+import { wsService } from '@services/websocket';
 import type { ServiceStatus } from '@/types';
 
 export function ServicesView() {
   const { services, updateServiceStatus } = useSystemStore();
   const { addToast } = useUIStore();
+
+  // Real-time service status updates
+  useEffect(() => {
+    const unsubscribe = wsService.on<{
+      services: {
+        metasploitRpc: ServiceStatus;
+        zap: ServiceStatus;
+        burp: ServiceStatus;
+      }
+    }>('status_update', (data) => {
+      if (data.services) {
+        updateServiceStatus('metasploitRpc', data.services.metasploitRpc);
+        updateServiceStatus('zap', data.services.zap);
+        updateServiceStatus('burp', data.services.burp);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [updateServiceStatus]);
 
   const handleStartService = async (
     service: 'metasploit' | 'zap' | 'burp'
@@ -73,6 +94,28 @@ export function ServicesView() {
     }
   };
 
+  const handleRestartService = async (service: 'metasploitRpc' | 'zap' | 'burp') => {
+    updateServiceStatus(service, 'stopping');
+
+    try {
+      // Map to backend service names
+      const backendName = service === 'metasploitRpc' ? 'metasploit' : service;
+      await apiService.restartService(backendName);
+
+      updateServiceStatus(service, 'running');
+      addToast({
+        type: 'success',
+        message: `${service} restarted successfully`,
+      });
+    } catch (error) {
+      updateServiceStatus(service, 'error');
+      addToast({
+        type: 'error',
+        message: `Failed to restart ${service}`,
+      });
+    }
+  };
+
   return (
     <div className="h-full overflow-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold text-grok-text-heading">Service Control</h1>
@@ -84,6 +127,7 @@ export function ServicesView() {
           status={services.metasploitRpc}
           onStart={() => handleStartService('metasploit')}
           onStop={() => handleStopService('metasploit')}
+          onRestart={() => handleRestartService('metasploitRpc')}
           port="55553"
           docs="https://docs.rapid7.com/metasploit/"
         />
@@ -94,6 +138,7 @@ export function ServicesView() {
           status={services.zap}
           onStart={() => handleStartService('zap')}
           onStop={() => handleStopService('zap')}
+          onRestart={() => handleRestartService('zap')}
           port="8080"
           docs="https://www.zaproxy.org/docs/"
         />
@@ -104,6 +149,7 @@ export function ServicesView() {
           status={services.burp}
           onStart={() => handleStartService('burp')}
           onStop={() => handleStopService('burp')}
+          onRestart={() => handleRestartService('burp')}
           port="8081"
           docs="https://portswigger.net/burp/documentation"
         />
@@ -152,6 +198,7 @@ interface ServiceCardProps {
   status: ServiceStatus;
   onStart: () => void;
   onStop: () => void;
+  onRestart: () => void;
   port: string;
   docs: string;
 }
@@ -162,6 +209,7 @@ function ServiceCard({
   status,
   onStart,
   onStop,
+  onRestart,
   port,
   docs,
 }: ServiceCardProps) {
@@ -220,7 +268,11 @@ function ServiceCard({
               Start
             </Button>
           )}
-          <Button variant="ghost" disabled={!isRunning}>
+          <Button
+            variant="ghost"
+            onClick={onRestart}
+            disabled={!isRunning || isTransitioning}
+          >
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>

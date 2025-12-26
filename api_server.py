@@ -19,7 +19,8 @@ import time
 
 # Import CStrike modules
 from modules.recon import run_recon_layered
-from modules.exploitation import run_exploitation_chain
+from modules.exploitation import run_exploitation_chain, run_bruteforce_enumeration
+from modules.utils import get_target_dir
 from modules.loot_tracker import (
     get_loot, add_loot, generate_credential_heatmap,
     get_credentials, get_all_credentials, get_credential_by_id,
@@ -54,7 +55,7 @@ system_metrics = {
     'timestamp': 0
 }
 services_status = {
-    'metasploit': 'stopped',
+    'metasploitRpc': 'stopped',  # Changed from 'metasploit' to match frontend
     'zap': 'stopped',
     'burp': 'stopped'
 }
@@ -130,7 +131,7 @@ def update_system_metrics():
             system_metrics['timestamp'] = int(time.time() * 1000)  # Milliseconds
 
             # Update service status
-            services_status['metasploit'] = check_service_status('msfrpcd')
+            services_status['metasploitRpc'] = check_service_status('msfrpcd')
             services_status['zap'] = check_service_status('zap')
             services_status['burp'] = check_service_status('burpsuite')
 
@@ -176,7 +177,7 @@ def control_service(service_name):
     action = request.json.get('action')  # 'start' or 'stop'
 
     service_commands = {
-        'metasploit': {
+        'metasploitRpc': {
             'start': ['systemctl', 'start', 'msfrpcd'],
             'stop': ['pkill', '-f', 'msfrpcd']
         },
@@ -204,6 +205,45 @@ def control_service(service_name):
         return jsonify({
             'service': service_name,
             'action': action,
+            'status': services_status[service_name]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/services/<service_name>/restart', methods=['POST'])
+def restart_service(service_name):
+    """Restart a service"""
+    # Map frontend names to process names
+    process_map = {
+        'metasploitRpc': 'msfrpcd',
+        'zap': 'zap',
+        'burp': 'burpsuite'
+    }
+
+    if service_name not in process_map:
+        return jsonify({'error': 'Unknown service'}), 404
+
+    try:
+        process = process_map[service_name]
+        # Stop
+        subprocess.run(['pkill', '-f', process], check=False)
+        time.sleep(2)
+
+        # Start based on service
+        if service_name == 'metasploitRpc':
+            subprocess.Popen(['msfrpcd', '-P', 'password', '-S'])
+        elif service_name == 'zap':
+            subprocess.Popen(['zap.sh', '-daemon'])
+        elif service_name == 'burp':
+            subprocess.Popen(['burpsuite'])
+
+        time.sleep(1)
+        services_status[service_name] = check_service_status(process)
+
+        return jsonify({
+            'service': service_name,
+            'action': 'restart',
             'status': services_status[service_name]
         })
     except Exception as e:
@@ -878,8 +918,10 @@ def analyze_with_ai():
 
 @app.route('/api/v1/exploit/start', methods=['POST'])
 def start_exploitation():
-    """Start exploitation chain on target"""
+    """Start exploitation chain with configurable tools"""
     target = request.json.get('target')
+    tools = request.json.get('tools', ['nuclei', 'ffuf'])  # NEW: Tool selection
+
     if not target:
         return jsonify({'error': 'Target required'}), 400
 
@@ -896,11 +938,13 @@ def start_exploitation():
                 'target': target,
                 'event': 'started',
                 'message': f'Starting exploitation on {target}',
+                'tools': tools,
                 'timestamp': datetime.now(timezone.utc).isoformat()
             })
 
-            # Run full exploitation chain
-            run_exploitation_chain(target)
+            # Pass tools to exploitation chain
+            target_dir = get_target_dir(target)
+            run_exploitation_chain(target, target_dir, enabled_tools=tools)
 
             socketio.emit('exploit_result', {
                 'exploit_id': exploit_id,
@@ -927,13 +971,84 @@ def start_exploitation():
     thread = threading.Thread(target=run_exploitation, daemon=True)
     thread.start()
 
-    return jsonify({'exploit_id': exploit_id, 'status': 'started'})
+    return jsonify({
+        'exploit_id': exploit_id,
+        'status': 'started',
+        'target': target,
+        'tools': tools
+    })
+
+
+@app.route('/api/v1/exploit/bruteforce', methods=['POST'])
+def start_bruteforce():
+    """Start targeted bruteforce attack"""
+    target = request.json.get('target')
+    service = request.json.get('service', 'ssh').lower()
+    port = request.json.get('port', 22)
+    wordlist = request.json.get('wordlist', 'rockyou.txt')
+
+    if not target:
+        return jsonify({'error': 'Target required'}), 400
+
+    exploit_id = f"bruteforce_{int(time.time())}"
+
+    def run_bruteforce():
+        global current_phase
+        current_phase = 'exploitation'
+        socketio.emit('phase_change', {'phase': 'exploitation', 'target': target})
+
+        try:
+            socketio.emit('exploit_result', {
+                'exploit_id': exploit_id,
+                'target': target,
+                'service': service,
+                'port': port,
+                'event': 'started',
+                'message': f'Starting bruteforce attack on {service}://{target}:{port}',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+            # Run Hydra bruteforce
+            run_bruteforce_enumeration(target, [str(port)])
+
+            socketio.emit('exploit_result', {
+                'exploit_id': exploit_id,
+                'target': target,
+                'event': 'completed',
+                'message': f'Bruteforce attack completed on {service}',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+        except Exception as e:
+            logging.error(f"Bruteforce {exploit_id} failed: {e}")
+            socketio.emit('exploit_result', {
+                'exploit_id': exploit_id,
+                'target': target,
+                'event': 'failed',
+                'error': str(e),
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+        finally:
+            current_phase = 'idle'
+            socketio.emit('phase_change', {'phase': 'idle', 'target': target})
+
+    thread = threading.Thread(target=run_bruteforce, daemon=True)
+    thread.start()
+
+    return jsonify({
+        'status': 'started',
+        'exploit_id': exploit_id,
+        'target': target,
+        'service': service,
+        'port': port
+    })
 
 
 @app.route('/api/v1/logs', methods=['GET'])
 def get_logs():
-    """Get recent logs"""
-    limit = request.args.get('limit', 100, type=int)
+    """Get recent logs with proper structured format"""
+    limit = request.args.get('limit', 1000, type=int)
     level = request.args.get('level')  # DEBUG, INFO, WARN, ERROR
 
     log_file = Path('logs/driver.log')
@@ -948,17 +1063,50 @@ def get_logs():
         lines = [line for line in lines if level in line]
 
     logs = []
-    for line in lines:
+    for idx, line in enumerate(lines):
         try:
             parts = line.split(maxsplit=3)
             if len(parts) >= 4:
+                # Parse timestamp, level, message
+                timestamp_str = f"{parts[0]} {parts[1]}"
+                log_level = parts[2]
+                message = parts[3].strip()
+
+                # Try to parse timestamp to ISO format
+                try:
+                    dt = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S,%f')
+                    iso_timestamp = dt.replace(tzinfo=timezone.utc).isoformat()
+                except:
+                    iso_timestamp = datetime.now(timezone.utc).isoformat()
+
                 logs.append({
-                    'timestamp': f"{parts[0]} {parts[1]}",
-                    'level': parts[2],
-                    'message': parts[3].strip()
+                    'id': f"{int(time.time() * 1000)}-{idx:04d}-{os.urandom(2).hex()}",
+                    'timestamp': iso_timestamp,
+                    'level': log_level,
+                    'source': 'system',
+                    'message': message,
+                    'metadata': {}
                 })
-        except Exception:
-            logs.append({'message': line.strip()})
+            else:
+                # Unstructured log line
+                logs.append({
+                    'id': f"{int(time.time() * 1000)}-{idx:04d}-{os.urandom(2).hex()}",
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                    'level': 'INFO',
+                    'source': 'system',
+                    'message': line.strip(),
+                    'metadata': {}
+                })
+        except Exception as e:
+            # Fallback for parsing errors
+            logs.append({
+                'id': f"{int(time.time() * 1000)}-{idx:04d}-{os.urandom(2).hex()}",
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'level': 'INFO',
+                'source': 'system',
+                'message': line.strip(),
+                'metadata': {'parse_error': str(e)}
+            })
 
     return jsonify({'logs': logs})
 

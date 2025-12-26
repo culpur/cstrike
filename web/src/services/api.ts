@@ -91,6 +91,10 @@ class ApiService {
     await this.client.post(`/services/${service}`, { action: 'stop' });
   }
 
+  async restartService(service: 'metasploit' | 'zap' | 'burp'): Promise<void> {
+    await this.client.post(`/services/${service}/restart`);
+  }
+
   // ============================================================================
   // Reconnaissance
   // ============================================================================
@@ -162,9 +166,20 @@ class ApiService {
   // Exploitation
   // ============================================================================
 
-  async startExploitation(target: string): Promise<{exploit_id: string; status: string}> {
-    // Backend: POST /exploit/start with {target}
-    const { data } = await this.client.post('/exploit/start', { target });
+  async startExploitation(target: string, tools: string[] = ['nuclei', 'ffuf']): Promise<{exploit_id: string; status: string}> {
+    // Backend: POST /exploit/start with {target, tools}
+    const { data } = await this.client.post('/exploit/start', { target, tools });
+    return data;
+  }
+
+  async startBruteforce(config: {
+    target: string;
+    service: string;
+    port: number;
+    wordlist: string;
+  }): Promise<{exploit_id: string; status: string}> {
+    // Backend: POST /exploit/bruteforce
+    const { data } = await this.client.post('/exploit/bruteforce', config);
     return data;
   }
 
@@ -272,7 +287,15 @@ class ApiService {
     const { data } = await this.client.get('/logs', {
       params: { limit },
     });
-    return data.logs || [];
+    // Transform backend logs to frontend format
+    const logs = data.logs || [];
+    return logs.map((log: any) => ({
+      id: log.id || `${Date.now()}-${Math.random()}`,
+      timestamp: log.timestamp ? new Date(log.timestamp).getTime() : Date.now(),
+      level: log.level || 'INFO',
+      source: log.source || 'system',
+      message: log.message || '',
+    }));
   }
 }
 

@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Download, Check, X, Clock, Target } from 'lucide-react';
+import { Download, Check, X, Clock, Target, TrendingUp } from 'lucide-react';
 import { Button, Panel, Input } from '@components/ui';
 import { useLootStore } from '@stores/lootStore';
 import { useReconStore } from '@stores/reconStore';
@@ -11,13 +11,16 @@ import { useUIStore } from '@stores/uiStore';
 import { wsService } from '@services/websocket';
 import { apiService } from '@services/api';
 import { formatDateTime, exportAsJson, exportAsCsv } from '@utils/index';
-import type { LootItem, LootCategory } from '@/types';
+import type { LootItem, LootCategory, HeatmapResponse } from '@/types';
 
 export function LootView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<LootCategory | 'all'>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [validating, setValidating] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'list' | 'heatmap'>('list');
+  const [heatmapData, setHeatmapData] = useState<HeatmapResponse | null>(null);
+  const [loadingHeatmap, setLoadingHeatmap] = useState(false);
 
   const { items, credentials, stats, addLootItem, validateCredential } =
     useLootStore();
@@ -241,6 +244,63 @@ export function LootView() {
     }
   };
 
+  const handleLoadHeatmap = async () => {
+    setLoadingHeatmap(true);
+    try {
+      const data = await apiService.getLootHeatmap(50, 0);
+      setHeatmapData(data);
+      setViewMode('heatmap');
+      addToast({
+        type: 'success',
+        message: `Loaded ${data.count} scored credentials`,
+      });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        message: 'Failed to load credential heatmap',
+      });
+    } finally {
+      setLoadingHeatmap(false);
+    }
+  };
+
+  const handleValidateTop10 = async () => {
+    try {
+      const heatmapData = await apiService.getLootHeatmap(10, 0);
+
+      if (heatmapData.credentials.length === 0) {
+        addToast({ type: 'info', message: 'No scored credentials available' });
+        return;
+      }
+
+      const credentialsToValidate = heatmapData.credentials.map((cred) => ({
+        credential_id: `${cred.username}-${cred.target}-${Date.now()}`,
+        target: cred.target,
+        username: cred.username,
+        password: cred.password,
+        service: cred.service,
+        port: undefined,
+      }));
+
+      setValidating((prev) => {
+        const next = new Set(prev);
+        credentialsToValidate.forEach((c) => next.add(c.credential_id));
+        return next;
+      });
+
+      await apiService.validateCredentialsBatch(credentialsToValidate);
+      addToast({
+        type: 'success',
+        message: `Testing top ${credentialsToValidate.length} credentials`,
+      });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        message: 'Failed to start top credentials validation',
+      });
+    }
+  };
+
   // Filter items
   const filteredItems = items.filter((item) => {
     if (selectedCategory !== 'all' && item.category !== selectedCategory) {
@@ -277,6 +337,33 @@ export function LootView() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-grok-text-heading">Loot Tracker</h1>
         <div className="flex gap-2">
+          <div className="flex gap-1 bg-grok-surface-2 rounded p-1">
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn(
+                'px-3 py-1.5 rounded text-sm font-medium transition-colors',
+                viewMode === 'list'
+                  ? 'bg-grok-primary text-white'
+                  : 'text-grok-text-muted hover:text-grok-text-body'
+              )}
+            >
+              List View
+            </button>
+            <button
+              onClick={handleLoadHeatmap}
+              disabled={loadingHeatmap}
+              className={cn(
+                'px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-1',
+                viewMode === 'heatmap'
+                  ? 'bg-grok-primary text-white'
+                  : 'text-grok-text-muted hover:text-grok-text-body',
+                loadingHeatmap && 'opacity-50 cursor-not-allowed'
+              )}
+            >
+              <TrendingUp className="w-4 h-4" />
+              Heatmap
+            </button>
+          </div>
           <Button variant="secondary" onClick={handleExportCsv}>
             <Download className="w-4 h-4 mr-1" />
             CSV
@@ -304,8 +391,109 @@ export function LootView() {
         />
       </div>
 
-      {/* Filters */}
-      <Panel title="Filters">
+      {/* Heatmap View */}
+      {viewMode === 'heatmap' && heatmapData && (
+        <Panel title={`Credential Heatmap (${heatmapData.count} scored)`}>
+          {loadingHeatmap ? (
+            <p className="text-sm text-grok-text-muted text-center py-8">
+              Loading heatmap...
+            </p>
+          ) : heatmapData.credentials.length === 0 ? (
+            <p className="text-sm text-grok-text-muted text-center py-8">
+              No scored credentials found
+            </p>
+          ) : (
+            <div className="space-y-3 max-h-[600px] overflow-y-auto">
+              {heatmapData.credentials.map((cred, idx) => {
+                const maxScore = heatmapData.credentials[0]?.score || 1;
+                const scorePercentage = (cred.score / maxScore) * 100;
+
+                return (
+                  <div
+                    key={`${cred.username}-${cred.target}-${idx}`}
+                    className="bg-grok-surface-2 rounded-lg border border-grok-border overflow-hidden"
+                  >
+                    {/* Score Bar */}
+                    <div className="relative h-2 bg-grok-surface-1">
+                      <div
+                        className="absolute h-full bg-gradient-to-r from-grok-warning via-grok-error to-grok-critical transition-all"
+                        style={{ width: `${scorePercentage}%` }}
+                      />
+                    </div>
+
+                    {/* Credential Info */}
+                    <div className="p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-mono text-grok-text-heading">
+                              {cred.username}
+                            </span>
+                            <span className="text-xs text-grok-text-muted">@</span>
+                            <span className="text-sm text-grok-text-body">
+                              {cred.target}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-grok-text-muted">
+                            <span className="px-2 py-0.5 bg-grok-surface-3 rounded">
+                              {cred.service}
+                            </span>
+                            <span>
+                              Password: {'*'.repeat(Math.min(cred.password.length, 12))}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-grok-error">
+                            {cred.score.toFixed(1)}
+                          </div>
+                          <div className="text-xs text-grok-text-muted">Score</div>
+                        </div>
+                      </div>
+
+                      {/* Score Breakdown */}
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                        <div className="bg-grok-surface-1 rounded p-2">
+                          <div className="text-grok-text-muted">Reuse Count</div>
+                          <div className="text-grok-text-heading font-semibold">
+                            {cred.breakdown.reuse_count}x (+
+                            {cred.breakdown.reuse_score.toFixed(1)})
+                          </div>
+                        </div>
+                        <div className="bg-grok-surface-1 rounded p-2">
+                          <div className="text-grok-text-muted">Username Weight</div>
+                          <div className="text-grok-text-heading font-semibold">
+                            +{cred.breakdown.username_weight.toFixed(1)}
+                          </div>
+                        </div>
+                        <div className="bg-grok-surface-1 rounded p-2">
+                          <div className="text-grok-text-muted">Service Weight</div>
+                          <div className="text-grok-text-heading font-semibold">
+                            +{cred.breakdown.service_weight.toFixed(1)}
+                          </div>
+                        </div>
+                        <div className="bg-grok-surface-1 rounded p-2">
+                          <div className="text-grok-text-muted">Complexity</div>
+                          <div className="text-grok-text-heading font-semibold">
+                            {cred.breakdown.complexity_score.toFixed(1)} (-
+                            {cred.breakdown.complexity_penalty.toFixed(1)})
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Panel>
+      )}
+
+      {/* List View */}
+      {viewMode === 'list' && (
+        <>
+          {/* Filters */}
+          <Panel title="Filters">
         <div className="space-y-4">
           <div className="flex gap-2 flex-wrap">
             {categories.map((cat) => (
@@ -342,15 +530,26 @@ export function LootView() {
           title={`Credentials (${credentials.length})`}
           action={
             unvalidatedCount > 0 && (
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={handleValidateAll}
-                disabled={validating.size > 0}
-              >
-                <Target className="w-4 h-4 mr-1" />
-                Test All ({unvalidatedCount})
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleValidateTop10}
+                  disabled={validating.size > 0}
+                >
+                  <TrendingUp className="w-4 h-4 mr-1" />
+                  Test Top 10
+                </Button>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleValidateAll}
+                  disabled={validating.size > 0}
+                >
+                  <Target className="w-4 h-4 mr-1" />
+                  Test All ({unvalidatedCount})
+                </Button>
+              </div>
             )
           }
         >
@@ -418,44 +617,46 @@ export function LootView() {
         </Panel>
       )}
 
-      {/* Loot Items */}
-      <Panel title={`Items (${filteredItems.length})`}>
-        {isLoading ? (
-          <p className="text-sm text-grok-text-muted text-center py-8">
-            Loading loot...
-          </p>
-        ) : filteredItems.length === 0 ? (
-          <p className="text-sm text-grok-text-muted text-center py-8">
-            No loot items found
-          </p>
-        ) : (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {filteredItems.slice(-100).reverse().map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between p-3 bg-grok-surface-2 rounded border border-grok-border"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs px-2 py-0.5 bg-grok-loot-green/20 text-grok-loot-green rounded">
-                      {item.category}
-                    </span>
-                    <span className="text-xs text-grok-text-muted">
-                      {formatDateTime(item.timestamp)}
-                    </span>
+          {/* Loot Items */}
+          <Panel title={`Items (${filteredItems.length})`}>
+            {isLoading ? (
+              <p className="text-sm text-grok-text-muted text-center py-8">
+                Loading loot...
+              </p>
+            ) : filteredItems.length === 0 ? (
+              <p className="text-sm text-grok-text-muted text-center py-8">
+                No loot items found
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {filteredItems.slice(-100).reverse().map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between p-3 bg-grok-surface-2 rounded border border-grok-border"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs px-2 py-0.5 bg-grok-loot-green/20 text-grok-loot-green rounded">
+                          {item.category}
+                        </span>
+                        <span className="text-xs text-grok-text-muted">
+                          {formatDateTime(item.timestamp)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-grok-text-heading font-mono truncate">
+                        {item.value}
+                      </p>
+                      <p className="text-xs text-grok-text-muted mt-1">
+                        Target: {item.target} • Source: {item.source}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-grok-text-heading font-mono truncate">
-                    {item.value}
-                  </p>
-                  <p className="text-xs text-grok-text-muted mt-1">
-                    Target: {item.target} • Source: {item.source}
-                  </p>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
-      </Panel>
+            )}
+          </Panel>
+        </>
+      )}
     </div>
   );
 }
