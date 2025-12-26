@@ -1152,4 +1152,5 @@ if __name__ == '__main__':
     logging.info("🔌 WebSocket: ws://localhost:8000/")
     logging.info("🎯 Frontend: http://localhost:3000")
 
-    socketio.run(app, host='0.0.0.0', port=8000, debug=True, allow_unsafe_werkzeug=True)
+    # Disable reloader to prevent port binding issues
+    socketio.run(app, host='0.0.0.0', port=8000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
