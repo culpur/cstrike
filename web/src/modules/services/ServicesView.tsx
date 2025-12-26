@@ -15,6 +15,22 @@ export function ServicesView() {
   const { services, updateServiceStatus } = useSystemStore();
   const { addToast } = useUIStore();
 
+  // Fetch initial service status on mount
+  useEffect(() => {
+    const fetchServiceStatus = async () => {
+      try {
+        const serviceStatus = await apiService.getServiceStatus();
+        updateServiceStatus('metasploitRpc', serviceStatus.metasploitRpc);
+        updateServiceStatus('zap', serviceStatus.zap);
+        updateServiceStatus('burp', serviceStatus.burp);
+      } catch (error) {
+        console.error('Failed to fetch service status:', error);
+      }
+    };
+
+    fetchServiceStatus();
+  }, [updateServiceStatus]);
+
   // Real-time service status updates
   useEffect(() => {
     const unsubscribe = wsService.on<{
