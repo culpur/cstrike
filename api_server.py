@@ -269,15 +269,26 @@ def add_target():
     return jsonify({'error': 'Invalid or duplicate target'}), 400
 
 
-@app.route('/api/v1/targets/<int:target_id>', methods=['DELETE'])
+@app.route('/api/v1/targets/<path:target_id>', methods=['DELETE'])
 def remove_target(target_id):
-    """Remove a target"""
-    if 0 <= target_id < len(TARGETS):
-        removed = TARGETS.pop(target_id)
-        CONFIG['target_scope'] = TARGETS
-        CONFIG_PATH.write_text(json.dumps(CONFIG, indent=2))
-        return jsonify({'success': True, 'removed': removed})
-    return jsonify({'error': 'Invalid target ID'}), 404
+    """Remove a target by URL or index"""
+    # Try to parse as integer index first
+    try:
+        idx = int(target_id)
+        if 0 <= idx < len(TARGETS):
+            removed = TARGETS.pop(idx)
+            CONFIG['target_scope'] = TARGETS
+            CONFIG_PATH.write_text(json.dumps(CONFIG, indent=2))
+            return jsonify({'success': True, 'removed': removed})
+    except ValueError:
+        # Not an integer, treat as URL string
+        if target_id in TARGETS:
+            TARGETS.remove(target_id)
+            CONFIG['target_scope'] = TARGETS
+            CONFIG_PATH.write_text(json.dumps(CONFIG, indent=2))
+            return jsonify({'success': True, 'removed': target_id})
+
+    return jsonify({'error': 'Target not found'}), 404
 
 
 @app.route('/api/v1/recon/start', methods=['POST'])
@@ -360,11 +371,7 @@ def start_recon():
                 if scan_id in scan_threads:
                     del scan_threads[scan_id]
 
-    # Create and start thread
-    thread = threading.Thread(target=run_scan, daemon=True)
-    thread.start()
-
-    # Store scan info and thread reference with thread safety
+    # Store scan info BEFORE starting thread to avoid race condition
     with active_scans_lock:
         active_scans[scan_id] = {
             'status': 'running',
@@ -373,6 +380,13 @@ def start_recon():
             'started_at': datetime.now(timezone.utc).isoformat(),
             'stop_event': stop_event
         }
+
+    # Create and start thread after scan_id is registered
+    thread = threading.Thread(target=run_scan, daemon=True)
+    thread.start()
+
+    # Store thread reference
+    with active_scans_lock:
         scan_threads[scan_id] = thread
 
     return jsonify({'scan_id': scan_id, 'status': 'started', 'target': target})

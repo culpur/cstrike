@@ -165,10 +165,14 @@ export function ReconnaissanceView() {
     }
   };
 
-  const handleRemoveTarget = async (id: string) => {
+  const handleRemoveTarget = async (targetUrl: string) => {
     try {
-      await apiService.removeTarget(id);
-      removeTarget(id);
+      // Find the target by URL to get its ID for local store removal
+      const target = targets.find((t) => t.url === targetUrl);
+      if (!target) return;
+
+      await apiService.removeTarget(targetUrl);
+      removeTarget(target.id);
       addToast({
         type: 'success',
         message: 'Target removed',
@@ -442,7 +446,7 @@ export function ReconnaissanceView() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => handleRemoveTarget(target.id)}
+                    onClick={() => handleRemoveTarget(target.url)}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
