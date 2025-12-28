@@ -593,9 +593,10 @@ def cancel_scan(scan_id):
     })
 
 
-@app.route('/api/v1/loot/<target>', methods=['GET'])
+@app.route('/api/v1/loot/<path:target>', methods=['GET'])
 def get_target_loot(target):
-    """Get loot for a target"""
+    """Get loot for a target (URL-encoded or path format)"""
+    # Flask automatically decodes URL-encoded parameters
     category = request.args.get('category')
 
     if category:

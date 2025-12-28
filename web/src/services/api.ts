@@ -208,13 +208,29 @@ class ApiService {
   }
 
   // ============================================================================
+  // Status
+  // ============================================================================
+
+  async getStatus(): Promise<{
+    metrics: SystemMetrics;
+    services: ServiceState;
+    phase: string;
+    timestamp: string;
+  }> {
+    const { data } = await this.client.get('/status');
+    return data;
+  }
+
+  // ============================================================================
   // Loot
   // ============================================================================
 
   async getLoot(target: string = 'all'): Promise<LootItem[]> {
     // Backend expects GET /loot/<target>
     // Returns {usernames, passwords, urls, ports} when no category specified
-    const { data } = await this.client.get(`/loot/${target}`);
+    // URL-encode target to handle URLs with slashes (e.g., https://example.com)
+    const encodedTarget = encodeURIComponent(target);
+    const { data } = await this.client.get(`/loot/${encodedTarget}`);
 
     // Convert backend format to LootItem array
     const items: LootItem[] = [];

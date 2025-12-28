@@ -9,14 +9,34 @@ import { useSystemStore } from '@stores/systemStore';
 import { useLootStore } from '@stores/lootStore';
 import { useReconStore } from '@stores/reconStore';
 import { wsService } from '@services/websocket';
+import { apiService } from '@services/api';
 import { formatPercent, formatUptime, getPhaseDisplayName } from '@utils/index';
 import type { SystemMetrics, ServiceState, PhaseProgress } from '@/types';
 
 export function DashboardView() {
-  const { metrics, services, phaseProgress, connected, updateMetrics, setConnected } =
+  const { metrics, services, phaseProgress, connected, updateMetrics, updateServiceStatus, setConnected } =
     useSystemStore();
   const { stats: lootStats } = useLootStore();
   const { targets } = useReconStore();
+
+  // Fetch initial status on mount
+  useEffect(() => {
+    const fetchInitialStatus = async () => {
+      try {
+        const status = await apiService.getStatus();
+        updateMetrics(status.metrics);
+        updateServiceStatus('metasploitRpc', status.services.metasploitRpc);
+        updateServiceStatus('zap', status.services.zap);
+        updateServiceStatus('burp', status.services.burp);
+        setConnected(true);
+      } catch (error) {
+        console.error('Failed to fetch initial status:', error);
+        setConnected(false);
+      }
+    };
+
+    fetchInitialStatus();
+  }, [updateMetrics, updateServiceStatus, setConnected]);
 
   // Setup WebSocket listeners
   useEffect(() => {
@@ -30,6 +50,23 @@ export function DashboardView() {
       setConnected(true);
     });
 
+    // Listen for status updates (includes services)
+    const unsubStatus = wsService.on<{
+      metrics: SystemMetrics;
+      services: { metasploitRpc: string; zap: string; burp: string };
+      phase: string;
+    }>('status_update', (data) => {
+      if (data.metrics) {
+        updateMetrics(data.metrics);
+      }
+      if (data.services) {
+        updateServiceStatus('metasploitRpc', data.services.metasploitRpc as any);
+        updateServiceStatus('zap', data.services.zap as any);
+        updateServiceStatus('burp', data.services.burp as any);
+      }
+      setConnected(true);
+    });
+
     // Update connection status when disconnected
     const checkConnection = setInterval(() => {
       setConnected(wsService.isConnected());
@@ -37,9 +74,10 @@ export function DashboardView() {
 
     return () => {
       unsubMetrics();
+      unsubStatus();
       clearInterval(checkConnection);
     };
-  }, [updateMetrics, setConnected]);
+  }, [updateMetrics, updateServiceStatus, setConnected]);
 
   const phasePercentage = calculatePhaseProgress(phaseProgress);
 
