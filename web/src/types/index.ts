@@ -87,6 +87,9 @@ export interface ReconOutput {
   output: string;
   timestamp: number;
   complete: boolean;
+  event?: string; // tool_start, tool_complete, tool_error, tool_timeout, tool_retry, tool_failed
+  progress?: string; // "5/15" format showing completed/total tools
+  scan_id?: string;
 }
 
 // ============================================================================
@@ -174,7 +177,15 @@ export interface CompleteScanResults {
 export interface AIThought {
   id: string;
   timestamp: number;
-  thoughtType: 'reasoning' | 'command' | 'decision' | 'observation';
+  thoughtType:
+    | 'reasoning'       // AI is thinking/analyzing
+    | 'command'         // Command being executed
+    | 'decision'        // Decision being made
+    | 'observation'     // General observation
+    | 'ai_prompt'       // Prompt being sent to AI API
+    | 'ai_response'     // Response received from AI API
+    | 'ai_decision'     // AI decided on commands to execute
+    | 'ai_execution';   // Commands ready for execution
   content: string;
   command?: string;
   metadata?: Record<string, unknown>;

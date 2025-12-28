@@ -229,6 +229,8 @@ function DecisionCard({ decision }: { decision: AIDecision }) {
 }
 
 function ThoughtCard({ thought }: { thought: AIThought }) {
+  const [expanded, setExpanded] = useState(false);
+
   const getIcon = () => {
     switch (thought.thoughtType) {
       case 'reasoning':
@@ -239,21 +241,39 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
         return <Zap className="w-4 h-4" />;
       case 'observation':
         return <Eye className="w-4 h-4" />;
+      case 'ai_prompt':
+        return <Play className="w-4 h-4" />;
+      case 'ai_response':
+        return <Brain className="w-4 h-4 animate-pulse" />;
+      case 'ai_decision':
+        return <Zap className="w-4 h-4" />;
+      case 'ai_execution':
+        return <Terminal className="w-4 h-4" />;
     }
   };
 
   const getColor = () => {
     switch (thought.thoughtType) {
       case 'reasoning':
-        return 'text-grok-ai-purple border-grok-ai-purple/30';
+        return 'text-grok-ai-purple border-grok-ai-purple/30 bg-grok-ai-purple/5';
       case 'command':
-        return 'text-grok-recon-blue border-grok-recon-blue/30';
+        return 'text-grok-recon-blue border-grok-recon-blue/30 bg-grok-recon-blue/5';
       case 'decision':
-        return 'text-grok-warning border-grok-warning/30';
+        return 'text-grok-warning border-grok-warning/30 bg-grok-warning/5';
       case 'observation':
-        return 'text-grok-text-body border-grok-border';
+        return 'text-grok-text-body border-grok-border bg-grok-surface-2/50';
+      case 'ai_prompt':
+        return 'text-grok-recon-blue border-grok-recon-blue/50 bg-grok-recon-blue/10';
+      case 'ai_response':
+        return 'text-grok-success border-grok-success/50 bg-grok-success/10';
+      case 'ai_decision':
+        return 'text-grok-ai-purple border-grok-ai-purple/50 bg-grok-ai-purple/10';
+      case 'ai_execution':
+        return 'text-grok-warning border-grok-warning/50 bg-grok-warning/10';
     }
   };
+
+  const hasDetails = thought.metadata && Object.keys(thought.metadata).length > 0;
 
   return (
     <div className={cn('flex gap-3 p-3 border-l-2 rounded', getColor())}>
@@ -266,11 +286,104 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
           <span className="text-xs px-1.5 py-0.5 bg-grok-surface-2 rounded">
             {thought.thoughtType}
           </span>
+          {hasDetails && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="text-xs text-grok-text-muted hover:text-grok-text-body transition-colors"
+            >
+              {expanded ? '▼ Hide details' : '▶ Show details'}
+            </button>
+          )}
         </div>
         <p className="text-sm text-grok-text-body">{thought.content}</p>
+
+        {/* Show command if present */}
         {thought.command && (
-          <div className="mt-2 p-2 bg-grok-surface-2 rounded text-xs text-grok-recon-blue">
+          <div className="mt-2 p-2 bg-grok-surface-2 rounded text-xs text-grok-recon-blue font-mono">
             $ {thought.command}
+          </div>
+        )}
+
+        {/* Show expanded metadata details */}
+        {expanded && thought.metadata && (
+          <div className="mt-3 space-y-2">
+            {/* AI Prompt Details */}
+            {thought.thoughtType === 'ai_prompt' && thought.metadata.system_prompt && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-grok-text-muted">System Prompt:</div>
+                <div className="p-2 bg-grok-void rounded text-xs text-grok-text-body font-mono whitespace-pre-wrap">
+                  {thought.metadata.system_prompt as string}
+                </div>
+                {thought.metadata.data_preview && (
+                  <>
+                    <div className="text-xs font-semibold text-grok-text-muted">Data Preview:</div>
+                    <div className="p-2 bg-grok-void rounded text-xs text-grok-text-body font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
+                      {thought.metadata.data_preview as string}
+                    </div>
+                  </>
+                )}
+                <div className="text-xs text-grok-text-muted">
+                  Model: {thought.metadata.model as string} | Tokens: {thought.metadata.max_tokens as number} | Temp: {thought.metadata.temperature as number}
+                </div>
+              </div>
+            )}
+
+            {/* AI Response Details */}
+            {thought.thoughtType === 'ai_response' && thought.metadata.response && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-grok-text-muted">Full AI Response:</div>
+                <div className="p-2 bg-grok-void rounded text-xs text-grok-text-body font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
+                  {thought.metadata.response as string}
+                </div>
+                {thought.metadata.usage && (
+                  <div className="text-xs text-grok-text-muted">
+                    Tokens - Prompt: {(thought.metadata.usage as any).prompt_tokens} |
+                    Completion: {(thought.metadata.usage as any).completion_tokens} |
+                    Total: {(thought.metadata.usage as any).total_tokens}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* AI Decision Details */}
+            {thought.thoughtType === 'ai_decision' && thought.metadata.commands && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-grok-text-muted">Parsed Commands:</div>
+                <div className="space-y-1">
+                  {(thought.metadata.commands as string[]).map((cmd, idx) => (
+                    <div key={idx} className="p-2 bg-grok-void rounded text-xs text-grok-recon-blue font-mono">
+                      $ {cmd}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* AI Execution Details */}
+            {thought.thoughtType === 'ai_execution' && thought.metadata.commands && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-grok-text-muted">Commands to Execute:</div>
+                <div className="space-y-1">
+                  {(thought.metadata.commands as string[]).map((cmd, idx) => (
+                    <div key={idx} className="p-2 bg-grok-void rounded text-xs text-grok-warning font-mono">
+                      $ {cmd}
+                    </div>
+                  ))}
+                </div>
+                {thought.metadata.note && (
+                  <div className="text-xs text-grok-text-muted italic">
+                    {thought.metadata.note as string}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Generic metadata fallback */}
+            {!['ai_prompt', 'ai_response', 'ai_decision', 'ai_execution'].includes(thought.thoughtType) && (
+              <pre className="p-2 bg-grok-void rounded text-xs text-grok-text-body overflow-x-auto">
+                {JSON.stringify(thought.metadata, null, 2)}
+              </pre>
+            )}
           </div>
         )}
       </div>

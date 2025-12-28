@@ -331,7 +331,7 @@ def start_recon():
             if stop_event.is_set():
                 raise Exception("Scan cancelled before execution")
 
-            results = run_recon_layered(target)
+            results = run_recon_layered(target, socketio=socketio, scan_id=scan_id)
 
             # Check for cancellation after completion
             if stop_event.is_set():
@@ -487,7 +487,7 @@ def start_batch_recon():
                     if stop_evt.is_set():
                         raise Exception("Scan cancelled before execution")
 
-                    results = run_recon_layered(target_url)
+                    results = run_recon_layered(target_url, socketio=socketio, scan_id=sid)
 
                     if stop_evt.is_set():
                         raise Exception("Scan cancelled")
@@ -913,21 +913,44 @@ def analyze_with_ai():
             else:
                 recon_data = {'message': f'No recon data found for {target}'}
 
-            # Ask AI for analysis
-            ai_response = ask_ai(recon_data)
+            # Ask AI for analysis (now emits detailed WebSocket events)
+            ai_response = ask_ai(recon_data, socketio=socketio, target=target)
 
-            # Emit AI thoughts via WebSocket
-            socketio.emit('ai_thought', {
-                'target': target,
-                'phase': phase,
-                'response': ai_response,
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            })
+            if ai_response:
+                # Parse commands from AI response (also emits events)
+                from modules.ai_assistant import parse_ai_commands
+                commands = parse_ai_commands(ai_response, socketio=socketio, target=target)
+
+                # Emit execution plan
+                if commands:
+                    socketio.emit('ai_thought', {
+                        'target': target,
+                        'thoughtType': 'ai_execution',
+                        'content': f'Ready to execute {len(commands)} commands',
+                        'metadata': {
+                            'commands': [' '.join(cmd) for cmd in commands],
+                            'note': 'Commands will be executed when exploitation phase is triggered'
+                        },
+                        'timestamp': datetime.now(timezone.utc).isoformat()
+                    })
+                else:
+                    socketio.emit('ai_thought', {
+                        'target': target,
+                        'thoughtType': 'observation',
+                        'content': 'No executable commands found in AI response',
+                        'timestamp': datetime.now(timezone.utc).isoformat()
+                    })
 
             return {'success': True, 'response': ai_response}
 
         except Exception as e:
             logging.error(f"AI analysis failed: {e}")
+            socketio.emit('ai_thought', {
+                'target': target,
+                'thoughtType': 'observation',
+                'content': f'❌ Analysis failed: {str(e)}',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
             return {'error': str(e)}
 
         finally:

@@ -522,17 +522,48 @@ export function ReconnaissanceView() {
             <p className="text-grok-text-muted">Waiting for scan output...</p>
           ) : (
             <div className="space-y-1">
-              {reconOutputs.slice(-50).map((output) => (
-                <div key={output.timestamp} className="flex gap-2">
-                  <span className="text-grok-text-muted flex-shrink-0">
-                    [{formatTime(output.timestamp)}]
-                  </span>
-                  <span className="text-grok-recon-blue flex-shrink-0">
-                    [{output.tool}]
-                  </span>
-                  <span className="text-grok-text-body">{output.output}</span>
-                </div>
-              ))}
+              {reconOutputs.slice(-50).map((output) => {
+                // Color based on event type
+                const getEventColor = (event?: string) => {
+                  if (!event) return 'text-grok-text-body';
+                  if (event.includes('start')) return 'text-grok-recon-blue';
+                  if (event.includes('complete')) return 'text-grok-success';
+                  if (event.includes('error') || event.includes('failed')) return 'text-grok-error';
+                  if (event.includes('timeout')) return 'text-grok-warning';
+                  if (event.includes('retry')) return 'text-grok-warning';
+                  return 'text-grok-text-body';
+                };
+
+                const getEventIcon = (event?: string) => {
+                  if (!event) return '•';
+                  if (event.includes('start')) return '▶';
+                  if (event.includes('complete')) return '✓';
+                  if (event.includes('error') || event.includes('failed')) return '✗';
+                  if (event.includes('timeout')) return '⏱';
+                  if (event.includes('retry')) return '↻';
+                  return '•';
+                };
+
+                return (
+                  <div key={output.timestamp} className="flex gap-2">
+                    <span className="text-grok-text-muted flex-shrink-0">
+                      [{formatTime(output.timestamp)}]
+                    </span>
+                    <span className={cn('flex-shrink-0', getEventColor(output.event))}>
+                      {getEventIcon(output.event)}
+                    </span>
+                    <span className="text-grok-recon-blue flex-shrink-0">
+                      [{output.tool || 'recon'}]
+                    </span>
+                    {output.progress && (
+                      <span className="text-grok-text-muted flex-shrink-0">
+                        [{output.progress}]
+                      </span>
+                    )}
+                    <span className={getEventColor(output.event)}>{output.output}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

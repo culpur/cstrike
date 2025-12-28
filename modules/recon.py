@@ -118,11 +118,30 @@ def run_httpx_input_mode(target, target_dir):
         print(f"[!] httpx input error: {e}")
 
 
-def run_recon_layered(target):
+def run_recon_layered(target, socketio=None, scan_id=None):
+    """
+    Run layered reconnaissance with optional WebSocket progress updates
+
+    Args:
+        target: Target hostname/IP to scan
+        socketio: Optional SocketIO instance for emitting progress
+        scan_id: Optional scan ID for tracking
+    """
     print(f"[+] Starting layered recon for {target}")
     results = load_results(target)
     target_dir = get_target_dir(target)
     os.makedirs(target_dir, exist_ok=True)
+
+    # Emit initial IP resolution
+    if socketio:
+        socketio.emit('recon_output', {
+            'scan_id': scan_id,
+            'target': target,
+            'tool': 'dns',
+            'event': 'tool_start',
+            'message': f'Resolving IP address for {target}...',
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
 
     resolve_and_store_ip(target, target_dir)
 
@@ -133,20 +152,63 @@ def run_recon_layered(target):
             loot = json.load(f)
 
     ports_for_url_generation = []
+    total_tools = len(RECON_COMMANDS)
+    completed_tools = 0
 
     for name, cmd_func in RECON_COMMANDS:
         if name == "httpx":
+            if socketio:
+                socketio.emit('recon_output', {
+                    'scan_id': scan_id,
+                    'target': target,
+                    'tool': name,
+                    'event': 'tool_start',
+                    'message': f'Running {name} (HTTP probe)...',
+                    'progress': f'{completed_tools}/{total_tools}',
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                })
             run_httpx_input_mode(target, target_dir)
+            completed_tools += 1
             continue
 
         if name in results:
+            completed_tools += 1
             continue  # Skip if already done
 
         command = cmd_func(target)
         print(f"[+] Running: {' '.join(command)}")
+
+        # Emit tool start
+        if socketio:
+            socketio.emit('recon_output', {
+                'scan_id': scan_id,
+                'target': target,
+                'tool': name,
+                'event': 'tool_start',
+                'message': f'Running {name}: {" ".join(command)}',
+                'progress': f'{completed_tools}/{total_tools}',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
         try:
             output = run_command_with_log(command, timeout=300)
             save_result(target, name, command, output)
+
+            # Emit tool completion with summary
+            if socketio:
+                output_preview = output[:200] + '...' if len(output) > 200 else output
+                socketio.emit('recon_output', {
+                    'scan_id': scan_id,
+                    'target': target,
+                    'tool': name,
+                    'event': 'tool_complete',
+                    'message': f'{name} completed successfully',
+                    'output_preview': output_preview,
+                    'progress': f'{completed_tools + 1}/{total_tools}',
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                })
+
+            completed_tools += 1
 
             if name == "nmap":
                 ports = extract_ports_for_chaining(output)
@@ -162,16 +224,66 @@ def run_recon_layered(target):
 
         except subprocess.TimeoutExpired:
             print(f"[!] Timeout: {' '.join(command)}")
+            if socketio:
+                socketio.emit('recon_output', {
+                    'scan_id': scan_id,
+                    'target': target,
+                    'tool': name,
+                    'event': 'tool_timeout',
+                    'message': f'{name} timed out after 300 seconds',
+                    'progress': f'{completed_tools}/{total_tools}',
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                })
+            completed_tools += 1
         except Exception as e:
             print(f"[!] Error running {name}: {e}")
+            if socketio:
+                socketio.emit('recon_output', {
+                    'scan_id': scan_id,
+                    'target': target,
+                    'tool': name,
+                    'event': 'tool_error',
+                    'message': f'{name} failed: {str(e)}',
+                    'progress': f'{completed_tools}/{total_tools}',
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                })
+
             if name in RETRYABLE_TOOLS:
                 print(f"[*] Retrying {name}...")
+                if socketio:
+                    socketio.emit('recon_output', {
+                        'scan_id': scan_id,
+                        'target': target,
+                        'tool': name,
+                        'event': 'tool_retry',
+                        'message': f'Retrying {name} in 5 seconds...',
+                        'timestamp': datetime.now(timezone.utc).isoformat()
+                    })
                 time.sleep(5)
                 try:
                     output = run_command_with_log(command, timeout=300)
                     save_result(target, name, command, output)
+                    if socketio:
+                        socketio.emit('recon_output', {
+                            'scan_id': scan_id,
+                            'target': target,
+                            'tool': name,
+                            'event': 'tool_complete',
+                            'message': f'{name} completed successfully on retry',
+                            'timestamp': datetime.now(timezone.utc).isoformat()
+                        })
                 except Exception as e:
                     print(f"[!] Second failure: {e}")
+                    if socketio:
+                        socketio.emit('recon_output', {
+                            'scan_id': scan_id,
+                            'target': target,
+                            'tool': name,
+                            'event': 'tool_failed',
+                            'message': f'{name} failed on retry: {str(e)}',
+                            'timestamp': datetime.now(timezone.utc).isoformat()
+                        })
+            completed_tools += 1
 
     # Optional post-Nmap URL generation
     if ports_for_url_generation:
