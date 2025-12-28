@@ -11,6 +11,8 @@ import type {
   CredentialPair,
   LogEntry,
   HeatmapResponse,
+  Config,
+  CompleteScanResults,
 } from '@/types';
 
 class ApiService {
@@ -312,6 +314,46 @@ class ApiService {
       source: log.source || 'system',
       message: log.message || '',
     }));
+  }
+
+  // ============================================================================
+  // Configuration
+  // ============================================================================
+
+  async getConfig(): Promise<Config> {
+    // Backend: GET /config
+    const { data } = await this.client.get('/config');
+    return data;
+  }
+
+  async updateConfig(config: Config): Promise<void> {
+    // Backend: PUT /config
+    await this.client.put('/config', config);
+  }
+
+  // ============================================================================
+  // Results
+  // ============================================================================
+
+  async getResults(): Promise<Target[]> {
+    // Backend: GET /results
+    const { data } = await this.client.get('/results');
+    return data.targets || [];
+  }
+
+  async getTargetResults(target: string): Promise<CompleteScanResults> {
+    // Backend: GET /results/<target>
+    const { data } = await this.client.get(`/results/${encodeURIComponent(target)}`);
+    return data;
+  }
+
+  async downloadResults(target: string, format: 'json' | 'markdown'): Promise<Blob> {
+    // Backend: GET /results/<target>/download?format=json|markdown
+    const { data } = await this.client.get(`/results/${encodeURIComponent(target)}/download`, {
+      params: { format },
+      responseType: 'blob',
+    });
+    return data;
   }
 }
 

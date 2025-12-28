@@ -4,11 +4,10 @@
 
 import {
   LayoutDashboard,
-  Search,
-  Crosshair,
-  Package,
-  FileText,
+  Target,
   Brain,
+  FolderOpen,
+  FileText,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -24,10 +23,10 @@ const navigationItems = [
     path: '/dashboard',
   },
   {
-    id: 'reconnaissance',
-    label: 'Reconnaissance',
-    icon: Search,
-    path: '/reconnaissance',
+    id: 'targets',
+    label: 'Targets',
+    icon: Target,
+    path: '/targets',
   },
   {
     id: 'ai-stream',
@@ -36,16 +35,10 @@ const navigationItems = [
     path: '/ai-stream',
   },
   {
-    id: 'exploitation',
-    label: 'Exploitation',
-    icon: Crosshair,
-    path: '/exploitation',
-  },
-  {
-    id: 'loot',
-    label: 'Loot',
-    icon: Package,
-    path: '/loot',
+    id: 'results',
+    label: 'Results',
+    icon: FolderOpen,
+    path: '/results',
   },
   {
     id: 'logs',
@@ -54,10 +47,10 @@ const navigationItems = [
     path: '/logs',
   },
   {
-    id: 'services',
-    label: 'Services',
+    id: 'config',
+    label: 'Configuration',
     icon: Settings,
-    path: '/services',
+    path: '/config',
   },
 ];
 

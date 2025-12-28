@@ -1,13 +1,16 @@
 /**
  * AI Stream View - Real-time AI decision and thought display
+ *
+ * This is a VIEW-ONLY component that displays AI thoughts and decisions
+ * as they happen during the autonomous AI-driven workflow.
+ *
+ * NO manual controls - AI analysis runs automatically after reconnaissance.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { Brain, Zap, Eye, Terminal, Play } from 'lucide-react';
-import { Panel, Button } from '@components/ui';
+import { Panel } from '@components/ui';
 import { useAIStore } from '@stores/aiStore';
-import { useReconStore } from '@stores/reconStore';
-import { useUIStore } from '@stores/uiStore';
 import { wsService } from '@services/websocket';
 import { apiService } from '@services/api';
 import { formatTime, cn } from '@utils/index';
@@ -16,13 +19,8 @@ import type { AIThought, AIDecision } from '@/types';
 export function AIStreamView() {
   const { thoughts, decisions, isThinking, addThought, addDecision, setThinking } =
     useAIStore();
-  const { targets } = useReconStore();
-  const { addToast } = useUIStore();
 
   const thoughtsEndRef = useRef<HTMLDivElement>(null);
-  const [selectedTarget, setSelectedTarget] = useState<string>('');
-  const [selectedPhase, setSelectedPhase] = useState<'recon' | 'exploitation'>('recon');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -34,7 +32,6 @@ export function AIStreamView() {
     const loadThoughts = async () => {
       try {
         const existingThoughts = await apiService.getAIThoughts();
-        // Transform string array to AIThought objects
         existingThoughts.forEach((thought) => {
           addThought({
             thoughtType: 'observation',
@@ -72,94 +69,28 @@ export function AIStreamView() {
     };
   }, [addThought, addDecision, setThinking]);
 
-  const handleAnalyze = async () => {
-    if (!selectedTarget) {
-      addToast({
-        type: 'warning',
-        message: 'Please select a target first',
-      });
-      return;
-    }
-
-    setIsAnalyzing(true);
-    setThinking(true);
-    try {
-      await apiService.analyzeWithAI(selectedTarget, selectedPhase);
-      addToast({
-        type: 'success',
-        message: `AI analysis started for ${selectedTarget}`,
-      });
-    } catch (error) {
-      setThinking(false);
-      addToast({
-        type: 'error',
-        message: 'Failed to start AI analysis',
-      });
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
   return (
     <div className="h-full overflow-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-grok-text-heading">AI Thought Stream</h1>
-        {isThinking && (
-          <div className="flex items-center gap-2 text-grok-ai-purple">
-            <Brain className="w-5 h-5 animate-pulse" />
-            <span className="text-sm font-medium">AI Thinking...</span>
-          </div>
-        )}
-      </div>
-
-      {/* AI Analysis Controls */}
-      <Panel title="AI Analysis">
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-grok-text-muted mb-1">Target</label>
-              <select
-                value={selectedTarget}
-                onChange={(e) => setSelectedTarget(e.target.value)}
-                className="w-full px-3 py-2 bg-grok-surface-2 border border-grok-border rounded text-sm text-grok-text-heading"
-              >
-                <option value="">Select target...</option>
-                {targets.map((target) => (
-                  <option key={target.id} value={target.url}>
-                    {target.url}
-                  </option>
-                ))}
-              </select>
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-2xl font-bold text-grok-text-heading">AI Thought Stream</h1>
+          {isThinking && (
+            <div className="flex items-center gap-2 text-grok-ai-purple">
+              <Brain className="w-5 h-5 animate-pulse" />
+              <span className="text-sm font-medium">AI Thinking...</span>
             </div>
-            <div>
-              <label className="block text-xs text-grok-text-muted mb-1">Phase</label>
-              <select
-                value={selectedPhase}
-                onChange={(e) => setSelectedPhase(e.target.value as 'recon' | 'exploitation')}
-                className="w-full px-3 py-2 bg-grok-surface-2 border border-grok-border rounded text-sm text-grok-text-heading"
-              >
-                <option value="recon">Reconnaissance</option>
-                <option value="exploitation">Exploitation</option>
-              </select>
-            </div>
-          </div>
-          <Button
-            onClick={handleAnalyze}
-            isLoading={isAnalyzing}
-            disabled={!selectedTarget || isThinking}
-            className="w-full"
-          >
-            <Play className="w-4 h-4 mr-2" />
-            Analyze with AI
-          </Button>
+          )}
         </div>
-      </Panel>
+        <p className="text-sm text-grok-text-muted">
+          Real-time view of AI decision-making during autonomous scans. AI analysis runs automatically.
+        </p>
+      </div>
 
       {/* Recent Decisions */}
       <Panel title="Recent Decisions">
         {decisions.length === 0 ? (
           <p className="text-sm text-grok-text-muted text-center py-8">
-            No AI decisions yet
+            No AI decisions yet. Start a scan from the Targets page to begin.
           </p>
         ) : (
           <div className="space-y-3">

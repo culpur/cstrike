@@ -28,9 +28,7 @@ from modules.loot_tracker import (
     update_credential_validation
 )
 from modules.credential_validator import validate_credential, validate_credentials_batch
-from modules.ai_assistant import ask_ai, get_thoughts, parse_ai_commands
-from modules.zap_burp import start_zap, start_burp, run_web_scans
-from modules.metasploit import start_msf_rpc, run_msf_exploits
+from modules.ai_assistant import ask_ai, get_thoughts
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000'])
@@ -40,45 +38,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s'
 )
-
-
-# ==================== WEBSOCKET LOG STREAMING ====================
-
-def emit_log(level, source, message, metadata=None):
-    """Emit log entry via WebSocket"""
-    socketio.emit('log_entry', {
-        'id': f"{int(time.time() * 1000)}-{os.urandom(2).hex()}",
-        'timestamp': datetime.now(timezone.utc).isoformat(),
-        'level': level,
-        'source': source,
-        'message': message,
-        'metadata': metadata or {}
-    })
-
-
-class WebSocketLogHandler(logging.Handler):
-    """Custom logging handler that emits logs via WebSocket"""
-    def emit(self, record):
-        try:
-            # Extract metadata from record
-            metadata = {}
-            if hasattr(record, 'target'):
-                metadata['target'] = record.target
-            if hasattr(record, 'scan_id'):
-                metadata['scan_id'] = record.scan_id
-            if hasattr(record, 'tool'):
-                metadata['tool'] = record.tool
-
-            # Emit via WebSocket
-            emit_log(
-                level=record.levelname,
-                source=record.name,
-                message=record.getMessage(),
-                metadata=metadata
-            )
-        except Exception as e:
-            # Don't let logging errors crash the app
-            print(f"WebSocket log handler error: {e}")
 
 # Load configuration
 CONFIG_PATH = Path('.env')
@@ -192,454 +151,6 @@ def update_system_metrics():
             logging.error(f"Error updating metrics: {e}")
 
         time.sleep(2)  # Update every 2 seconds
-
-# ==================== AUTO-SERVICE MANAGEMENT ====================
-
-def is_process_running(name):
-    """Check if a process is running by name"""
-    try:
-        output = os.popen(f"pgrep -f '{name}'").read()
-        return bool(output.strip())
-    except Exception:
-        return False
-
-
-def ensure_zap_running(socketio=None, target=None):
-    """
-    Ensure ZAP is running, start if not
-
-    Args:
-        socketio: Optional SocketIO instance for progress events
-        target: Optional target name for tracking
-    """
-    if not is_process_running("zap"):
-        logging.info("[Auto-Service] Starting ZAP...")
-        if socketio:
-            socketio.emit('service_auto_start', {
-                'service': 'zap',
-                'target': target,
-                'status': 'starting',
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            })
-        start_zap(gui=False)  # Start in daemon mode
-        services_status['zap'] = 'running'
-        logging.info("[Auto-Service] ZAP started successfully")
-    else:
-        logging.info("[Auto-Service] ZAP is already running")
-
-
-def ensure_burp_running(socketio=None, target=None):
-    """
-    Ensure Burp Suite is running, start if not
-
-    Args:
-        socketio: Optional SocketIO instance for progress events
-        target: Optional target name for tracking
-    """
-    if not is_process_running("burpsuite"):
-        logging.info("[Auto-Service] Starting Burp Suite...")
-        if socketio:
-            socketio.emit('service_auto_start', {
-                'service': 'burp',
-                'target': target,
-                'status': 'starting',
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            })
-        start_burp()
-        services_status['burp'] = 'running'
-        logging.info("[Auto-Service] Burp Suite started successfully")
-    else:
-        logging.info("[Auto-Service] Burp Suite is already running")
-
-
-def ensure_msf_running(socketio=None, target=None):
-    """
-    Ensure Metasploit RPC is running, start if not
-
-    Args:
-        socketio: Optional SocketIO instance for progress events
-        target: Optional target name for tracking
-
-    Returns:
-        MsfRpcClient instance or None
-    """
-    if not is_process_running("msfrpcd"):
-        logging.info("[Auto-Service] Starting Metasploit RPC...")
-        if socketio:
-            socketio.emit('service_auto_start', {
-                'service': 'metasploitRpc',
-                'target': target,
-                'status': 'starting',
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            })
-
-        # MSF RPC start is handled by start_msf_rpc()
-        client = start_msf_rpc()
-        if client:
-            services_status['metasploitRpc'] = 'running'
-            logging.info("[Auto-Service] Metasploit RPC started successfully")
-            return client
-        else:
-            logging.error("[Auto-Service] Failed to start Metasploit RPC")
-            return None
-    else:
-        logging.info("[Auto-Service] Metasploit RPC is already running")
-        return start_msf_rpc()  # Connect to existing instance
-
-
-def execute_ai_commands(commands, target, target_dir, socketio=None, scan_id=None):
-    """
-    Execute AI-suggested commands with proper logging and event emission
-
-    Args:
-        commands: List of command arrays to execute
-        target: Target hostname/IP
-        target_dir: Path to target results directory
-        socketio: Optional SocketIO instance for progress events
-        scan_id: Optional scan ID for tracking
-    """
-    command_logs = []
-
-    for cmd in commands:
-        log_entry = {
-            "command": ' '.join(cmd),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-
-        try:
-            logging.info(f"[AI ➔ Command] {' '.join(cmd)}")
-
-            # Emit command execution event
-            if socketio:
-                socketio.emit('ai_command_execution', {
-                    'scan_id': scan_id,
-                    'target': target,
-                    'command': ' '.join(cmd),
-                    'status': 'running',
-                    'timestamp': datetime.now(timezone.utc).isoformat()
-                })
-
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=300
-            )
-
-            log_entry["status"] = "success" if result.returncode == 0 else "fail"
-            log_entry["stdout"] = result.stdout.strip()
-            log_entry["stderr"] = result.stderr.strip()
-
-            # Emit completion event
-            if socketio:
-                socketio.emit('ai_command_execution', {
-                    'scan_id': scan_id,
-                    'target': target,
-                    'command': ' '.join(cmd),
-                    'status': 'success' if result.returncode == 0 else 'failed',
-                    'returncode': result.returncode,
-                    'timestamp': datetime.now(timezone.utc).isoformat()
-                })
-
-            logging.info(f"[AI ➔ Command] Completed with returncode {result.returncode}")
-
-        except Exception as e:
-            log_entry["status"] = "error"
-            log_entry["stderr"] = str(e)
-            logging.error(f"[AI ➔ Command] Failed: {e}")
-
-            if socketio:
-                socketio.emit('ai_command_execution', {
-                    'scan_id': scan_id,
-                    'target': target,
-                    'command': ' '.join(cmd),
-                    'status': 'error',
-                    'error': str(e),
-                    'timestamp': datetime.now(timezone.utc).isoformat()
-                })
-
-        command_logs.append(log_entry)
-
-    # Save command logs to target directory
-    log_file = Path(target_dir) / "ai_commands.json"
-    log_file.write_text(json.dumps(command_logs, indent=2))
-
-
-def run_full_ai_workflow(target, scan_id, tools, socketio):
-    """
-    Execute the complete AI-driven workflow for a target
-
-    This mirrors ai_driver.py but with WebSocket event emissions for real-time UI updates.
-
-    Phases:
-        1. Reconnaissance (all enabled tools)
-        2. AI Analysis #1 (post-recon)
-        3. Execute AI-suggested commands
-        4. Web Application Scanning (ZAP/Burp auto-start)
-        5. Metasploit Exploitation (MSF auto-start)
-        6. Exploitation Chain (nuclei, ffuf, etc.)
-        7. AI Analysis #2 (post-exploitation)
-        8. Execute AI followup commands
-
-    Args:
-        target: Target hostname/IP
-        scan_id: Unique scan identifier
-        tools: List of tools to enable (currently unused, AI decides)
-        socketio: SocketIO instance for event emissions
-    """
-    global current_phase
-    target_dir = get_target_dir(target)
-
-    try:
-        # ==================== PHASE 1: RECONNAISSANCE ====================
-        current_phase = 'recon'
-        socketio.emit('phase_change', {
-            'phase': 'recon',
-            'target': target,
-            'scan_id': scan_id,
-            'message': 'Starting reconnaissance phase',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        logging.info(f"[Phase 1/8] Starting reconnaissance for {target}")
-        socketio.emit('recon_output', {
-            'scan_id': scan_id,
-            'target': target,
-            'event': 'started',
-            'message': f'Starting reconnaissance on {target}',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        recon_results = run_recon_layered(target, socketio=socketio, scan_id=scan_id)
-
-        logging.info(f"[Phase 1/8] Reconnaissance completed for {target}")
-        socketio.emit('recon_output', {
-            'scan_id': scan_id,
-            'target': target,
-            'event': 'completed',
-            'results': recon_results,
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        # ==================== PHASE 2: AI ANALYSIS #1 (POST-RECON) ====================
-        current_phase = 'ai_analysis_1'
-        socketio.emit('phase_change', {
-            'phase': 'ai_analysis_1',
-            'target': target,
-            'scan_id': scan_id,
-            'message': 'AI analyzing reconnaissance results',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        logging.info(f"[Phase 2/8] AI Analysis #1 (post-recon) for {target}")
-        ai_response = ask_ai(recon_results, socketio=socketio, target=target)
-
-        if ai_response:
-            # Save AI suggestions
-            suggestions_file = Path(target_dir) / "ai_suggestions_post_recon.json"
-            suggestions_file.write_text(json.dumps({
-                "stage": "post_recon",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "response": ai_response
-            }, indent=2))
-
-            # ==================== PHASE 3: EXECUTE AI COMMANDS ====================
-            current_phase = 'ai_execution_1'
-            socketio.emit('phase_change', {
-                'phase': 'ai_execution_1',
-                'target': target,
-                'scan_id': scan_id,
-                'message': 'Executing AI-suggested commands',
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            })
-
-            logging.info(f"[Phase 3/8] Executing AI-suggested commands for {target}")
-            commands = parse_ai_commands(ai_response, socketio=socketio, target=target)
-
-            if commands:
-                execute_ai_commands(
-                    commands,
-                    target,
-                    target_dir,
-                    socketio=socketio,
-                    scan_id=scan_id
-                )
-
-        # ==================== PHASE 4: WEB APPLICATION SCANNING ====================
-        current_phase = 'web_scans'
-        socketio.emit('phase_change', {
-            'phase': 'web_scans',
-            'target': target,
-            'scan_id': scan_id,
-            'message': 'Running web application scans',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        logging.info(f"[Phase 4/8] Web application scanning for {target}")
-
-        # Auto-start ZAP and Burp if not running
-        ensure_zap_running(socketio=socketio, target=target)
-        ensure_burp_running(socketio=socketio, target=target)
-
-        # Run web scans
-        run_web_scans(target, target_dir)
-
-        # ==================== PHASE 5: METASPLOIT EXPLOITATION ====================
-        current_phase = 'metasploit'
-        socketio.emit('phase_change', {
-            'phase': 'metasploit',
-            'target': target,
-            'scan_id': scan_id,
-            'message': 'Running Metasploit exploitation',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        logging.info(f"[Phase 5/8] Metasploit exploitation for {target}")
-
-        # Auto-start Metasploit RPC if not running
-        msf_client = ensure_msf_running(socketio=socketio, target=target)
-        if msf_client:
-            run_msf_exploits(msf_client, target)
-
-        # ==================== PHASE 6: EXPLOITATION CHAIN ====================
-        current_phase = 'exploitation'
-        socketio.emit('phase_change', {
-            'phase': 'exploitation',
-            'target': target,
-            'scan_id': scan_id,
-            'message': 'Running exploitation chain',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        logging.info(f"[Phase 6/8] Exploitation chain for {target}")
-        socketio.emit('exploit_result', {
-            'exploit_id': f"{scan_id}_exploit",
-            'target': target,
-            'event': 'started',
-            'message': f'Starting exploitation chain on {target}',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        run_exploitation_chain(target, target_dir, enabled_tools=['nuclei', 'ffuf'])
-
-        socketio.emit('exploit_result', {
-            'exploit_id': f"{scan_id}_exploit",
-            'target': target,
-            'event': 'completed',
-            'message': 'Exploitation chain completed',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        # ==================== PHASE 7: AI ANALYSIS #2 (POST-EXPLOITATION) ====================
-        current_phase = 'ai_analysis_2'
-        socketio.emit('phase_change', {
-            'phase': 'ai_analysis_2',
-            'target': target,
-            'scan_id': scan_id,
-            'message': 'AI analyzing exploitation results',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        logging.info(f"[Phase 7/8] AI Analysis #2 (post-exploitation) for {target}")
-
-        # Gather loot for AI analysis
-        loot = {
-            "usernames": get_loot(target, "username"),
-            "passwords": get_loot(target, "password"),
-            "protocols": get_loot(target, "protocol"),
-            "urls": get_loot(target, "url"),
-            "ports": get_loot(target, "port")
-        }
-
-        ai_followup = ask_ai(
-            {"recon": recon_results, "loot": loot},
-            socketio=socketio,
-            target=target
-        )
-
-        if ai_followup:
-            # Save AI followup suggestions
-            followup_file = Path(target_dir) / "ai_suggestions_post_exploitation.json"
-            followup_file.write_text(json.dumps({
-                "stage": "post_exploitation",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "response": ai_followup
-            }, indent=2))
-
-            # ==================== PHASE 8: EXECUTE AI FOLLOWUP COMMANDS ====================
-            current_phase = 'ai_execution_2'
-            socketio.emit('phase_change', {
-                'phase': 'ai_execution_2',
-                'target': target,
-                'scan_id': scan_id,
-                'message': 'Executing AI followup commands',
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            })
-
-            logging.info(f"[Phase 8/8] Executing AI followup commands for {target}")
-            followup_commands = parse_ai_commands(ai_followup, socketio=socketio, target=target)
-
-            if followup_commands:
-                execute_ai_commands(
-                    followup_commands,
-                    target,
-                    target_dir,
-                    socketio=socketio,
-                    scan_id=scan_id
-                )
-
-        # ==================== COMPLETION ====================
-        logging.info(f"[✓] Completed all phases for {target}")
-        socketio.emit('scan_complete', {
-            'scan_id': scan_id,
-            'target': target,
-            'status': 'completed',
-            'message': f'Full AI workflow completed for {target}',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        # Update scan status
-        with active_scans_lock:
-            active_scans[scan_id].update({
-                'status': 'completed',
-                'completed_at': datetime.now(timezone.utc).isoformat()
-            })
-
-    except Exception as e:
-        logging.error(f"[✗] AI workflow failed for {target}: {e}")
-        socketio.emit('scan_complete', {
-            'scan_id': scan_id,
-            'target': target,
-            'status': 'failed',
-            'error': str(e),
-            'message': f'AI workflow failed for {target}: {str(e)}',
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        with active_scans_lock:
-            active_scans[scan_id].update({
-                'status': 'failed',
-                'error': str(e),
-                'completed_at': datetime.now(timezone.utc).isoformat()
-            })
-
-    finally:
-        # Reset phase back to idle
-        current_phase = 'idle'
-        socketio.emit('phase_change', {
-            'phase': 'idle',
-            'target': target,
-            'scan_id': scan_id,
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        })
-
-        # Clean up thread reference
-        with active_scans_lock:
-            if scan_id in scan_threads:
-                del scan_threads[scan_id]
-
-
 
 
 # ==================== REST API ENDPOINTS ====================
@@ -879,21 +390,7 @@ def update_config():
 
 @app.route('/api/v1/recon/start', methods=['POST'])
 def start_recon():
-    """
-    Start FULL AI-DRIVEN WORKFLOW for target
-
-    This endpoint triggers the complete autonomous workflow:
-    1. Reconnaissance
-    2. AI Analysis #1 (post-recon)
-    3. Execute AI commands
-    4. Web scans (ZAP/Burp auto-start)
-    5. Metasploit exploitation (MSF auto-start)
-    6. Exploitation chain
-    7. AI Analysis #2 (post-exploitation)
-    8. Execute AI followup commands
-
-    Supports concurrent scanning of multiple targets.
-    """
+    """Start reconnaissance scan - supports concurrent scanning"""
     target = request.json.get('target')
     tools = request.json.get('tools', [])
 
@@ -907,8 +404,79 @@ def start_recon():
     stop_event = threading.Event()
 
     def run_scan():
-        """Execute full AI-driven workflow (not just recon)"""
-        run_full_ai_workflow(target, scan_id, tools, socketio)
+        global current_phase
+        try:
+            # Update phase to recon
+            current_phase = 'recon'
+            socketio.emit('phase_change', {'phase': 'recon', 'target': target})
+
+            # Emit scan start
+            socketio.emit('recon_output', {
+                'scan_id': scan_id,
+                'target': target,
+                'event': 'started',
+                'message': f'Starting reconnaissance on {target}',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+            # Update scan status to running with tools info
+            with active_scans_lock:
+                active_scans[scan_id]['running_tools'] = tools
+                active_scans[scan_id]['stop_event'] = stop_event
+
+            # Check for cancellation before starting
+            if stop_event.is_set():
+                raise Exception("Scan cancelled before execution")
+
+            results = run_recon_layered(target, socketio=socketio, scan_id=scan_id)
+
+            # Check for cancellation after completion
+            if stop_event.is_set():
+                raise Exception("Scan cancelled")
+
+            # Emit scan completion
+            socketio.emit('recon_output', {
+                'scan_id': scan_id,
+                'target': target,
+                'event': 'completed',
+                'results': results,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+            with active_scans_lock:
+                active_scans[scan_id].update({
+                    'status': 'completed',
+                    'results': results,
+                    'completed_at': datetime.now(timezone.utc).isoformat()
+                })
+                # Clean up thread reference
+                if scan_id in scan_threads:
+                    del scan_threads[scan_id]
+
+        except Exception as e:
+            logging.error(f"Scan {scan_id} failed: {e}")
+            socketio.emit('recon_output', {
+                'scan_id': scan_id,
+                'target': target,
+                'event': 'failed',
+                'error': str(e),
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+            with active_scans_lock:
+                active_scans[scan_id].update({
+                    'status': 'failed' if 'cancelled' not in str(e).lower() else 'cancelled',
+                    'error': str(e),
+                    'completed_at': datetime.now(timezone.utc).isoformat()
+                })
+                # Clean up thread reference
+                if scan_id in scan_threads:
+                    del scan_threads[scan_id]
+
+        finally:
+            # Reset phase back to idle when scan completes
+            current_phase = 'idle'
+            socketio.emit('phase_change', {'phase': 'idle', 'target': target})
 
     # Store scan info BEFORE starting thread to avoid race condition
     with active_scans_lock:
@@ -1419,17 +987,7 @@ def get_ai_thoughts():
 
 @app.route('/api/v1/ai/analyze', methods=['POST'])
 def analyze_with_ai():
-    """
-    DEPRECATED: Trigger AI analysis on target data
-
-    This endpoint is deprecated as of Phase 3 redesign.
-    AI analysis now runs automatically as part of the full workflow in /api/v1/recon/start
-
-    Use POST /api/v1/recon/start to trigger the complete AI-driven workflow instead.
-    """
-    logging.warning("DEPRECATED endpoint /api/v1/ai/analyze called - use /api/v1/recon/start instead")
-
-    # Return deprecation warning but still function for backward compatibility
+    """Trigger AI analysis on target data"""
     target = request.json.get('target')
     phase = request.json.get('phase', 'recon')  # recon or exploitation
 
@@ -1505,17 +1063,7 @@ def analyze_with_ai():
 
 @app.route('/api/v1/exploit/start', methods=['POST'])
 def start_exploitation():
-    """
-    DEPRECATED: Start exploitation chain with configurable tools
-
-    This endpoint is deprecated as of Phase 3 redesign.
-    Exploitation now runs automatically as part of the full workflow in /api/v1/recon/start
-
-    Use POST /api/v1/recon/start to trigger the complete AI-driven workflow instead.
-    """
-    logging.warning("DEPRECATED endpoint /api/v1/exploit/start called - use /api/v1/recon/start instead")
-
-    # Return deprecation warning but still function for backward compatibility
+    """Start exploitation chain with configurable tools"""
     target = request.json.get('target')
     tools = request.json.get('tools', ['nuclei', 'ffuf'])  # NEW: Tool selection
 
@@ -1642,264 +1190,6 @@ def start_bruteforce():
     })
 
 
-@app.route('/api/v1/results', methods=['GET'])
-def get_all_results():
-    """
-    List all targets with their scan results status
-
-    Returns:
-        {
-          "targets": [
-            {
-              "target": "culpur.net",
-              "status": "completed",
-              "started_at": "2025-01-15T10:00:00Z",
-              "completed_at": "2025-01-15T10:45:00Z",
-              "loot_count": 42,
-              "results_available": true
-            },
-            ...
-          ]
-        }
-    """
-    try:
-        results_dir = Path('results')
-        if not results_dir.exists():
-            return jsonify({'targets': []})
-
-        targets_list = []
-        for target_dir in results_dir.iterdir():
-            if not target_dir.is_dir():
-                continue
-
-            target_info = {
-                'target': target_dir.name,
-                'status': 'unknown',
-                'results_available': False
-            }
-
-            # Check for results.json
-            results_file = target_dir / 'results.json'
-            if results_file.exists():
-                target_info['results_available'] = True
-                target_info['status'] = 'completed'
-
-                # Try to extract timestamps from results
-                try:
-                    results_data = json.loads(results_file.read_text())
-                    if 'started_at' in results_data:
-                        target_info['started_at'] = results_data['started_at']
-                    if 'completed_at' in results_data:
-                        target_info['completed_at'] = results_data['completed_at']
-                except Exception as e:
-                    logging.warning(f"Could not parse results for {target_dir.name}: {e}")
-
-            # Check for loot
-            loot_file = target_dir / 'loot.json'
-            if loot_file.exists():
-                try:
-                    loot = json.loads(loot_file.read_text())
-                    target_info['loot_count'] = sum(
-                        len(v) if isinstance(v, list) else 0
-                        for v in loot.values()
-                    )
-                except Exception as e:
-                    logging.warning(f"Could not parse loot for {target_dir.name}: {e}")
-                    target_info['loot_count'] = 0
-
-            targets_list.append(target_info)
-
-        # Sort by most recent first (if completed_at exists)
-        targets_list.sort(
-            key=lambda x: x.get('completed_at', ''),
-            reverse=True
-        )
-
-        return jsonify({'targets': targets_list, 'count': len(targets_list)})
-
-    except Exception as e:
-        logging.error(f"Failed to get results: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/v1/results/<path:target>', methods=['GET'])
-def get_target_results(target):
-    """
-    Get detailed scan results for a specific target
-
-    Returns: CompleteScanResults with all discovered data
-    """
-    try:
-        target_dir = Path('results') / target
-        if not target_dir.exists():
-            return jsonify({'error': 'Target not found'}), 404
-
-        results_file = target_dir / 'results.json'
-        if not results_file.exists():
-            return jsonify({'error': 'No results available'}), 404
-
-        results = json.loads(results_file.read_text())
-
-        # Load loot
-        loot_file = target_dir / 'loot.json'
-        if loot_file.exists():
-            results['loot'] = json.loads(loot_file.read_text())
-
-        return jsonify(results)
-
-    except Exception as e:
-        logging.error(f"Failed to get target results for {target}: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-def generate_markdown_report(target, results):
-    """Generate a markdown report from scan results"""
-    md = f"# Scan Report: {target}\n\n"
-    md += f"Generated: {datetime.now(timezone.utc).isoformat()}\n\n"
-
-    # Summary section
-    md += "## Summary\n\n"
-    if 'started_at' in results:
-        md += f"- **Started:** {results['started_at']}\n"
-    if 'completed_at' in results:
-        md += f"- **Completed:** {results['completed_at']}\n"
-    md += f"- **Target:** {target}\n\n"
-
-    # Ports section
-    if 'ports' in results and results['ports']:
-        md += "## Open Ports\n\n"
-        md += "| Port | Service | Version |\n"
-        md += "|------|---------|----------|\n"
-        for port_info in results['ports']:
-            port = port_info.get('port', 'N/A')
-            service = port_info.get('service', 'N/A')
-            version = port_info.get('version', 'N/A')
-            md += f"| {port} | {service} | {version} |\n"
-        md += "\n"
-
-    # Subdomains section
-    if 'subdomains' in results and results['subdomains']:
-        md += "## Discovered Subdomains\n\n"
-        for subdomain in results['subdomains']:
-            md += f"- {subdomain}\n"
-        md += "\n"
-
-    # URLs section
-    if 'urls' in results and results['urls']:
-        md += "## Discovered URLs\n\n"
-        for url in results['urls']:
-            md += f"- {url}\n"
-        md += "\n"
-
-    # Vulnerabilities section
-    if 'vulnerabilities' in results and results['vulnerabilities']:
-        md += "## Vulnerabilities\n\n"
-        for vuln in results['vulnerabilities']:
-            severity = vuln.get('severity', 'unknown').upper()
-            name = vuln.get('name', 'Unknown')
-            description = vuln.get('description', 'No description')
-            md += f"### [{severity}] {name}\n\n"
-            md += f"{description}\n\n"
-            if 'affected_target' in vuln:
-                md += f"**Affected:** {vuln['affected_target']}\n\n"
-
-    # Loot section
-    if 'loot' in results:
-        loot = results['loot']
-        md += "## Loot Collected\n\n"
-
-        if 'usernames' in loot and loot['usernames']:
-            md += f"### Usernames ({len(loot['usernames'])})\n\n"
-            for username in loot['usernames'][:20]:  # Limit to first 20
-                md += f"- {username}\n"
-            if len(loot['usernames']) > 20:
-                md += f"- ... and {len(loot['usernames']) - 20} more\n"
-            md += "\n"
-
-        if 'passwords' in loot and loot['passwords']:
-            md += f"### Passwords ({len(loot['passwords'])})\n\n"
-            for password in loot['passwords'][:20]:
-                md += f"- {password}\n"
-            if len(loot['passwords']) > 20:
-                md += f"- ... and {len(loot['passwords']) - 20} more\n"
-            md += "\n"
-
-    # DNS Records section
-    if 'dns_records' in results and results['dns_records']:
-        md += "## DNS Records\n\n"
-        for record_type, records in results['dns_records'].items():
-            if records:
-                md += f"### {record_type} Records\n\n"
-                for record in records:
-                    md += f"- {record}\n"
-                md += "\n"
-
-    # Footer
-    md += "---\n\n"
-    md += f"Report generated by CStrike on {datetime.now(timezone.utc).isoformat()}\n"
-
-    return md
-
-
-@app.route('/api/v1/results/<path:target>/download', methods=['GET'])
-def download_target_results(target):
-    """
-    Download scan results as JSON or Markdown
-
-    Query params:
-        format: 'json' or 'markdown' (default: json)
-    """
-    try:
-        format_type = request.args.get('format', 'json')
-        target_dir = Path('results') / target
-
-        if not target_dir.exists():
-            return jsonify({'error': 'Target not found'}), 404
-
-        if format_type == 'json':
-            results_file = target_dir / 'results.json'
-            if not results_file.exists():
-                return jsonify({'error': 'No results'}), 404
-            return send_file(
-                results_file,
-                as_attachment=True,
-                download_name=f'{target.replace("/", "_")}_results.json'
-            )
-
-        elif format_type == 'markdown':
-            results_file = target_dir / 'results.json'
-            if not results_file.exists():
-                return jsonify({'error': 'No results'}), 404
-
-            # Generate markdown report
-            results = json.loads(results_file.read_text())
-
-            # Load loot if available
-            loot_file = target_dir / 'loot.json'
-            if loot_file.exists():
-                results['loot'] = json.loads(loot_file.read_text())
-
-            markdown = generate_markdown_report(target, results)
-
-            # Create temp file
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as f:
-                f.write(markdown)
-                temp_path = f.name
-
-            return send_file(
-                temp_path,
-                as_attachment=True,
-                download_name=f'{target.replace("/", "_")}_report.md'
-            )
-
-        else:
-            return jsonify({'error': 'Invalid format. Use "json" or "markdown"'}), 400
-
-    except Exception as e:
-        logging.error(f"Failed to download results for {target}: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
 @app.route('/api/v1/logs', methods=['GET'])
 def get_logs():
     """Get recent logs with proper structured format"""
@@ -1998,19 +1288,14 @@ def handle_ping():
 # ==================== MAIN ====================
 
 if __name__ == '__main__':
-    # Add WebSocket log handler to root logger
-    ws_handler = WebSocketLogHandler()
-    ws_handler.setLevel(logging.INFO)
-    logging.root.addHandler(ws_handler)
-
     # Start metrics update thread
     metrics_thread = threading.Thread(target=update_system_metrics, daemon=True)
     metrics_thread.start()
 
-    logging.info("CStrike API Server starting...")
-    logging.info("REST API: http://localhost:8000/api/v1/")
-    logging.info("WebSocket: ws://localhost:8000/")
-    logging.info("Frontend: http://localhost:3000")
+    logging.info("🚀 CStrike API Server starting...")
+    logging.info("📡 REST API: http://localhost:8000/api/v1/")
+    logging.info("🔌 WebSocket: ws://localhost:8000/")
+    logging.info("🎯 Frontend: http://localhost:3000")
 
     # Disable reloader to prevent port binding issues
     socketio.run(app, host='0.0.0.0', port=8000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)

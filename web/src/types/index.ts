@@ -385,3 +385,22 @@ export interface ToastNotification {
   duration?: number;
   timestamp: number;
 }
+
+// ============================================================================
+// Configuration Types
+// ============================================================================
+
+export interface Config {
+  openai_api_key: string;
+  allow_exploitation: boolean;
+  scan_modes: string[];
+  allowed_tools: string[];
+  max_threads: number;
+  max_runtime: number;
+  msf_username: string;
+  msf_password: string;
+  msf_host: string;
+  msf_port: number;
+  zap_host: string;
+  zap_port: number;
+}

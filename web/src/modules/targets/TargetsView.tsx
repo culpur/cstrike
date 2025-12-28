@@ -1,9 +1,18 @@
 /**
- * Reconnaissance View - Target management and scanning controls
+ * Targets View - Target management for AI-driven autonomous scans
+ *
+ * This view allows users to add targets and initiate AI-driven scans.
+ * Once "Start Scan" is clicked, the AI autonomously runs ALL phases:
+ * - Reconnaissance (all tools)
+ * - AI Analysis
+ * - Exploitation
+ * - Follow-up actions
+ *
+ * Users simply watch the progress on the Dashboard and AI Stream.
  */
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Play, Square, PlayCircle, XCircle } from 'lucide-react';
+import { Plus, Trash2, Play, Square, XCircle } from 'lucide-react';
 import { Button, Panel, Input, StatusBadge } from '@components/ui';
 import { useReconStore } from '@stores/reconStore';
 import { useUIStore } from '@stores/uiStore';
@@ -21,24 +30,18 @@ interface ActiveScan {
   status: string;
 }
 
-export function ReconnaissanceView() {
+export function TargetsView() {
   const [targetUrl, setTargetUrl] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const [activeScanId, setActiveScanId] = useState<string | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
   const [activeScans, setActiveScans] = useState<ActiveScan[]>([]);
-  const [isBatchScanning, setIsBatchScanning] = useState(false);
 
   const {
     targets,
-    tools,
     portScanResults,
     subdomainResults,
     reconOutputs,
     addTarget,
     removeTarget,
-    toggleTool,
-    setToolRunning,
     addPortScanResult,
     addSubdomainResult,
     addReconOutput,
@@ -52,9 +55,7 @@ export function ReconnaissanceView() {
     const loadTargets = async () => {
       try {
         const existingTargets = await apiService.getTargets();
-        // Add each target individually (store doesn't have setTargets)
         existingTargets.forEach((url) => {
-          // Only add if not already in targets
           if (!targets.some((t) => t.url === url)) {
             addTarget(url);
           }
@@ -65,7 +66,7 @@ export function ReconnaissanceView() {
     };
     loadTargets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run on mount
+  }, []);
 
   // Poll active scans periodically
   useEffect(() => {
@@ -78,37 +79,11 @@ export function ReconnaissanceView() {
       }
     };
 
-    // Poll immediately and then every 3 seconds
     pollActiveScans();
     const interval = setInterval(pollActiveScans, 3000);
 
     return () => clearInterval(interval);
   }, []);
-
-  // Poll scan status when active scan
-  useEffect(() => {
-    if (!activeScanId) return;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const status = await apiService.getScanStatus(activeScanId);
-        if (status.status === 'completed' || status.status === 'failed') {
-          setIsScanning(false);
-          setActiveScanId(null);
-          clearInterval(pollInterval);
-
-          addToast({
-            type: status.status === 'completed' ? 'success' : 'error',
-            message: status.status === 'completed' ? 'Scan completed!' : `Scan failed: ${status.error}`,
-          });
-        }
-      } catch (error) {
-        console.error('Failed to poll scan status:', error);
-      }
-    }, 3000); // Poll every 3 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [activeScanId, addToast]);
 
   // Setup WebSocket listeners
   useEffect(() => {
@@ -167,7 +142,6 @@ export function ReconnaissanceView() {
 
   const handleRemoveTarget = async (targetUrl: string) => {
     try {
-      // Find the target by URL to get its ID for local store removal
       const target = targets.find((t) => t.url === targetUrl);
       if (!target) return;
 
@@ -186,37 +160,20 @@ export function ReconnaissanceView() {
   };
 
   const handleStartScan = async (targetId: string) => {
-    const enabledTools = tools.filter((t) => t.enabled).map((t) => t.name);
-
-    if (enabledTools.length === 0) {
-      addToast({
-        type: 'warning',
-        message: 'Please enable at least one tool',
-      });
-      return;
-    }
-
-    setIsScanning(true);
     try {
-      // Start recon and capture scan_id for polling
-      const response = await apiService.startRecon(targetId, enabledTools);
+      // Start AI-driven scan (AI will decide which tools to run)
+      const response = await apiService.startRecon(targetId, []);
       const scanId = response?.scan_id || null;
 
-      if (scanId) {
-        setActiveScanId(scanId);
-      }
-
       startScan(targetId);
-      enabledTools.forEach((tool) => setToolRunning(tool, true));
       addToast({
         type: 'success',
-        message: `Reconnaissance started (scan_id: ${scanId})`,
+        message: `AI-driven scan started (scan_id: ${scanId})`,
       });
     } catch (error) {
-      setIsScanning(false);
       addToast({
         type: 'error',
-        message: 'Failed to start reconnaissance',
+        message: 'Failed to start scan',
       });
     }
   };
@@ -228,7 +185,6 @@ export function ReconnaissanceView() {
         type: 'info',
         message: 'Scan cancellation requested',
       });
-      // Refresh active scans list
       const response = await apiService.getActiveScans();
       setActiveScans(response.active_scans);
     } catch (error) {
@@ -239,63 +195,20 @@ export function ReconnaissanceView() {
     }
   };
 
-  const handleBatchScan = async () => {
-    const targetUrls = targets.map((t) => t.url);
-    const enabledTools = tools.filter((t) => t.enabled).map((t) => t.name);
-
-    if (targetUrls.length === 0) {
-      addToast({
-        type: 'warning',
-        message: 'No targets available for batch scanning',
-      });
-      return;
-    }
-
-    if (enabledTools.length === 0) {
-      addToast({
-        type: 'warning',
-        message: 'Please enable at least one tool',
-      });
-      return;
-    }
-
-    setIsBatchScanning(true);
-    try {
-      const response = await apiService.startBatchRecon(targetUrls, enabledTools);
-      addToast({
-        type: 'success',
-        message: `Batch scan started: ${response.successful}/${response.total} targets`,
-      });
-
-      if (response.failed && response.failed.length > 0) {
-        addToast({
-          type: 'warning',
-          message: `${response.failed.length} targets failed to start`,
-        });
-      }
-
-      // Refresh active scans list
-      const activeResponse = await apiService.getActiveScans();
-      setActiveScans(activeResponse.active_scans);
-    } catch (error) {
-      addToast({
-        type: 'error',
-        message: 'Failed to start batch scan',
-      });
-    } finally {
-      setIsBatchScanning(false);
-    }
-  };
-
   return (
     <div className="h-full overflow-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-grok-text-heading">Reconnaissance</h1>
+      <div>
+        <h1 className="text-2xl font-bold text-grok-text-heading">Targets</h1>
+        <p className="text-sm text-grok-text-muted mt-1">
+          Add targets and start AI-driven autonomous scans. The AI will automatically run all phases.
+        </p>
+      </div>
 
       {/* Add Target */}
       <Panel title="Add Target">
         <div className="flex gap-2">
           <Input
-            placeholder="https://example.com"
+            placeholder="https://example.com or 192.168.1.1"
             value={targetUrl}
             onChange={(e) => setTargetUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddTarget()}
@@ -304,44 +217,6 @@ export function ReconnaissanceView() {
             <Plus className="w-4 h-4 mr-1" />
             Add
           </Button>
-        </div>
-      </Panel>
-
-      {/* Tool Selection */}
-      <Panel title="Reconnaissance Tools">
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {tools.map((tool) => (
-              <button
-                key={tool.name}
-                onClick={() => toggleTool(tool.name)}
-                className={cn(
-                  'p-3 rounded-lg border transition-all text-left',
-                  tool.enabled
-                    ? 'bg-grok-recon-blue/10 border-grok-recon-blue text-grok-recon-blue'
-                    : 'bg-grok-surface-2 border-grok-border text-grok-text-muted hover:border-grok-text-muted'
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{tool.name}</span>
-                  {tool.running && (
-                    <span className="w-2 h-2 bg-current rounded-full animate-pulse" />
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-          <div className="flex justify-end">
-            <Button
-              onClick={handleBatchScan}
-              isLoading={isBatchScanning}
-              disabled={targets.length === 0 || tools.filter(t => t.enabled).length === 0}
-              variant="primary"
-            >
-              <PlayCircle className="w-4 h-4 mr-2" />
-              Scan All Targets ({targets.length})
-            </Button>
-          </div>
         </div>
       </Panel>
 
@@ -400,29 +275,30 @@ export function ReconnaissanceView() {
       <Panel title={`Targets (${targets.length})`}>
         {targets.length === 0 ? (
           <p className="text-sm text-grok-text-muted text-center py-8">
-            No targets added yet
+            No targets added yet. Add a target above to begin.
           </p>
         ) : (
           <div className="space-y-3">
-            {targets.map((target) => (
-              <div
-                key={target.id}
-                className="flex items-center justify-between p-3 bg-grok-surface-2 rounded-lg border border-grok-border"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-grok-text-heading truncate">
-                    {target.url}
-                  </p>
-                  {target.ip && (
-                    <p className="text-xs text-grok-text-muted mt-1">{target.ip}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 ml-4">
-                  <StatusBadge status={target.status} />
-                  {/* Check if this target has an active scan */}
-                  {(() => {
-                    const activeScan = activeScans.find((s) => s.target === target.url);
-                    return activeScan ? (
+            {targets.map((target) => {
+              const activeScan = activeScans.find((s) => s.target === target.url);
+              const isScanning = !!activeScan;
+
+              return (
+                <div
+                  key={target.id}
+                  className="flex items-center justify-between p-3 bg-grok-surface-2 rounded-lg border border-grok-border"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-grok-text-heading truncate">
+                      {target.url}
+                    </p>
+                    {target.ip && (
+                      <p className="text-xs text-grok-text-muted mt-1">{target.ip}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <StatusBadge status={target.status} />
+                    {isScanning ? (
                       <Button
                         size="sm"
                         variant="danger"
@@ -436,23 +312,22 @@ export function ReconnaissanceView() {
                         size="sm"
                         variant="primary"
                         onClick={() => handleStartScan(target.url)}
-                        disabled={isScanning}
                       >
                         <Play className="w-3 h-3 mr-1" />
-                        Scan
+                        Start Scan
                       </Button>
-                    );
-                  })()}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleRemoveTarget(target.url)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleRemoveTarget(target.url)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Panel>
@@ -523,7 +398,6 @@ export function ReconnaissanceView() {
           ) : (
             <div className="space-y-1">
               {reconOutputs.slice(-50).map((output) => {
-                // Color based on event type
                 const getEventColor = (event?: string) => {
                   if (!event) return 'text-grok-text-body';
                   if (event.includes('start')) return 'text-grok-recon-blue';
