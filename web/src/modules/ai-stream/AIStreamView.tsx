@@ -308,45 +308,45 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
         {expanded && thought.metadata && (
           <div className="mt-3 space-y-2">
             {/* AI Prompt Details */}
-            {thought.thoughtType === 'ai_prompt' && thought.metadata.system_prompt && (
+            {thought.thoughtType === 'ai_prompt' && typeof thought.metadata.system_prompt === 'string' ? (
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-grok-text-muted">System Prompt:</div>
                 <div className="p-2 bg-grok-void rounded text-xs text-grok-text-body font-mono whitespace-pre-wrap">
-                  {thought.metadata.system_prompt as string}
+                  {thought.metadata.system_prompt}
                 </div>
-                {thought.metadata.data_preview && (
+                {typeof thought.metadata.data_preview === 'string' ? (
                   <>
                     <div className="text-xs font-semibold text-grok-text-muted">Data Preview:</div>
                     <div className="p-2 bg-grok-void rounded text-xs text-grok-text-body font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
-                      {thought.metadata.data_preview as string}
+                      {thought.metadata.data_preview}
                     </div>
                   </>
-                )}
+                ) : null}
                 <div className="text-xs text-grok-text-muted">
                   Model: {thought.metadata.model as string} | Tokens: {thought.metadata.max_tokens as number} | Temp: {thought.metadata.temperature as number}
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* AI Response Details */}
-            {thought.thoughtType === 'ai_response' && thought.metadata.response && (
+            {thought.thoughtType === 'ai_response' && typeof thought.metadata.response === 'string' ? (
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-grok-text-muted">Full AI Response:</div>
                 <div className="p-2 bg-grok-void rounded text-xs text-grok-text-body font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
-                  {thought.metadata.response as string}
+                  {thought.metadata.response}
                 </div>
-                {thought.metadata.usage && (
+                {thought.metadata.usage && typeof thought.metadata.usage === 'object' ? (
                   <div className="text-xs text-grok-text-muted">
                     Tokens - Prompt: {(thought.metadata.usage as any).prompt_tokens} |
                     Completion: {(thought.metadata.usage as any).completion_tokens} |
                     Total: {(thought.metadata.usage as any).total_tokens}
                   </div>
-                )}
+                ) : null}
               </div>
-            )}
+            ) : null}
 
             {/* AI Decision Details */}
-            {thought.thoughtType === 'ai_decision' && thought.metadata.commands && (
+            {thought.thoughtType === 'ai_decision' && Array.isArray(thought.metadata.commands) ? (
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-grok-text-muted">Parsed Commands:</div>
                 <div className="space-y-1">
@@ -357,10 +357,10 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* AI Execution Details */}
-            {thought.thoughtType === 'ai_execution' && thought.metadata.commands && (
+            {thought.thoughtType === 'ai_execution' && Array.isArray(thought.metadata.commands) ? (
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-grok-text-muted">Commands to Execute:</div>
                 <div className="space-y-1">
@@ -370,13 +370,13 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
                     </div>
                   ))}
                 </div>
-                {thought.metadata.note && (
+                {typeof thought.metadata.note === 'string' ? (
                   <div className="text-xs text-grok-text-muted italic">
-                    {thought.metadata.note as string}
+                    {thought.metadata.note}
                   </div>
-                )}
+                ) : null}
               </div>
-            )}
+            ) : null}
 
             {/* Generic metadata fallback */}
             {!['ai_prompt', 'ai_response', 'ai_decision', 'ai_execution'].includes(thought.thoughtType) && (
