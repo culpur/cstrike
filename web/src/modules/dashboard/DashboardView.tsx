@@ -92,6 +92,15 @@ export function DashboardView() {
 
   const phasePercentage = calculatePhaseProgress(phaseProgress);
 
+  // Calculate target counts by status
+  const targetCounts = {
+    total: targets.length,
+    pending: targets.filter(t => t.status === 'pending').length,
+    scanning: targets.filter(t => t.status === 'scanning').length,
+    complete: targets.filter(t => t.status === 'complete').length,
+    failed: targets.filter(t => t.status === 'failed').length,
+  };
+
   return (
     <div className="h-full overflow-auto p-6 space-y-6">
       {/* Connection Status */}
@@ -99,10 +108,17 @@ export function DashboardView() {
         <h1 className="text-2xl font-bold text-grok-text-heading">
           CStrike Dashboard
         </h1>
-        <StatusBadge
-          status={connected ? 'running' : 'stopped'}
-          label={connected ? 'Connected' : 'Disconnected'}
-        />
+        <div className="flex items-center gap-4">
+          {targetCounts.total > 0 && (
+            <span className="text-sm text-grok-text-muted">
+              Targets: {targetCounts.complete + targetCounts.failed}/{targetCounts.total} complete
+            </span>
+          )}
+          <StatusBadge
+            status={connected ? 'running' : 'stopped'}
+            label={connected ? 'Connected' : 'Disconnected'}
+          />
+        </div>
       </div>
 
       {/* System Metrics */}
@@ -154,6 +170,10 @@ export function DashboardView() {
               label="Recon"
               complete={phaseProgress.reconComplete}
               active={phaseProgress.currentPhase === 'recon'}
+              targetCount={targetCounts.total > 0 ? {
+                completed: targetCounts.complete,
+                total: targetCounts.total
+              } : undefined}
             />
             <PhaseIndicator
               label="AI Analysis"
@@ -250,16 +270,18 @@ function PhaseIndicator({
   label,
   complete,
   active,
+  targetCount,
 }: {
   label: string;
   complete: boolean;
   active: boolean;
+  targetCount?: { completed: number; total: number };
 }) {
   return (
     <div className="flex flex-col items-center gap-2">
       <div
         className={cn(
-          'w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all',
+          'w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all relative',
           complete && 'bg-grok-success border-grok-success',
           active && !complete && 'border-grok-recon-blue animate-pulse',
           !complete && !active && 'border-grok-border'
@@ -279,7 +301,17 @@ function PhaseIndicator({
           </svg>
         )}
       </div>
-      <span className="text-xs text-grok-text-muted text-center">{label}</span>
+      <div className="flex flex-col items-center gap-0.5">
+        <span className="text-xs text-grok-text-muted text-center">{label}</span>
+        {targetCount && targetCount.total > 0 && (
+          <span className={cn(
+            "text-xs font-mono font-semibold",
+            targetCount.completed === targetCount.total ? 'text-grok-success' : 'text-grok-recon-blue'
+          )}>
+            {targetCount.completed}/{targetCount.total}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
