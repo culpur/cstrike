@@ -14,7 +14,7 @@ import { formatPercent, formatUptime, getPhaseDisplayName } from '@utils/index';
 import type { SystemMetrics, ServiceState, PhaseProgress } from '@/types';
 
 export function DashboardView() {
-  const { metrics, services, phaseProgress, connected, updateMetrics, updateServiceStatus, setConnected } =
+  const { metrics, services, phaseProgress, connected, updateMetrics, updateServiceStatus, updatePhase, setConnected } =
     useSystemStore();
   const { stats: lootStats } = useLootStore();
   const { targets } = useReconStore();
@@ -64,7 +64,17 @@ export function DashboardView() {
         updateServiceStatus('zap', data.services.zap as any);
         updateServiceStatus('burp', data.services.burp as any);
       }
+      if (data.phase) {
+        updatePhase(data.phase as any);
+      }
       setConnected(true);
+    });
+
+    // Listen for phase changes
+    const unsubPhase = wsService.on<{ phase: string; target?: string }>('phase_change', (data) => {
+      if (data.phase) {
+        updatePhase(data.phase as any);
+      }
     });
 
     // Update connection status when disconnected
@@ -75,9 +85,10 @@ export function DashboardView() {
     return () => {
       unsubMetrics();
       unsubStatus();
+      unsubPhase();
       clearInterval(checkConnection);
     };
-  }, [updateMetrics, updateServiceStatus, setConnected]);
+  }, [updateMetrics, updateServiceStatus, updatePhase, setConnected]);
 
   const phasePercentage = calculatePhaseProgress(phaseProgress);
 

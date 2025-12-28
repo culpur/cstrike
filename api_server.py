@@ -307,7 +307,12 @@ def start_recon():
     stop_event = threading.Event()
 
     def run_scan():
+        global current_phase
         try:
+            # Update phase to recon
+            current_phase = 'recon'
+            socketio.emit('phase_change', {'phase': 'recon', 'target': target})
+
             # Emit scan start
             socketio.emit('recon_output', {
                 'scan_id': scan_id,
@@ -370,6 +375,11 @@ def start_recon():
                 # Clean up thread reference
                 if scan_id in scan_threads:
                     del scan_threads[scan_id]
+
+        finally:
+            # Reset phase back to idle when scan completes
+            current_phase = 'idle'
+            socketio.emit('phase_change', {'phase': 'idle', 'target': target})
 
     # Store scan info BEFORE starting thread to avoid race condition
     with active_scans_lock:

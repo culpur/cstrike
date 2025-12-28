@@ -280,15 +280,45 @@ export function isValidIp(ip: string): boolean {
 }
 
 /**
- * Validate URL format
+ * Validate URL, hostname, or IP address format
  */
 export function isValidUrl(url: string): boolean {
+  // Remove whitespace
+  url = url.trim();
+
+  // Empty string is invalid
+  if (!url) return false;
+
+  // Try parsing as URL with protocol
   try {
     new URL(url);
     return true;
   } catch {
-    return false;
+    // Fall through to check if it's a hostname or IP without protocol
   }
+
+  // Check if it's a valid IPv4 address
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+  if (ipv4Regex.test(url)) {
+    // Validate IP octets are 0-255
+    const octets = url.split('.').map(Number);
+    return octets.every(octet => octet >= 0 && octet <= 255);
+  }
+
+  // Check if it's a valid hostname (with or without port)
+  // Allows: example.com, sub.example.com, example.com:8080
+  const hostnameRegex = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(:[0-9]{1,5})?$/;
+  if (hostnameRegex.test(url)) {
+    return true;
+  }
+
+  // Check if it's a valid IPv6 address (basic check)
+  if (url.includes(':') && url.split(':').length > 2) {
+    // Simple IPv6 validation
+    return /^[0-9a-fA-F:]+$/.test(url.replace(/\[|\]/g, ''));
+  }
+
+  return false;
 }
 
 /**

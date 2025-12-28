@@ -27,7 +27,8 @@ RECON_COMMANDS = [
     ("dnsrecon", lambda t: ["dnsrecon", "-d", t]),
     ("subfinder", lambda t: ["subfinder", "-d", t, "-silent"]),
     ("amass", lambda t: ["amass", "enum", "-d", t, "-nocolor", "-passive"]),
-    ("nmap", lambda t: ["nmap", "-p-", "-T4", "-Pn", t]),
+    # Use -sT for TCP connect scan (doesn't require root/sudo)
+    ("nmap", lambda t: ["nmap", "-sT", "-p-", "-T4", "-Pn", t]),
     ("curl_headers", lambda t: ["curl", "-I", "--max-time", "10", t]),
     ("whatweb", lambda t: ["whatweb", t]),
     ("wafw00f", lambda t: ["wafw00f", t]),
