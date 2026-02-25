@@ -4,9 +4,9 @@ set -e
 
 USERNAME="redteam"
 GROUPNAME="redteam"
-INSTALL_DIR="/opt/ai_driver"
+INSTALL_DIR="/opt/cstrike"
 SOURCE_DIR="/root/qs"
-EXECUTABLES=("ai_driver.py" "setup_anon_env.sh")
+EXECUTABLES=("cstrike.py" "setup_anon_env.sh")
 ZSHRC="/home/$USERNAME/.zshrc"
 LOG_DIR="$INSTALL_DIR/logs"
 
@@ -34,10 +34,10 @@ done
 echo "[+] Updating $ZSHRC with environment paths"
 cat <<EOF >> "$ZSHRC"
 
-# ai_driver aliases
-export AI_DRIVER_HOME="$INSTALL_DIR"
-alias ai_driver="sudo python3 \$AI_DRIVER_HOME/ai_driver.py"
-alias setup_anon="\$AI_DRIVER_HOME/setup_anon_env.sh"
+# cstrike aliases
+export CSTRIKE_HOME="$INSTALL_DIR"
+alias cstrike="sudo python3 \$CSTRIKE_HOME/cstrike.py"
+alias setup_anon="\$CSTRIKE_HOME/setup_anon_env.sh"
 EOF
 
 echo "[+] Applying iptables routing rules for redteam VPN traffic"
@@ -58,7 +58,7 @@ ip route show table wgvpn | grep -q '^default' || ip route add default dev wg0 t
 echo "[+] Updating logging paths in Python scripts"
 
 for py in "$INSTALL_DIR"/*.py; do
-  sed -i "s|log_file = .*|log_file = os.path.join(os.getenv('AI_DRIVER_HOME', '/opt/ai_driver'), 'logs', 'ai_driver.log')|" "$py"
+  sed -i "s|log_file = .*|log_file = os.path.join(os.getenv('CSTRIKE_HOME', '/opt/cstrike'), 'logs', 'cstrike.log')|" "$py"
 done
 
-echo "[+] Environment setup complete. Login as '$USERNAME' and use 'ai_driver' to start."
+echo "[+] Environment setup complete. Login as '$USERNAME' and use 'cstrike' to start."

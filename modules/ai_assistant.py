@@ -1,4 +1,4 @@
-# /opt/ai_driver/modules/ai_assistant.py
+# cstrike/modules/ai_assistant.py
 
 import os
 import json
@@ -50,7 +50,13 @@ def ask_ai(recon_data, socketio=None, target=None):
         system_prompt = (
             "You are a highly skilled penetration testing AI assistant. "
             "Based on the following recon and loot data, suggest additional commands "
-            "to enumerate, exploit, or pivot further. Return only shell commands if possible."
+            "to enumerate, exploit, or pivot further. Return only shell commands if possible. "
+            "Available tools include vulnapi for API security scanning: "
+            "'vulnapi scan curl <URL>' to scan an API endpoint without a spec, "
+            "'vulnapi scan openapi <SPEC_URL>' to scan using an OpenAPI/Swagger spec, "
+            "'vulnapi discover api <URL>' to discover API endpoints. "
+            "When you detect API frameworks, REST endpoints, or JSON responses in the recon data, "
+            "suggest vulnapi commands to test for OWASP API Top 10 vulnerabilities."
         )
 
         # Truncate data to 7000 chars

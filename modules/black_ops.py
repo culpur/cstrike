@@ -1,11 +1,11 @@
-# /opt/ai_driver/modules/black_ops.py
+# cstrike/modules/black_ops.py
 
 import json
 import subprocess
 import os
 from pathlib import Path
 
-AGENTS_FILE = Path("/opt/ai_driver/data/agents.json")
+AGENTS_FILE = Path("data/agents.json")
 
 
 def load_agents():

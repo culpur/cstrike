@@ -1,4 +1,4 @@
-# /opt/ai_driver/modules/utils/__init__.py
+# cstrike/modules/utils/__init__.py
 
 import subprocess
 import json
@@ -37,7 +37,7 @@ def load_results(target):
     return results
 
 def get_target_dir(target):
-    return os.path.join("/opt/ai_driver/results", target.replace("https://", "").replace("http://", "").replace("/", "_"))
+    return os.path.join("results", target.replace("https://", "").replace("http://", "").replace("/", "_"))
 
 def compile_results(target):
     target_dir = get_target_dir(target)

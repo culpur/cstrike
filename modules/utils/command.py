@@ -1,4 +1,4 @@
-# /opt/ai_driver/modules/utils/command.py
+# cstrike/modules/utils/command.py
 
 import subprocess
 

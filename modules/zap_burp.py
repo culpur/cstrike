@@ -1,4 +1,4 @@
-# /opt/ai_driver/modules/zap_burp.py
+# cstrike/modules/zap_burp.py
 
 import subprocess
 import time

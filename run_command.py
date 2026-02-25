@@ -43,6 +43,8 @@ def mode_allowed(cmd):
         return True
     if tool in ["enum4linux-ng", "wpscan", "nikto"] and "vulnscan" in SCAN_MODES:
         return True
+    if tool in ["vulnapi"] and "apiscan" in SCAN_MODES:
+        return True
     if tool in ["hydra", "msfconsole"] and ALLOW_EXPLOITATION:
         return True
     return tool in ALLOWED_TOOLS

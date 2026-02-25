@@ -31,6 +31,7 @@ from modules.credential_validator import validate_credential, validate_credentia
 from modules.ai_assistant import ask_ai, get_thoughts, parse_ai_commands
 from modules.zap_burp import start_zap, start_burp, run_web_scans
 from modules.metasploit import start_msf_rpc, run_msf_exploits
+from modules.vulnapi import run_vulnapi_full_scan, run_vulnapi_curl_scan, run_vulnapi_openapi_scan
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000'])
@@ -370,17 +371,18 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
     """
     Execute the complete AI-driven workflow for a target
 
-    This mirrors ai_driver.py but with WebSocket event emissions for real-time UI updates.
+    This mirrors cstrike.py but with WebSocket event emissions for real-time UI updates.
 
     Phases:
         1. Reconnaissance (all enabled tools)
         2. AI Analysis #1 (post-recon)
         3. Execute AI-suggested commands
         4. Web Application Scanning (ZAP/Burp auto-start)
-        5. Metasploit Exploitation (MSF auto-start)
-        6. Exploitation Chain (nuclei, ffuf, etc.)
-        7. AI Analysis #2 (post-exploitation)
-        8. Execute AI followup commands
+        5. API Security Scanning (VulnAPI)
+        6. Metasploit Exploitation (MSF auto-start)
+        7. Exploitation Chain (nuclei, ffuf, vulnapi)
+        8. AI Analysis #2 (post-exploitation)
+        9. Execute AI followup commands
 
     Args:
         target: Target hostname/IP
@@ -402,7 +404,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-        logging.info(f"[Phase 1/8] Starting reconnaissance for {target}")
+        logging.info(f"[Phase 1/9] Starting reconnaissance for {target}")
         socketio.emit('recon_output', {
             'scan_id': scan_id,
             'target': target,
@@ -413,7 +415,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
 
         recon_results = run_recon_layered(target, socketio=socketio, scan_id=scan_id)
 
-        logging.info(f"[Phase 1/8] Reconnaissance completed for {target}")
+        logging.info(f"[Phase 1/9] Reconnaissance completed for {target}")
         socketio.emit('recon_output', {
             'scan_id': scan_id,
             'target': target,
@@ -432,7 +434,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-        logging.info(f"[Phase 2/8] AI Analysis #1 (post-recon) for {target}")
+        logging.info(f"[Phase 2/9] AI Analysis #1 (post-recon) for {target}")
         ai_response = ask_ai(recon_results, socketio=socketio, target=target)
 
         if ai_response:
@@ -454,7 +456,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
                 'timestamp': datetime.now(timezone.utc).isoformat()
             })
 
-            logging.info(f"[Phase 3/8] Executing AI-suggested commands for {target}")
+            logging.info(f"[Phase 3/9] Executing AI-suggested commands for {target}")
             commands = parse_ai_commands(ai_response, socketio=socketio, target=target)
 
             if commands:
@@ -476,7 +478,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-        logging.info(f"[Phase 4/8] Web application scanning for {target}")
+        logging.info(f"[Phase 4/9] Web application scanning for {target}")
 
         # Auto-start ZAP and Burp if not running
         ensure_zap_running(socketio=socketio, target=target)
@@ -485,7 +487,27 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
         # Run web scans
         run_web_scans(target, target_dir)
 
-        # ==================== PHASE 5: METASPLOIT EXPLOITATION ====================
+        # ==================== PHASE 5: API SECURITY SCANNING ====================
+        current_phase = 'apiscan'
+        socketio.emit('phase_change', {
+            'phase': 'apiscan',
+            'target': target,
+            'scan_id': scan_id,
+            'message': 'Running API security scanning (VulnAPI)',
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+
+        logging.info(f"[Phase 5/9] API security scanning for {target}")
+        vulnapi_results = run_vulnapi_full_scan(
+            target, socketio=socketio, scan_id=scan_id
+        )
+
+        # Save VulnAPI summary
+        if vulnapi_results and vulnapi_results.get("total_findings", 0) > 0:
+            vulnapi_summary_file = Path(target_dir) / "vulnapi_summary.json"
+            vulnapi_summary_file.write_text(json.dumps(vulnapi_results, indent=2))
+
+        # ==================== PHASE 6: METASPLOIT EXPLOITATION ====================
         current_phase = 'metasploit'
         socketio.emit('phase_change', {
             'phase': 'metasploit',
@@ -495,7 +517,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-        logging.info(f"[Phase 5/8] Metasploit exploitation for {target}")
+        logging.info(f"[Phase 6/9] Metasploit exploitation for {target}")
 
         # Auto-start Metasploit RPC if not running
         msf_client = ensure_msf_running(socketio=socketio, target=target)
@@ -512,7 +534,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-        logging.info(f"[Phase 6/8] Exploitation chain for {target}")
+        logging.info(f"[Phase 7/9] Exploitation chain for {target}")
         socketio.emit('exploit_result', {
             'exploit_id': f"{scan_id}_exploit",
             'target': target,
@@ -521,7 +543,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-        run_exploitation_chain(target, target_dir, enabled_tools=['nuclei', 'ffuf'])
+        run_exploitation_chain(target, target_dir, enabled_tools=['nuclei', 'ffuf', 'vulnapi'])
 
         socketio.emit('exploit_result', {
             'exploit_id': f"{scan_id}_exploit",
@@ -531,7 +553,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-        # ==================== PHASE 7: AI ANALYSIS #2 (POST-EXPLOITATION) ====================
+        # ==================== PHASE 8: AI ANALYSIS #2 (POST-EXPLOITATION) ====================
         current_phase = 'ai_analysis_2'
         socketio.emit('phase_change', {
             'phase': 'ai_analysis_2',
@@ -541,7 +563,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-        logging.info(f"[Phase 7/8] AI Analysis #2 (post-exploitation) for {target}")
+        logging.info(f"[Phase 8/9] AI Analysis #2 (post-exploitation) for {target}")
 
         # Gather loot for AI analysis
         loot = {
@@ -549,7 +571,8 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             "passwords": get_loot(target, "password"),
             "protocols": get_loot(target, "protocol"),
             "urls": get_loot(target, "url"),
-            "ports": get_loot(target, "port")
+            "ports": get_loot(target, "port"),
+            "api_vulnerabilities": get_loot(target, "vulnerability")
         }
 
         ai_followup = ask_ai(
@@ -567,7 +590,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
                 "response": ai_followup
             }, indent=2))
 
-            # ==================== PHASE 8: EXECUTE AI FOLLOWUP COMMANDS ====================
+            # ==================== PHASE 9: EXECUTE AI FOLLOWUP COMMANDS ====================
             current_phase = 'ai_execution_2'
             socketio.emit('phase_change', {
                 'phase': 'ai_execution_2',
@@ -577,7 +600,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
                 'timestamp': datetime.now(timezone.utc).isoformat()
             })
 
-            logging.info(f"[Phase 8/8] Executing AI followup commands for {target}")
+            logging.info(f"[Phase 9/9] Executing AI followup commands for {target}")
             followup_commands = parse_ai_commands(ai_followup, socketio=socketio, target=target)
 
             if followup_commands:
@@ -887,10 +910,11 @@ def start_recon():
     2. AI Analysis #1 (post-recon)
     3. Execute AI commands
     4. Web scans (ZAP/Burp auto-start)
-    5. Metasploit exploitation (MSF auto-start)
-    6. Exploitation chain
-    7. AI Analysis #2 (post-exploitation)
-    8. Execute AI followup commands
+    5. API Security Scanning (VulnAPI)
+    6. Metasploit exploitation (MSF auto-start)
+    7. Exploitation chain
+    8. AI Analysis #2 (post-exploitation)
+    9. Execute AI followup commands
 
     Supports concurrent scanning of multiple targets.
     """
@@ -1640,6 +1664,137 @@ def start_bruteforce():
         'service': service,
         'port': port
     })
+
+
+# ==================== VULNAPI ENDPOINTS ====================
+
+@app.route('/api/v1/vulnapi/scan', methods=['POST'])
+def start_vulnapi_scan():
+    """
+    Start a VulnAPI scan on a target.
+
+    Request body:
+        {
+            "target": "example.com",
+            "mode": "full" | "curl" | "openapi",
+            "url": "https://example.com/api",      // required for curl/openapi mode
+            "spec_url": "https://example.com/swagger.json",  // required for openapi mode
+            "headers": {"Authorization": "Bearer ..."},  // optional
+            "method": "GET"  // optional, default GET
+        }
+
+    Returns:
+        {
+            "status": "started" | "completed",
+            "scan_id": "vulnapi_123456",
+            "target": "example.com",
+            ...results for synchronous modes
+        }
+    """
+    data = request.json or {}
+    target = data.get('target')
+    mode = data.get('mode', 'full')
+    url = data.get('url')
+    spec_url = data.get('spec_url')
+    headers = data.get('headers')
+    method = data.get('method', 'GET')
+
+    if not target:
+        return jsonify({'error': 'Target required'}), 400
+
+    scan_id = f"vulnapi_{int(time.time() * 1000)}"
+
+    if mode == 'full':
+        # Run full scan in background thread
+        def run_scan():
+            result = run_vulnapi_full_scan(target, socketio=socketio, scan_id=scan_id)
+            socketio.emit('vulnapi_output', {
+                'scan_id': scan_id,
+                'target': target,
+                'event': 'scan_complete',
+                'results': result,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+        thread = threading.Thread(target=run_scan, daemon=True)
+        thread.start()
+
+        return jsonify({
+            'status': 'started',
+            'scan_id': scan_id,
+            'target': target,
+            'mode': 'full'
+        })
+
+    elif mode == 'curl':
+        if not url:
+            return jsonify({'error': 'url required for curl mode'}), 400
+
+        raw_output, findings = run_vulnapi_curl_scan(
+            url, headers=headers, method=method,
+            socketio=socketio, scan_id=scan_id, target=target
+        )
+
+        return jsonify({
+            'status': 'completed',
+            'scan_id': scan_id,
+            'target': target,
+            'mode': 'curl',
+            'url': url,
+            'findings': findings,
+            'total_findings': len(findings)
+        })
+
+    elif mode == 'openapi':
+        scan_url = spec_url or url
+        if not scan_url:
+            return jsonify({'error': 'spec_url or url required for openapi mode'}), 400
+
+        raw_output, findings = run_vulnapi_openapi_scan(
+            scan_url, socketio=socketio, scan_id=scan_id, target=target
+        )
+
+        return jsonify({
+            'status': 'completed',
+            'scan_id': scan_id,
+            'target': target,
+            'mode': 'openapi',
+            'spec_url': scan_url,
+            'findings': findings,
+            'total_findings': len(findings)
+        })
+
+    else:
+        return jsonify({'error': f'Invalid mode: {mode}. Use full, curl, or openapi'}), 400
+
+
+@app.route('/api/v1/vulnapi/results/<path:target>', methods=['GET'])
+def get_vulnapi_results(target):
+    """
+    Get VulnAPI scan results for a target.
+
+    Returns structured results from vulnapi_results.json if available.
+    """
+    try:
+        target_dir = Path('results') / target
+        if not target_dir.exists():
+            return jsonify({'error': 'Target not found'}), 404
+
+        results_file = target_dir / 'vulnapi_results.json'
+        if not results_file.exists():
+            return jsonify({
+                'target': target,
+                'findings': [],
+                'total_findings': 0,
+                'message': 'No VulnAPI results available for this target'
+            })
+
+        results = json.loads(results_file.read_text())
+        return jsonify(results)
+
+    except Exception as e:
+        logging.error(f"Failed to get VulnAPI results for {target}: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/v1/results', methods=['GET'])

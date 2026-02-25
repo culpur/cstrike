@@ -7,7 +7,7 @@
 // System & Status Types
 // ============================================================================
 
-export type PhaseType = 'recon' | 'ai' | 'zap' | 'metasploit' | 'exploit' | 'idle';
+export type PhaseType = 'recon' | 'ai' | 'zap' | 'metasploit' | 'exploit' | 'apiscan' | 'idle';
 
 export type ServiceStatus = 'running' | 'stopped' | 'error' | 'starting' | 'stopping';
 
@@ -168,6 +168,36 @@ export interface CompleteScanResults {
   // Raw output for reference
   rawOutput?: string[];
   errors?: string[];
+}
+
+// ============================================================================
+// VulnAPI Types
+// ============================================================================
+
+export interface VulnAPIFinding {
+  id?: string;
+  name: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  cvss: string;
+  owasp: string;
+  url: string;
+}
+
+export interface VulnAPIScanResult {
+  target: string;
+  timestamp: string;
+  endpoints_scanned: number;
+  specs_found: number;
+  spec_urls: string[];
+  total_findings: number;
+  findings: VulnAPIFinding[];
+  severity_counts: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
+  };
 }
 
 // ============================================================================
@@ -339,7 +369,8 @@ export type WSMessageType =
   | 'file_downloaded'
   | 'loot_item'
   | 'log_entry'
-  | 'tool_update';
+  | 'tool_update'
+  | 'vulnapi_output';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

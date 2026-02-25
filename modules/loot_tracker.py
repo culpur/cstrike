@@ -1,4 +1,4 @@
-# /opt/ai_driver/modules/loot_tracker.py
+# cstrike/modules/loot_tracker.py
 
 import json
 import re

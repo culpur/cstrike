@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# CStrike AI Driver - Autonomous penetration testing orchestrator
+# CStrike - Autonomous penetration testing orchestrator
 
 import os
 import json
@@ -15,10 +15,11 @@ from modules.zap_burp import start_zap, start_burp, run_web_scans
 from modules.metasploit import start_msf_rpc, run_msf_exploits
 from modules.ai_assistant import ask_ai, parse_ai_commands
 from modules.loot_tracker import get_loot
+from modules.vulnapi import run_vulnapi_full_scan
 from dashboard import live_dashboard
 
 logging.basicConfig(
-    filename="/opt/ai_driver/logs/driver.log",
+    filename="logs/driver.log",
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s"
 )
@@ -61,7 +62,7 @@ def execute_ai_commands(commands, log_path, trigger_exploitation=False, target=N
     log_path.write_text(json.dumps(command_logs, indent=2))
 
 
-def ai_driver():
+def cstrike_driver():
     for target in TARGETS:
         logging.info(f"[+] Starting recon for target: {target}")
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -102,6 +103,10 @@ def ai_driver():
         # Run web app scans
         run_web_scans(target, target_dir)
 
+        # Run VulnAPI API security scanning
+        logging.info(f"[+] Running VulnAPI scan for {target}")
+        run_vulnapi_full_scan(target)
+
         # Run Metasploit
         msf_client = start_msf_rpc()
         if msf_client:
@@ -114,7 +119,8 @@ def ai_driver():
         loot = {
             "usernames": get_loot(target, "username"),
             "passwords": get_loot(target, "password"),
-            "protocols": get_loot(target, "protocol")
+            "protocols": get_loot(target, "protocol"),
+            "api_vulnerabilities": get_loot(target, "vulnerability")
         }
 
         ai_followup = ask_ai({"recon": recon_results, "loot": loot})
@@ -133,4 +139,4 @@ def ai_driver():
 
 
 if __name__ == "__main__":
-    ai_driver()
+    cstrike_driver()

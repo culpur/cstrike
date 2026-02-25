@@ -1,4 +1,4 @@
-# /opt/ai_driver/modules/recon.py
+# cstrike/modules/recon.py
 
 import os
 import subprocess

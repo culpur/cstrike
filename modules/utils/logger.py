@@ -1,11 +1,11 @@
-# /opt/ai_driver/modules/utils/logger.py
+# cstrike/modules/utils/logger.py
 
 import os
 from datetime import datetime
 
-LOG_DIR = "/opt/ai_driver/logs"
+LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, "ai_driver.log")
+LOG_FILE = os.path.join(LOG_DIR, "cstrike.log")
 
 def log(message, level="INFO"):
     timestamp = datetime.utcnow().isoformat()

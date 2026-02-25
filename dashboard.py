@@ -1,4 +1,4 @@
-# /opt/ai_driver/dashboard.py
+# cstrike/dashboard.py
 
 import curses
 import json
@@ -8,7 +8,7 @@ import psutil
 from pathlib import Path
 from modules.ai_assistant import get_thoughts
 
-LOG_FILE = "/opt/ai_driver/logs/driver.log"
+LOG_FILE = "logs/driver.log"
 MAX_LINES = 200
 ICONS = {
     "target": "[✓]",
@@ -167,7 +167,7 @@ def init_colors_and_run(stdscr):
 def main():
     curses.wrapper(init_colors_and_run)
 
-# ✅ Add this so ai_driver.py can import it
+# ✅ Add this so cstrike.py can import it
 def live_dashboard():
     curses.wrapper(init_colors_and_run)
 

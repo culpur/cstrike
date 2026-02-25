@@ -1,4 +1,4 @@
-# /opt/ai_driver/modules/metasploit.py
+# cstrike/modules/metasploit.py
 
 import os
 import json

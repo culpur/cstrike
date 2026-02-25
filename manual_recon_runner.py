@@ -1,4 +1,4 @@
-# /opt/ai_driver/manual_recon_runner.py
+# cstrike/manual_recon_runner.py
 
 import sys
 import logging
@@ -18,7 +18,7 @@ results_dir = Path("results") / target
 results_dir.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
-    filename="/opt/ai_driver/logs/driver.log",
+    filename="logs/driver.log",
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s"
 )

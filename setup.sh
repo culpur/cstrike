@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Setup script for ai_driver
+# Setup script for cstrike
 # Usage: bash setup.sh
 
-echo "[*] Setting up ai_driver..."
+echo "[*] Setting up cstrike..."
 
 # Create virtual environment
 if [ ! -d "venv" ]; then

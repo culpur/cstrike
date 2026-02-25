@@ -116,6 +116,10 @@ class WebSocketService {
     this.socket.on('log_entry', (data) => {
       this.handleServerMessage('log_entry', data);
     });
+
+    this.socket.on('vulnapi_output', (data) => {
+      this.handleServerMessage('vulnapi_output', data);
+    });
   }
 
   /**

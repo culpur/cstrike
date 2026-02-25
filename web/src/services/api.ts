@@ -13,6 +13,8 @@ import type {
   HeatmapResponse,
   Config,
   CompleteScanResults,
+  VulnAPIFinding,
+  VulnAPIScanResult,
 } from '@/types';
 
 class ApiService {
@@ -329,6 +331,34 @@ class ApiService {
   async updateConfig(config: Config): Promise<void> {
     // Backend: PUT /config
     await this.client.put('/config', config);
+  }
+
+  // ============================================================================
+  // VulnAPI
+  // ============================================================================
+
+  async startVulnAPIScan(params: {
+    target: string;
+    mode?: 'full' | 'curl' | 'openapi';
+    url?: string;
+    spec_url?: string;
+    headers?: Record<string, string>;
+    method?: string;
+  }): Promise<{
+    status: string;
+    scan_id: string;
+    target: string;
+    mode: string;
+    findings?: VulnAPIFinding[];
+    total_findings?: number;
+  }> {
+    const { data } = await this.client.post('/vulnapi/scan', params);
+    return data;
+  }
+
+  async getVulnAPIResults(target: string): Promise<VulnAPIScanResult> {
+    const { data } = await this.client.get(`/vulnapi/results/${encodeURIComponent(target)}`);
+    return data;
   }
 
   // ============================================================================

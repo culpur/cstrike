@@ -1,151 +1,156 @@
-# CStrike (Formally Ai-Driver)
+# CStrike
 
-An elite, modular offensive security automation framework with full TUI integration, OpenAI-enhanced command chaining, real-time recon, exploitation, and pivoting. Built for serious red team operations with support for split-VPN routing, ZAP/Burp Suite integration, Metasploit RPC automation, and interactive dashboards.
-
----
-
-## 🚀 Key Features
-
-- **Layered Reconnaissance** with tools like `nmap`, `dig`, `amass`, `subfinder`, `httpx`, `nikto`, `wafw00f`, etc.
-- **AI-Augmented Command Chaining** using OpenAI (GPT-4o), streaming decisions in real time.
-- **Auto-Triggered Exploit Chains**: nuclei, ffuf, sqlmap, metasploit modules, smtp-user-enum, dnsenum.
-- **Credential Loot Tracking & Reuse** for brute-forcing (`hydra`, etc).
-- **Metasploit RPC Automation** via `pymetasploit3` (auto-credentialed).
-- **Burp/ZAP Integration** with toggles via dashboard or AI.
-- **TUI Dashboard** (curses):
-
-  - Live stream of current recon/exploit status
-  - System metrics (CPU, RAM, VPN IP)
-  - Service statuses
-  - AI thought window
-  - Split-screen log viewer with `ERROR`/`WARN` filters
-  - Hotkeys to start/stop tools or view live logs
-
-- **VPN Split Routing**: Run tools as `redteam` user → traffic isolated via `wg0` or `tun0`
-- **Mission-Ready Modular Design**: Easily add more tools or scan logic
+An autonomous, modular offensive security framework with AI-driven command chaining, real-time recon, exploitation, API security scanning, and interactive dashboards. Built for authorized red team operations with split-VPN routing, ZAP/Burp Suite integration, Metasploit RPC automation, VulnAPI DAST scanning, and a React web UI.
 
 ---
 
-## 📁 Project Structure
+## Key Features
 
-```bash
-ai_driver/
-├── ai_driver.py              # Main orchestrator
-├── dashboard.py              # TUI live dashboard
-├── setup_redteam_env.sh      # Environment + routing bootstrap
-├── requirements.txt
-├── .env                      # JSON config file (not dotenv)
+- **9-Phase Autonomous Workflow**: Recon, AI Analysis, ZAP/Burp, Web Exploitation, API Security (VulnAPI), Metasploit, Post-Exploitation, AI Follow-up, Reporting
+- **Layered Reconnaissance**: nmap, dig, amass, subfinder, httpx, nikto, wafw00f, and more
+- **AI-Augmented Command Chaining**: OpenAI GPT-4o streams decisions in real time
+- **API Security Scanning**: VulnAPI integration for endpoint discovery, OpenAPI spec scanning, and DAST
+- **Auto-Triggered Exploit Chains**: nuclei, ffuf, sqlmap, hydra, metasploit modules
+- **Credential Loot Tracking & Reuse**: Automatic credential harvesting and brute-force reuse
+- **Metasploit RPC Automation**: Auto-credentialed via pymetasploit3
+- **Burp/ZAP Integration**: Toggle via dashboard or AI
+- **Web UI**: React/TypeScript frontend with real-time WebSocket updates
+- **TUI Dashboard**: curses-based live status, AI thoughts, log viewer
+- **VPN Split Routing**: Isolate scan traffic via wg0/tun0 as redteam user
+- **Black Ops Module**: Proxy chaining, agent routing, credential heatmaps
+
+---
+
+## Project Structure
+
+```
+cstrike/
+├── cstrike.py                 # Main CLI orchestrator (9-phase workflow)
+├── api_server.py              # Flask + Socket.IO API backend
+├── dashboard.py               # TUI live dashboard (curses)
+├── manual_recon_runner.py     # Manual single-target recon trigger
+├── run_command.py             # Command allowlist/execution gateway
+├── requirements.txt           # Python dependencies (CLI)
+├── api_requirements.txt       # Python dependencies (API server)
+├── .env                       # JSON config (targets, API keys, tool toggles)
+├── .env.example               # Config template
+├── setup.sh                   # Quick virtualenv setup
+├── setup_redteam_env.sh       # Full redteam user + VPN routing bootstrap
+├── setup_anon_env.sh          # Anonymous environment setup
+├── start_cstrike_web.sh       # Start web UI + API server
+├── START_CSTRIKE.sh           # Quick start script
 ├── modules/
-│   ├── recon.py              # Multi-tool recon logic
-│   ├── exploitation.py       # FFUF, nuclei, brute-force logic
-│   ├── zap_burp.py           # ZAP/Burp scanner integration
-│   ├── metasploit.py         # RPC control logic
-│   ├── loot_tracker.py       # Tracks discovered usernames, creds, etc.
-│   ├── ai_assistant.py       # OpenAI GPT assistant + command parser
-│   └── utils.py              # Support utilities
-├── results/                  # Output per target (loot, json, markdown)
-└── logs/driver.log           # Global log (used by dashboard)
+│   ├── recon.py               # Multi-tool layered reconnaissance
+│   ├── exploitation.py        # FFUF, nuclei, brute-force, VulnAPI chains
+│   ├── vulnapi.py             # VulnAPI DAST integration (API scanning)
+│   ├── zap_burp.py            # ZAP/Burp Suite scanner integration
+│   ├── metasploit.py          # Metasploit RPC automation
+│   ├── ai_assistant.py        # OpenAI GPT assistant + command parser
+│   ├── loot_tracker.py        # Credential/vulnerability loot tracking
+│   ├── credential_validator.py # Credential validation
+│   ├── black_ops.py           # Proxy chaining, agent management, heatmaps
+│   └── utils/
+│       ├── __init__.py        # Shared utilities (run commands, save results)
+│       ├── command.py         # Command execution helpers
+│       └── logger.py          # Logging setup
+├── web/                       # React/TypeScript frontend
+│   ├── src/
+│   │   ├── services/          # API client + WebSocket
+│   │   ├── modules/           # UI modules (targets, scans, loot)
+│   │   └── types/             # TypeScript interfaces
+│   └── package.json
+├── docs/                      # User-facing documentation
+├── results/                   # Output per target (loot, JSON, reports)
+└── logs/                      # Runtime logs
 ```
 
 ---
 
-## 🧠 AI Features
-
-| Feature                      | Description                                                            |
-|-----------------------------|------------------------------------------------------------------------|
-| 🧠 Thought Streaming         | Dashboard shows real-time AI decisions as they are generated          |
-| ⚡ Auto-Triggered Exploits   | AI can auto-run chains like nuclei, hydra, metasploit modules          |
-| 🤖 AI Post-Exploitation Loop | Follows up after initial exploit chain to suggest lateral moves       |
-| 🧼 Safe Command Parser       | Extracts only shell-safe commands from OpenAI replies                  |
-| 💾 Logs & Outputs Persisted | Stored in `results/<target>/ai_suggestions*.json` + logs               |
-
----
-
-## 📡 Dashboard (TUI)
-
-| Hotkey | Function                                 |
-|--------|------------------------------------------|
-| `3`    | Toggle Live Logs                         |
-| `4`    | Start Metasploit RPC, ZAP, Burp          |
-| `5`    | Stop all services                        |
-| `f`    | Filter logs for `[ERROR]` / `[WARN]`     |
-| `q`    | Quit the dashboard                       |
-
-Includes:
-
-- VPN IP detection via `tun0` / `wg0`
-- CPU/RAM % usage
-- Current target
-- Phase progress (recon → AI → zap → metasploit → exploit)
-- AI "thought" log viewer
-- Log filter, scroll, highlight
-
----
-
-## 🧪 Setup
+## Quick Start
 
 ### 1. Clone and configure
 
 ```bash
-mkdir /opt/ai_driver
-cd /opt
 git clone https://github.com/culpur/cstrike.git
-cd ai_driver
+cd cstrike
 cp .env.example .env
+# Edit .env with your targets and API keys
 ```
 
-### 2. Create virtualenv
+### 2. Install dependencies
 
 ```bash
-python3 -m venv venv
+bash setup.sh
 source venv/bin/activate
-pip install -r requirements.txt
+```
+
+### 3. Run CStrike
+
+```bash
+# CLI mode (9-phase autonomous workflow)
+python3 cstrike.py
+
+# Web UI mode (API server + React frontend)
+bash start_cstrike_web.sh
 ```
 
 ---
 
-## ⚙️ Split VPN Setup: redteam User
+## 9-Phase Workflow
 
-To isolate all scanning traffic through a VPN tunnel:
+| Phase | Description |
+|-------|-------------|
+| 1. Recon | Layered reconnaissance (nmap, amass, subfinder, httpx, nikto, etc.) |
+| 2. AI Analysis | GPT-4o analyzes recon data, suggests next steps |
+| 3. ZAP/Burp | Automated web vulnerability scanning |
+| 4. Web Exploitation | nuclei, ffuf, sqlmap, brute-force chains |
+| 5. API Security | VulnAPI endpoint discovery + DAST scanning |
+| 6. Metasploit | RPC-driven exploit modules |
+| 7. Post-Exploitation | Credential reuse, lateral movement |
+| 8. AI Follow-up | GPT-4o reviews findings, suggests pivots |
+| 9. Reporting | Compile results, loot summary, JSON export |
 
-### Step 1: Bootstrap with `setup_redteam_env.sh`
+---
+
+## TUI Dashboard
+
+| Hotkey | Function |
+|--------|----------|
+| `3` | Toggle live log viewer |
+| `4` | Start Metasploit RPC, ZAP, Burp |
+| `5` | Stop all services |
+| `f` | Filter logs for ERROR/WARN |
+| `q` | Quit |
+
+---
+
+## VPN Split Routing
+
+Isolate all scan traffic through a VPN tunnel:
 
 ```bash
 sudo bash setup_redteam_env.sh
-```
-
-Creates:
-
-- `redteam` user w/ `/bin/zsh`
-- Project files in `/opt/ai_driver`
-- ZSH aliases (`ai_driver`, `setup_anon`)
-- `iptables` + `ip rule` VPN routing (via `wg0`)
-- Default route in table `wgvpn`
-
-### Step 2: Test isolation
-
-```bash
 su - redteam
-curl --interface wg0 https://ifconfig.me
-ai_driver
+cstrike    # alias for python3 /opt/cstrike/cstrike.py
 ```
 
-All commands as `redteam` will now use the VPN route.
+Creates a `redteam` user with iptables + ip rule routing through wg0.
 
 ---
 
-## 🧵 .env Example
+## .env Configuration
 
 ```json
 {
-  "target_scope": ["culpur.net"],
+  "target_scope": ["example.com"],
   "openai_api_key": "sk-xxxxxxxxxxxx",
   "allow_exploitation": true,
-  "scan_modes": ["http", "dns", "port", "vulnscan"],
+  "scan_modes": ["http", "dns", "port", "vulnscan", "apiscan"],
   "allowed_tools": [
     "nmap", "ffuf", "httpx", "sqlmap",
     "dig", "subfinder", "amass",
-    "nikto", "wafw00f", "smtp-user-enum", "dnsenum"
+    "nikto", "wafw00f", "smtp-user-enum", "dnsenum",
+    "nuclei", "vulnapi"
   ],
   "max_threads": 10,
   "max_runtime": 300,
@@ -160,46 +165,19 @@ All commands as `redteam` will now use the VPN route.
 
 ---
 
-## 🎯 Example Usage
-
-```bash
-# Launch full pipeline with live dashboard
-python3 ai_driver.py
-```
-
-- Will open curses dashboard
-- Shows status of recon/exploitation per target
-- Auto-invokes AI twice: post-recon + post-exploitation
-- Auto-triggers all exploit logic if `allow_exploitation = true`
-
----
-
-## 🔮 Coming Soon
-
-These features are already scaffolded or partially integrated:
-
-- ✅ Proxy chaining logic for agent routing
-- ✅ Pivot interface in TUI
-- ✅ Credential heatmaps in dashboard
-- 🔄 Remote agent registration
-- 🔍 AI-driven lateral movement planner
-- 📂 Export full report: Markdown + JSON
-
----
-
-## 🔐 Legal
+## Legal
 
 This tool is intended only for **authorized red team use**. Use against unauthorized targets is illegal and unethical.
 
 ---
 
-## 📜 License
+## License
 
-MIT License © 2025 Culpur Defense Inc.
+MIT License (c) 2025 Culpur Defense Inc.
 
 ---
 
-## 🙌 Credits & Contact
+## Credits
 
 Crafted by [Culpur Defense Inc.](https://culpur.net)
 
