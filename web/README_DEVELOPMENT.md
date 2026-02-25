@@ -8,7 +8,7 @@ From the project root directory:
 
 ```bash
 # Start both backend and frontend
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh
+/Users/$user/projects/cstrike/START_DEV_SERVERS.sh
 
 # The script will:
 # 1. Start backend API on port 8000
@@ -21,13 +21,13 @@ From the project root directory:
 
 Terminal 1 - Backend:
 ```bash
-cd /Users/soulofall/projects/cstrike
+cd /Users/$user/projects/cstrike
 python3 api_server.py
 ```
 
 Terminal 2 - Frontend:
 ```bash
-cd /Users/soulofall/projects/cstrike/web
+cd /Users/$user/projects/cstrike/web
 npm run dev
 ```
 
@@ -57,7 +57,7 @@ fetch('http://localhost:8000/api/v1/targets')
 
 ## Proxy Configuration Details
 
-File: `/Users/soulofall/projects/cstrike/web/vite.config.ts`
+File: `/Users/$USER/projects/cstrike/web/vite.config.ts`
 
 ```typescript
 export default defineConfig({
@@ -320,19 +320,19 @@ The production build is optimized and minified, output to `dist/` directory.
 
 ```bash
 # Start development
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh
+/Users/$USER/projects/cstrike/START_DEV_SERVERS.sh
 
 # Stop servers
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh stop
+/Users/$USER/projects/cstrike/START_DEV_SERVERS.sh stop
 
 # Check status
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh status
+/Users/$USER/projects/cstrike/START_DEV_SERVERS.sh status
 
 # Manual frontend start
-cd /Users/soulofall/projects/cstrike/web && npm run dev
+cd /Users/$USER/projects/cstrike/web && npm run dev
 
 # Manual backend start
-cd /Users/soulofall/projects/cstrike && python3 api_server.py
+cd /Users/$USER/projects/cstrike && python3 api_server.py
 
 # Test API directly
 curl http://localhost:8000/api/v1/targets
@@ -343,4 +343,4 @@ curl http://localhost:3000/api/v1/targets
 
 ---
 
-**Need help?** Check `/Users/soulofall/projects/cstrike/FRONTEND_BACKEND_TROUBLESHOOTING.md` for detailed troubleshooting.
+**Need help?** Check `/Users/$USER/projects/cstrike/FRONTEND_BACKEND_TROUBLESHOOTING.md` for detailed troubleshooting.
