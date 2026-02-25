@@ -1,19 +1,39 @@
 # cstrike/modules/ai_assistant.py
 
-import os
 import json
 import re
 from pathlib import Path
-from openai import OpenAI
 
 # Live thoughts queue (used by TUI for streaming sidebar)
 AI_THOUGHTS = []
 
 # Load config
-CONFIG = json.loads(Path(".env").read_text())
-OPENAI_API_KEY = CONFIG.get("openai_api_key")
+try:
+    CONFIG = json.loads(Path(".env").read_text())
+except (FileNotFoundError, json.JSONDecodeError) as e:
+    print(f"[AI] Warning: Could not load .env config: {e}")
+    CONFIG = {}
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Initialize AI provider (Ollama or OpenAI based on config)
+_provider = None
+
+
+def _get_provider():
+    """Lazy-init the configured AI provider."""
+    global _provider
+    if _provider is None:
+        try:
+            from modules.ai_provider import create_provider
+            _provider = create_provider(CONFIG)
+        except Exception as e:
+            print(f"[AI] Failed to create provider: {e}, falling back to OpenAI direct")
+            from modules.ai_provider import OpenAIProvider
+            _provider = OpenAIProvider(
+                api_key=CONFIG.get("openai_api_key", ""),
+                model=CONFIG.get("openai_model", "gpt-5.2"),
+            )
+    return _provider
+
 
 def stream_thought(thought):
     """Send a new thought to the global stream queue."""
@@ -22,9 +42,24 @@ def stream_thought(thought):
     AI_THOUGHTS.append(f"🧠 {thought}")
 
 
+SYSTEM_PROMPT = (
+    "You are a highly skilled penetration testing AI assistant. "
+    "Based on the following recon and loot data, suggest additional commands "
+    "to enumerate, exploit, or pivot further. Return only shell commands if possible. "
+    "Available tools include vulnapi for API security scanning: "
+    "'vulnapi scan curl <URL>' to scan an API endpoint without a spec, "
+    "'vulnapi scan openapi <SPEC_URL>' to scan using an OpenAPI/Swagger spec, "
+    "'vulnapi discover api <URL>' to discover API endpoints. "
+    "When you detect API frameworks, REST endpoints, or JSON responses in the recon data, "
+    "suggest vulnapi commands to test for OWASP API Top 10 vulnerabilities."
+)
+
+
 def ask_ai(recon_data, socketio=None, target=None):
     """
-    Ask AI for next steps based on recon data
+    Ask AI for next steps based on recon data.
+
+    Uses the configured AI provider (Ollama or OpenAI).
 
     Args:
         recon_data: Dictionary of reconnaissance results
@@ -35,73 +70,43 @@ def ask_ai(recon_data, socketio=None, target=None):
         AI suggestion string or None on error
     """
     print("[AI ➤ Asking for next step...]")
-    stream_thought("Analyzing recon data for actionable next steps...")
+    provider = _get_provider()
+    model_name = provider.get_model_name()
+    stream_thought(f"Analyzing recon data via {model_name}...")
 
-    # Emit prompt preparation event
     if socketio:
         socketio.emit('ai_thought', {
             'target': target,
             'thoughtType': 'observation',
-            'content': 'Preparing AI analysis prompt with reconnaissance data...',
+            'content': f'Preparing AI analysis prompt ({model_name})...',
             'timestamp': None
         })
 
     try:
-        system_prompt = (
-            "You are a highly skilled penetration testing AI assistant. "
-            "Based on the following recon and loot data, suggest additional commands "
-            "to enumerate, exploit, or pivot further. Return only shell commands if possible. "
-            "Available tools include vulnapi for API security scanning: "
-            "'vulnapi scan curl <URL>' to scan an API endpoint without a spec, "
-            "'vulnapi scan openapi <SPEC_URL>' to scan using an OpenAPI/Swagger spec, "
-            "'vulnapi discover api <URL>' to discover API endpoints. "
-            "When you detect API frameworks, REST endpoints, or JSON responses in the recon data, "
-            "suggest vulnapi commands to test for OWASP API Top 10 vulnerabilities."
-        )
-
-        # Truncate data to 7000 chars
         recon_json = json.dumps(recon_data, indent=2)
         data_preview = recon_json[:7000]
 
         messages = [
-            {
-                "role": "system",
-                "content": system_prompt
-            },
-            {
-                "role": "user",
-                "content": f"Recon and loot data:\n{data_preview}"
-            },
+            {"role": "user", "content": f"Recon and loot data:\n{data_preview}"}
         ]
 
-        # Emit prompt being sent
         if socketio:
             socketio.emit('ai_thought', {
                 'target': target,
                 'thoughtType': 'ai_prompt',
-                'content': f'Sending prompt to OpenAI (gpt-4o)...',
+                'content': f'Sending prompt to {model_name}...',
                 'metadata': {
-                    'system_prompt': system_prompt,
+                    'system_prompt': SYSTEM_PROMPT,
                     'data_preview': data_preview[:500] + '...' if len(data_preview) > 500 else data_preview,
-                    'model': 'gpt-4o',
-                    'max_tokens': 800,
-                    'temperature': 0.3
+                    'model': model_name,
                 },
                 'timestamp': None
             })
 
-        # Call OpenAI API
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            max_tokens=800,
-            temperature=0.3
-        )
-
-        suggestion = response.choices[0].message.content.strip()
+        response = provider.chat(messages, system_prompt=SYSTEM_PROMPT)
+        suggestion = response["content"].strip()
         stream_thought("Commands prepared based on recon.")
 
-        # Emit AI response received
         if socketio:
             socketio.emit('ai_thought', {
                 'target': target,
@@ -109,11 +114,7 @@ def ask_ai(recon_data, socketio=None, target=None):
                 'content': f'Received AI response ({len(suggestion)} chars)',
                 'metadata': {
                     'response': suggestion,
-                    'usage': {
-                        'prompt_tokens': response.usage.prompt_tokens if hasattr(response, 'usage') else None,
-                        'completion_tokens': response.usage.completion_tokens if hasattr(response, 'usage') else None,
-                        'total_tokens': response.usage.total_tokens if hasattr(response, 'usage') else None
-                    }
+                    'usage': response.get("usage"),
                 },
                 'timestamp': None
             })
@@ -129,10 +130,75 @@ def ask_ai(recon_data, socketio=None, target=None):
             socketio.emit('ai_thought', {
                 'target': target,
                 'thoughtType': 'observation',
-                'content': f'❌ AI API error: {str(e)}',
+                'content': f'❌ AI error: {str(e)}',
                 'timestamp': None
             })
 
+        return None
+
+
+def ask_ai_with_tools(recon_data, tool_executor, socketio=None, target=None, max_iterations=10):
+    """
+    Ask AI with MCP tool calling — agentic loop.
+
+    The AI analyzes recon data and can call MCP tools directly to gather
+    more info, run scans, or execute exploitation steps.
+
+    Args:
+        recon_data: Dictionary of reconnaissance results
+        tool_executor: Callable(tool_name, arguments) -> str
+        socketio: Optional SocketIO instance
+        target: Optional target name
+        max_iterations: Max tool-calling rounds
+
+    Returns:
+        Final AI analysis string or None on error
+    """
+    provider = _get_provider()
+    model_name = provider.get_model_name()
+    stream_thought(f"Starting agentic analysis via {model_name} with MCP tools...")
+
+    try:
+        from mcp_server.server import get_mcp_tool_definitions
+        tool_defs = get_mcp_tool_definitions()
+    except ImportError:
+        stream_thought("MCP server not available, falling back to text mode.")
+        return ask_ai(recon_data, socketio, target)
+
+    recon_json = json.dumps(recon_data, indent=2)
+    data_preview = recon_json[:7000]
+
+    agentic_prompt = (
+        "You are an autonomous penetration testing AI. You have access to MCP tools "
+        "for reconnaissance, exploitation, API scanning, credential management, and more. "
+        "Analyze the provided recon data and use the tools to gather additional information, "
+        "run scans, and execute your attack plan. When done, provide a summary of findings."
+    )
+
+    messages = [
+        {"role": "user", "content": f"Analyze and attack this target. Recon data:\n{data_preview}"}
+    ]
+
+    if socketio:
+        socketio.emit('ai_thought', {
+            'target': target,
+            'thoughtType': 'ai_prompt',
+            'content': f'Starting agentic loop with {len(tool_defs)} MCP tools via {model_name}',
+            'timestamp': None
+        })
+
+    try:
+        result = provider.chat_with_tools_loop(
+            messages, tool_defs, tool_executor,
+            system_prompt=agentic_prompt,
+            max_iterations=max_iterations
+        )
+        stream_thought(f"Agentic analysis complete via {model_name}.")
+        return result
+    except Exception as e:
+        error_msg = f"Agentic AI loop failed: {e}"
+        print(f"[AI ➤ ERROR] {error_msg}")
+        stream_thought(f"❌ {error_msg}")
         return None
 
 
@@ -151,7 +217,6 @@ def parse_ai_commands(ai_response, socketio=None, target=None):
     if not ai_response:
         return []
 
-    # Emit parsing start
     if socketio:
         socketio.emit('ai_thought', {
             'target': target,
@@ -161,19 +226,16 @@ def parse_ai_commands(ai_response, socketio=None, target=None):
         })
 
     commands_text = ""
-    # Extract code block if present
     match = re.search(r"```(?:bash)?\n(.*?)```", ai_response, re.DOTALL)
     if match:
         commands_text = match.group(1).strip()
     else:
-        # Try to extract lines that look like commands
         commands_text = "\n".join(
             line.strip()
             for line in ai_response.splitlines()
             if line.strip() and not line.strip().startswith("#")
         )
 
-    # Parse into individual commands
     commands = []
     for line in commands_text.splitlines():
         line = line.strip()
@@ -183,7 +245,6 @@ def parse_ai_commands(ai_response, socketio=None, target=None):
 
     stream_thought(f"Parsed {len(commands)} commands for execution.")
 
-    # Emit parsed commands
     if socketio:
         command_strings = [' '.join(cmd) for cmd in commands]
         socketio.emit('ai_thought', {

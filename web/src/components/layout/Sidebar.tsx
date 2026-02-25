@@ -11,6 +11,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Swords,
+  Trophy,
 } from 'lucide-react';
 import { useUIStore } from '@stores/uiStore';
 import { cn } from '@utils/index';
@@ -35,10 +37,22 @@ const navigationItems = [
     path: '/ai-stream',
   },
   {
+    id: 'exploitation',
+    label: 'Exploitation',
+    icon: Swords,
+    path: '/exploitation',
+  },
+  {
     id: 'results',
     label: 'Results',
     icon: FolderOpen,
     path: '/results',
+  },
+  {
+    id: 'loot',
+    label: 'Loot',
+    icon: Trophy,
+    path: '/loot',
   },
   {
     id: 'logs',

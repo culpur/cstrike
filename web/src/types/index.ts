@@ -358,7 +358,9 @@ export type WSMessageType =
   | 'status_update'
   | 'phase_change'
   | 'recon_output'
+  | 'scan_complete'
   | 'ai_thought'
+  | 'ai_command_execution'
   | 'exploit_result'
   | 'exploit_started'
   | 'exploit_completed'
@@ -370,7 +372,8 @@ export type WSMessageType =
   | 'loot_item'
   | 'log_entry'
   | 'tool_update'
-  | 'vulnapi_output';
+  | 'vulnapi_output'
+  | 'service_auto_start';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

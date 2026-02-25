@@ -6,8 +6,9 @@ import os
 import json
 from datetime import datetime
 
-# Load .env config
-with open("/root/qs/.env", "r") as f:
+# Load .env config (deprecated — use mcp_server/guardrails.py instead)
+_env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+with open(_env_path, "r") as f:
     config = json.load(f)
 
 ALLOW_EXPLOITATION = config.get("allow_exploitation", False)
@@ -17,7 +18,7 @@ MAX_RUNTIME = config.get("max_runtime", 300)
 MAX_THREADS = config.get("max_threads", 10)
 ALLOWED_TOOLS = config.get("allowed_tools", [])
 
-LOGFILE = "/root/qs/log/ai-actions.log"
+LOGFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "log", "ai-actions.log")
 os.makedirs(os.path.dirname(LOGFILE), exist_ok=True)
 
 def log_command(cmd):

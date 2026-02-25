@@ -236,12 +236,14 @@ class ApiService {
     const encodedTarget = encodeURIComponent(target);
     const { data } = await this.client.get(`/loot/${encodedTarget}`);
 
-    // Convert backend format to LootItem array
+    // Convert backend format to LootItem array (using 'category' to match LootItem interface)
     const items: LootItem[] = [];
-    if (data.usernames) items.push(...data.usernames.map((u: string) => ({ type: 'username', value: u, timestamp: Date.now() })));
-    if (data.passwords) items.push(...data.passwords.map((p: string) => ({ type: 'password', value: p, timestamp: Date.now() })));
-    if (data.urls) items.push(...data.urls.map((url: string) => ({ type: 'url', value: url, timestamp: Date.now() })));
-    if (data.ports) items.push(...data.ports.map((port: number) => ({ type: 'port', value: port.toString(), timestamp: Date.now() })));
+    const now = Date.now();
+    const t = target === 'all' ? 'unknown' : target;
+    if (data.usernames) items.push(...data.usernames.map((u: string, i: number) => ({ id: `usr-${i}-${now}`, category: 'username' as const, value: u, source: 'api', target: t, timestamp: now })));
+    if (data.passwords) items.push(...data.passwords.map((p: string, i: number) => ({ id: `pwd-${i}-${now}`, category: 'password' as const, value: p, source: 'api', target: t, timestamp: now })));
+    if (data.urls) items.push(...data.urls.map((url: string, i: number) => ({ id: `url-${i}-${now}`, category: 'url' as const, value: url, source: 'api', target: t, timestamp: now })));
+    if (data.ports) items.push(...data.ports.map((port: number, i: number) => ({ id: `port-${i}-${now}`, category: 'port' as const, value: port.toString(), source: 'api', target: t, timestamp: now })));
 
     return items;
   }
@@ -366,9 +368,15 @@ class ApiService {
   // ============================================================================
 
   async getResults(): Promise<Target[]> {
-    // Backend: GET /results
+    // Backend: GET /results returns {targets: [{target, status, started_at, completed_at, loot_count}]}
+    // Map to frontend Target interface
     const { data } = await this.client.get('/results');
-    return data.targets || [];
+    return (data.targets || []).map((t: Record<string, unknown>, i: number) => ({
+      id: String(t.target || i),
+      url: String(t.target || ''),
+      addedAt: t.started_at ? new Date(t.started_at as string).getTime() : Date.now(),
+      status: t.status === 'completed' ? 'complete' : (t.status as string || 'pending'),
+    }));
   }
 
   async getTargetResults(target: string): Promise<CompleteScanResults> {

@@ -49,8 +49,15 @@ def run_web_scans(target, output_base="targets"):
     target_dir = Path(output_base) / target
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    # Placeholders — Replace with proper ZAP/Burp API or CLI scan calls
-    zap_scan_cmd = f"curl http://localhost:8080/JSON/ascan/action/scan/?url=http://{target}"
+    # Use configured ZAP port (default 8090 matches .env convention)
+    try:
+        env_path = Path(__file__).parent.parent / ".env"
+        cfg = json.loads(env_path.read_text()) if env_path.exists() else {}
+    except Exception:
+        cfg = {}
+    zap_port = cfg.get("zap_port", 8090)
+    zap_host = cfg.get("zap_host", "127.0.0.1")
+    zap_scan_cmd = f"curl http://{zap_host}:{zap_port}/JSON/ascan/action/scan/?url=http://{target}"
     burp_scan_cmd = f"echo Trigger Burp Suite scan for {target}"
 
     try:

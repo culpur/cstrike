@@ -28,10 +28,23 @@ from modules.loot_tracker import (
     update_credential_validation
 )
 from modules.credential_validator import validate_credential, validate_credentials_batch
-from modules.ai_assistant import ask_ai, get_thoughts, parse_ai_commands
+from modules.ai_assistant import ask_ai, ask_ai_with_tools, get_thoughts, parse_ai_commands
 from modules.zap_burp import start_zap, start_burp, run_web_scans
 from modules.metasploit import start_msf_rpc, run_msf_exploits
 from modules.vulnapi import run_vulnapi_full_scan, run_vulnapi_curl_scan, run_vulnapi_openapi_scan
+
+# MCP and AI provider support (optional)
+try:
+    from mcp_server.server import get_mcp_tool_definitions, execute_mcp_tool_sync
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+
+try:
+    from modules.ai_provider import create_provider
+    AI_PROVIDER_AVAILABLE = True
+except ImportError:
+    AI_PROVIDER_AVAILABLE = False
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000'])
@@ -103,6 +116,18 @@ services_status = {
     'burp': 'stopped'
 }
 current_phase = 'idle'
+
+# Base directory for scan results (used for path traversal prevention)
+RESULTS_BASE = Path('results').resolve()
+
+
+def safe_target_path(target):
+    """Resolve a target path under results/ and verify it doesn't escape.
+    Returns the resolved Path or None if traversal is detected."""
+    resolved = (Path('results') / target).resolve()
+    if not str(resolved).startswith(str(RESULTS_BASE)):
+        return None
+    return resolved
 
 
 def get_vpn_ip():
@@ -199,8 +224,10 @@ def update_system_metrics():
 def is_process_running(name):
     """Check if a process is running by name"""
     try:
-        output = os.popen(f"pgrep -f '{name}'").read()
-        return bool(output.strip())
+        result = subprocess.run(
+            ['pgrep', '-f', name],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return result.returncode == 0
     except Exception:
         return False
 
@@ -393,6 +420,8 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
     global current_phase
     target_dir = get_target_dir(target)
 
+    use_mcp = CONFIG.get('mcp_enabled', False) and MCP_AVAILABLE
+
     try:
         # ==================== PHASE 1: RECONNAISSANCE ====================
         current_phase = 'recon'
@@ -404,7 +433,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
 
-        logging.info(f"[Phase 1/9] Starting reconnaissance for {target}")
+        logging.info(f"[Phase 1] Starting reconnaissance for {target}")
         socketio.emit('recon_output', {
             'scan_id': scan_id,
             'target': target,
@@ -415,7 +444,7 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
 
         recon_results = run_recon_layered(target, socketio=socketio, scan_id=scan_id)
 
-        logging.info(f"[Phase 1/9] Reconnaissance completed for {target}")
+        logging.info(f"[Phase 1] Reconnaissance completed for {target}")
         socketio.emit('recon_output', {
             'scan_id': scan_id,
             'target': target,
@@ -423,6 +452,57 @@ def run_full_ai_workflow(target, scan_id, tools, socketio):
             'results': recon_results,
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
+
+        # ==================== MCP AGENTIC MODE ====================
+        if use_mcp:
+            current_phase = 'agentic'
+            socketio.emit('phase_change', {
+                'phase': 'agentic',
+                'target': target,
+                'scan_id': scan_id,
+                'message': 'AI agentic mode — AI drives remaining phases via MCP tools',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+            logging.info(f"[MCP] Entering agentic mode for {target}")
+
+            agentic_result = ask_ai_with_tools(
+                recon_results,
+                tool_executor=execute_mcp_tool_sync,
+                socketio=socketio,
+                target=target,
+                max_iterations=CONFIG.get('ai_max_iterations', 15),
+            )
+
+            if agentic_result:
+                result_file = Path(target_dir) / "ai_agentic_result.json"
+                result_file.write_text(json.dumps({
+                    "mode": "agentic",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "result": agentic_result,
+                }, indent=2))
+
+            # Skip classic phases 2-9, jump to completion
+            logging.info(f"[MCP] Agentic mode complete for {target}")
+
+            # Emit completion
+            socketio.emit('scan_complete', {
+                'scan_id': scan_id,
+                'target': target,
+                'status': 'completed',
+                'mode': 'agentic',
+                'message': f'Agentic AI workflow completed for {target}',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+
+            with active_scans_lock:
+                active_scans[scan_id].update({
+                    'status': 'completed',
+                    'mode': 'agentic',
+                    'completed_at': datetime.now(timezone.utc).isoformat()
+                })
+
+            return  # Done — skip classic pipeline below
 
         # ==================== PHASE 2: AI ANALYSIS #1 (POST-RECON) ====================
         current_phase = 'ai_analysis_1'
@@ -745,7 +825,8 @@ def restart_service(service_name):
 
         # Start based on service
         if service_name == 'metasploitRpc':
-            subprocess.Popen(['msfrpcd', '-P', 'password', '-S'])
+            msf_pass = CONFIG.get('msf_password', 'password')
+            subprocess.Popen(['msfrpcd', '-P', msf_pass, '-S'])
         elif service_name == 'zap':
             subprocess.Popen(['zap.sh', '-daemon'])
         elif service_name == 'burp':
@@ -1159,7 +1240,8 @@ def cancel_scan(scan_id):
 @app.route('/api/v1/loot/<path:target>', methods=['GET'])
 def get_target_loot(target):
     """Get loot for a target (URL-encoded or path format)"""
-    # Flask automatically decodes URL-encoded parameters
+    if safe_target_path(target) is None:
+        return jsonify({'error': 'Invalid target path'}), 400
     category = request.args.get('category')
 
     if category:
@@ -1776,7 +1858,9 @@ def get_vulnapi_results(target):
     Returns structured results from vulnapi_results.json if available.
     """
     try:
-        target_dir = Path('results') / target
+        target_dir = safe_target_path(target)
+        if target_dir is None:
+            return jsonify({'error': 'Invalid target path'}), 400
         if not target_dir.exists():
             return jsonify({'error': 'Target not found'}), 404
 
@@ -1796,6 +1880,120 @@ def get_vulnapi_results(target):
         logging.error(f"Failed to get VulnAPI results for {target}: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+# ==================== AI PROVIDER ENDPOINTS ====================
+
+@app.route('/api/v1/ai/provider', methods=['GET'])
+def get_ai_provider():
+    """Get current AI provider name and status"""
+    if not AI_PROVIDER_AVAILABLE:
+        return jsonify({
+            'provider': 'openai',
+            'model': CONFIG.get('openai_model', 'gpt-4o'),
+            'available': False,
+            'message': 'ai_provider module not installed'
+        })
+
+    try:
+        provider = create_provider(CONFIG)
+        return jsonify({
+            'provider': CONFIG.get('ai_provider', 'openai'),
+            'model': provider.get_model_name(),
+            'available': provider.is_available(),
+            'mcp_enabled': CONFIG.get('mcp_enabled', False) and MCP_AVAILABLE,
+            'mcp_tools_count': len(get_mcp_tool_definitions()) if MCP_AVAILABLE else 0,
+        })
+    except Exception as e:
+        return jsonify({
+            'provider': CONFIG.get('ai_provider', 'openai'),
+            'available': False,
+            'error': str(e)
+        })
+
+
+@app.route('/api/v1/ai/provider', methods=['PUT'])
+def switch_ai_provider():
+    """Switch AI provider at runtime (ollama or openai)"""
+    data = request.json or {}
+    new_provider = data.get('provider')
+
+    if new_provider not in ('openai', 'ollama'):
+        return jsonify({'error': 'provider must be "openai" or "ollama"'}), 400
+
+    # Update config in memory and on disk
+    CONFIG['ai_provider'] = new_provider
+
+    # Allow optional model override
+    if 'model' in data:
+        if new_provider == 'ollama':
+            CONFIG['ollama_model'] = data['model']
+        else:
+            CONFIG['openai_model'] = data['model']
+
+    CONFIG_PATH.write_text(json.dumps(CONFIG, indent=2))
+
+    # Reset the cached provider so next call picks up the change
+    try:
+        import modules.ai_assistant as ai_mod
+        ai_mod._provider = None
+    except Exception:
+        pass
+
+    logging.info(f"AI provider switched to {new_provider}")
+
+    return jsonify({
+        'success': True,
+        'provider': new_provider,
+        'message': f'Switched to {new_provider}'
+    })
+
+
+# ==================== MCP TOOL ENDPOINTS ====================
+
+@app.route('/api/v1/mcp/tools', methods=['GET'])
+def list_mcp_tools():
+    """List all available MCP tools"""
+    if not MCP_AVAILABLE:
+        return jsonify({
+            'tools': [],
+            'count': 0,
+            'message': 'MCP server not available'
+        })
+
+    tools = get_mcp_tool_definitions()
+    return jsonify({
+        'tools': tools,
+        'count': len(tools)
+    })
+
+
+@app.route('/api/v1/mcp/tools/<tool_name>', methods=['POST'])
+def invoke_mcp_tool(tool_name):
+    """Invoke a specific MCP tool by name from the web UI"""
+    if not MCP_AVAILABLE:
+        return jsonify({'error': 'MCP server not available'}), 503
+
+    arguments = request.json or {}
+
+    try:
+        result = execute_mcp_tool_sync(tool_name, arguments)
+        # Try to parse as JSON for structured response
+        try:
+            parsed = json.loads(result) if isinstance(result, str) else result
+        except (json.JSONDecodeError, TypeError):
+            parsed = {"raw_output": str(result)}
+
+        return jsonify({
+            'tool': tool_name,
+            'result': parsed,
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+    except Exception as e:
+        logging.error(f"MCP tool {tool_name} invocation failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== RESULTS ENDPOINTS ====================
 
 @app.route('/api/v1/results', methods=['GET'])
 def get_all_results():
@@ -1885,7 +2083,9 @@ def get_target_results(target):
     Returns: CompleteScanResults with all discovered data
     """
     try:
-        target_dir = Path('results') / target
+        target_dir = safe_target_path(target)
+        if target_dir is None:
+            return jsonify({'error': 'Invalid target path'}), 400
         if not target_dir.exists():
             return jsonify({'error': 'Target not found'}), 404
 
@@ -2006,7 +2206,9 @@ def download_target_results(target):
     """
     try:
         format_type = request.args.get('format', 'json')
-        target_dir = Path('results') / target
+        target_dir = safe_target_path(target)
+        if target_dir is None:
+            return jsonify({'error': 'Invalid target path'}), 400
 
         if not target_dir.exists():
             return jsonify({'error': 'Target not found'}), 404

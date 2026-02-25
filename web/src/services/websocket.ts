@@ -120,6 +120,34 @@ class WebSocketService {
     this.socket.on('vulnapi_output', (data) => {
       this.handleServerMessage('vulnapi_output', data);
     });
+
+    // Recon and scan lifecycle events
+    this.socket.on('recon_output', (data) => {
+      this.handleServerMessage('recon_output', data);
+    });
+
+    this.socket.on('tool_update', (data) => {
+      this.handleServerMessage('tool_update', data);
+    });
+
+    this.socket.on('scan_complete', (data) => {
+      this.handleServerMessage('scan_complete', data);
+    });
+
+    // System metrics (dashboard)
+    this.socket.on('system_metrics', (data) => {
+      this.handleServerMessage('system_metrics', data);
+    });
+
+    // AI command execution events
+    this.socket.on('ai_command_execution', (data) => {
+      this.handleServerMessage('ai_command_execution', data);
+    });
+
+    // Service auto-start notifications
+    this.socket.on('service_auto_start', (data) => {
+      this.handleServerMessage('service_auto_start', data);
+    });
   }
 
   /**
@@ -202,17 +230,8 @@ class WebSocketService {
 
 
   private notifyConnectionStatus(connected: boolean): void {
-    // Emit connection status event
-    const handlers = this.handlers.get('system_metrics'); // Reuse for connection status
-    if (handlers) {
-      handlers.forEach((handler) => {
-        try {
-          handler({ connected });
-        } catch (error) {
-          console.error('[WebSocket] Connection status handler error:', error);
-        }
-      });
-    }
+    // Use dedicated connection_status type instead of hijacking system_metrics
+    this.handleServerMessage('status_update', { connected });
   }
 }
 

@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.log
 logs/
+log/
 results/*
 targets/*/report.md
 targets/*/results.json
@@ -15,3 +16,7 @@ web/dist/
 dist/
 .env
 !.env.example
+data/
+*.pid
+*.pot
+/tmp/
