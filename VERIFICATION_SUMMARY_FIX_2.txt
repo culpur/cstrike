@@ -78,12 +78,12 @@ Result: Found at lines 57, 133, 179, 218, 233 (all expected locations)
 6. FILES CREATED/MODIFIED
 -------------------------
 Modified:
-  - /Users/soulofall/projects/cstrike/api_server.py
+  - api_server.py
 
 Created:
-  - /Users/soulofall/projects/cstrike/BACKEND_FIX_SERVICE_STATUS_AND_LOGS.md
-  - /Users/soulofall/projects/cstrike/QUICK_REFERENCE_BACKEND_FIX_2.md
-  - /Users/soulofall/projects/cstrike/VERIFICATION_SUMMARY_FIX_2.txt
+  - BACKEND_FIX_SERVICE_STATUS_AND_LOGS.md
+  - QUICK_REFERENCE_BACKEND_FIX_2.md
+  - VERIFICATION_SUMMARY_FIX_2.txt
 
 7. API ENDPOINTS SUMMARY
 ------------------------

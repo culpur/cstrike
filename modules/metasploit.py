@@ -9,7 +9,7 @@ from modules.utils import get_target_dir
 # Load creds from .env
 CONFIG = json.loads(Path(".env").read_text())
 MSF_USERNAME = CONFIG.get("msf_username", "msf")
-MSF_PASSWORD = CONFIG.get("msf_password", "mypassword")
+MSF_PASSWORD = CONFIG.get("msf_password", "")
 MSF_HOST = CONFIG.get("msf_host", "127.0.0.1")
 MSF_PORT = CONFIG.get("msf_port", 55552)
 

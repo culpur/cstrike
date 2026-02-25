@@ -1221,7 +1221,7 @@ def validate_single_credential():
             "credential_id": "cred_123",
             "target": "192.168.1.10",
             "username": "admin",
-            "password": "password123",
+            "password": "<test_password>",
             "service": "ssh",
             "port": 22  // optional
         }
@@ -1316,7 +1316,7 @@ def validate_batch_credentials():
                     "credential_id": "cred_1",
                     "target": "192.168.1.10",
                     "username": "admin",
-                    "password": "password123",
+                    "password": "<test_password>",
                     "service": "ssh",
                     "port": 22  // optional
                 },

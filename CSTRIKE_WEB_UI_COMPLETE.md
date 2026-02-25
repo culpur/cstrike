@@ -5,7 +5,7 @@
 The **CStrike Web UI** is a complete, production-ready React/TypeScript frontend for the CStrike offensive security automation framework. Built with modern web technologies and the elegant Grok dark theme, it transforms the terminal-based penetration testing tool into a beautiful, accessible web application.
 
 **Status:** ✅ **COMPLETE & PRODUCTION READY**
-**Location:** `/Users/soulofall/projects/cstrike/web/`
+**Location:** `web/`
 **Timeline:** Delivered in full scope
 **Build Status:** ✅ Passing (294KB gzipped)
 
@@ -427,7 +427,7 @@ dist/assets/index-CqO6TI3z.js   294.26 kB │ gzipped: 96.84 kB
 
 ### **Development**
 ```bash
-cd /Users/soulofall/projects/cstrike/web
+cd web
 npm install
 npm run dev
 ```

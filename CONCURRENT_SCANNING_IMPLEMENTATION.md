@@ -10,7 +10,7 @@ December 25, 2025
 
 ## Changes Summary
 
-### Backend Changes (/Users/soulofall/projects/cstrike/api_server.py)
+### Backend Changes (api_server.py)
 
 #### 1. Thread Safety Infrastructure
 
@@ -109,7 +109,7 @@ scan_threads = {}
 
 ### Frontend Changes
 
-#### 1. API Service (/Users/soulofall/projects/cstrike/web/src/services/api.ts)
+#### 1. API Service (web/src/services/api.ts)
 
 **Added Methods:**
 
@@ -124,7 +124,7 @@ async startBatchRecon(targets: string[], tools: string[]): Promise<BatchResponse
 async stopRecon(scanId: string): Promise<void>
 ```
 
-#### 2. ReconnaissanceView (/Users/soulofall/projects/cstrike/web/src/modules/reconnaissance/ReconnaissanceView.tsx)
+#### 2. ReconnaissanceView (web/src/modules/reconnaissance/ReconnaissanceView.tsx)
 
 **New State:**
 - `activeScans` - Tracks all running scans
@@ -175,7 +175,7 @@ async stopRecon(scanId: string): Promise<void>
 ## Documentation
 
 ### 1. Concurrent Scanning Guide
-**File:** `/Users/soulofall/projects/cstrike/docs/CONCURRENT_SCANNING_GUIDE.md`
+**File:** `docs/CONCURRENT_SCANNING_GUIDE.md`
 
 **Contents:**
 - Architecture overview
@@ -188,7 +188,7 @@ async stopRecon(scanId: string): Promise<void>
 - Troubleshooting guide
 
 ### 2. API Reference
-**File:** `/Users/soulofall/projects/cstrike/docs/API_CONCURRENT_SCANNING.md`
+**File:** `docs/API_CONCURRENT_SCANNING.md`
 
 **Contents:**
 - Complete API specification
@@ -200,7 +200,7 @@ async stopRecon(scanId: string): Promise<void>
 - Code examples
 
 ### 3. Test Suite
-**File:** `/Users/soulofall/projects/cstrike/test_concurrent_scanning.sh`
+**File:** `test_concurrent_scanning.sh`
 
 **Tests:**
 - Individual scan starting
@@ -285,7 +285,7 @@ with active_scans_lock:
 
 Run test suite:
 ```bash
-cd /Users/soulofall/projects/cstrike
+cd 
 ./test_concurrent_scanning.sh
 ```
 
@@ -452,18 +452,18 @@ htop
 ## File Locations
 
 ### Backend
-- **API Server:** `/Users/soulofall/projects/cstrike/api_server.py`
-- **Recon Module:** `/Users/soulofall/projects/cstrike/modules/recon.py`
+- **API Server:** `api_server.py`
+- **Recon Module:** `modules/recon.py`
 
 ### Frontend
-- **View:** `/Users/soulofall/projects/cstrike/web/src/modules/reconnaissance/ReconnaissanceView.tsx`
-- **API Service:** `/Users/soulofall/projects/cstrike/web/src/services/api.ts`
+- **View:** `web/src/modules/reconnaissance/ReconnaissanceView.tsx`
+- **API Service:** `web/src/services/api.ts`
 
 ### Documentation
-- **Implementation Guide:** `/Users/soulofall/projects/cstrike/docs/CONCURRENT_SCANNING_GUIDE.md`
-- **API Reference:** `/Users/soulofall/projects/cstrike/docs/API_CONCURRENT_SCANNING.md`
-- **Test Suite:** `/Users/soulofall/projects/cstrike/test_concurrent_scanning.sh`
-- **This Summary:** `/Users/soulofall/projects/cstrike/CONCURRENT_SCANNING_IMPLEMENTATION.md`
+- **Implementation Guide:** `docs/CONCURRENT_SCANNING_GUIDE.md`
+- **API Reference:** `docs/API_CONCURRENT_SCANNING.md`
+- **Test Suite:** `test_concurrent_scanning.sh`
+- **This Summary:** `CONCURRENT_SCANNING_IMPLEMENTATION.md`
 
 ## Conclusion
 

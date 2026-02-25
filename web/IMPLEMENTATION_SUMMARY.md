@@ -6,7 +6,7 @@ Successfully implemented three new pages for the CStrike web interface as part o
 ## What Was Built
 
 ### 1. Configuration Management Page (`/config`)
-**File:** `/Users/$USER/projects/cstrike/web/src/modules/configuration/ConfigurationView.tsx`
+**File:** `web/src/modules/configuration/ConfigurationView.tsx`
 
 **Features:**
 - OpenAI API Key input (password field)
@@ -23,7 +23,7 @@ Successfully implemented three new pages for the CStrike web interface as part o
 - `PUT /api/v1/config` - Save configuration
 
 ### 2. Results Browser Page (`/results`)
-**File:** `/Users/$USER/projects/cstrike/web/src/modules/results/ResultsView.tsx`
+**File:** `web/src/modules/results/ResultsView.tsx`
 
 **Features:**
 - Target list with status badges (Pending/Scanning/Complete/Failed)
@@ -42,7 +42,7 @@ Successfully implemented three new pages for the CStrike web interface as part o
 - `GET /api/v1/results/<target>/download?format=json|markdown` - Download results
 
 ### 3. Targets Management Page (`/targets`)
-**File:** `/Users/$USER/projects/cstrike/web/src/modules/targets/TargetsView.tsx`
+**File:** `web/src/modules/targets/TargetsView.tsx`
 
 **Note:** This page was already implemented in a previous phase. It provides:
 - Add new target input
@@ -54,7 +54,7 @@ Successfully implemented three new pages for the CStrike web interface as part o
 ## Updated Components
 
 ### 4. Navigation (Sidebar)
-**File:** `/Users/$USER/projects/cstrike/web/src/components/layout/Sidebar.tsx`
+**File:** `web/src/components/layout/Sidebar.tsx`
 
 **Changes:**
 - Updated navigation items to reflect new structure:
@@ -67,7 +67,7 @@ Successfully implemented three new pages for the CStrike web interface as part o
 - Updated icons (Target, FolderOpen, Settings)
 
 ### 5. App Router
-**File:** `/Users/$USER/projects/cstrike/web/src/App.tsx`
+**File:** `web/src/App.tsx`
 
 **Changes:**
 - Added imports for ConfigurationView and ResultsView
@@ -76,7 +76,7 @@ Successfully implemented three new pages for the CStrike web interface as part o
 - Maintained backward compatibility for old `reconnaissance` route
 
 ### 6. API Service
-**File:** `/Users/$USER/projects/cstrike/web/src/services/api.ts`
+**File:** `web/src/services/api.ts`
 
 **New Methods:**
 ```typescript
@@ -91,7 +91,7 @@ async downloadResults(target: string, format: 'json' | 'markdown'): Promise<Blob
 ```
 
 ### 7. TypeScript Types
-**File:** `/Users/$USER/projects/cstrike/web/src/types/index.ts`
+**File:** `web/src/types/index.ts`
 
 **New Type:**
 ```typescript

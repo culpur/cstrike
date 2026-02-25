@@ -202,7 +202,7 @@ results/
 
 ```bash
 # 1. Navigate to project directory
-cd /Users/soulofall/projects/cstrike
+cd 
 
 # 2. Verify changes applied
 grep -c "run_full_ai_workflow" api_server.py
@@ -495,16 +495,16 @@ Current logging includes:
 ## Documentation References
 
 ### Implementation Details
-- `/Users/soulofall/projects/cstrike/PHASE3_IMPLEMENTATION.md`
+- `PHASE3_IMPLEMENTATION.md`
 
 ### Deployment Guide
-- `/Users/soulofall/projects/cstrike/PHASE3_DEPLOYMENT_SUMMARY.md`
+- `PHASE3_DEPLOYMENT_SUMMARY.md`
 
 ### Frontend Redesign Spec
-- `/Users/soulofall/projects/cstrike/FRONTEND_REDESIGN.md`
+- `FRONTEND_REDESIGN.md`
 
 ### Original AI Driver
-- `/Users/soulofall/projects/cstrike/ai_driver.py` (reference implementation)
+- `ai_driver.py` (reference implementation)
 
 ---
 
@@ -533,7 +533,7 @@ Current logging includes:
 ## Contact and Support
 
 ### For Questions
-- Review documentation in `/Users/soulofall/projects/cstrike/`
+- Review documentation in ``
 - Check error logs in `logs/driver.log`
 - Consult `PHASE3_IMPLEMENTATION.md` for technical details
 

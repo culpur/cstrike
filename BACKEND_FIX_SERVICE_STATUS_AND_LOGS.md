@@ -3,7 +3,7 @@
 ## Overview
 This document details the critical fixes applied to the CStrike API server to resolve service status key mismatches and implement proper log streaming functionality.
 
-**File Modified**: `/Users/soulofall/projects/cstrike/api_server.py`
+**File Modified**: `api_server.py`
 **Date**: 2025-12-25
 **Issue**: Service status keys didn't match frontend expectations, causing UI inconsistencies
 
@@ -339,5 +339,5 @@ For issues related to these changes:
 3. Check browser console for WebSocket events
 4. Review this document for known limitations
 
-**File Location**: `/Users/soulofall/projects/cstrike/api_server.py`
-**Documentation**: `/Users/soulofall/projects/cstrike/BACKEND_FIX_SERVICE_STATUS_AND_LOGS.md`
+**File Location**: `api_server.py`
+**Documentation**: `BACKEND_FIX_SERVICE_STATUS_AND_LOGS.md`

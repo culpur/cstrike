@@ -7,7 +7,7 @@ Implemented a comprehensive credential validation/testing system for the CStrike
 ## Implementation Completed
 
 ### 1. Backend Validation Engine
-**File**: `/Users/soulofall/projects/cstrike/modules/credential_validator.py`
+**File**: `modules/credential_validator.py`
 
 - Created `CredentialValidator` class with support for multiple service types
 - Implemented validation methods for:
@@ -26,7 +26,7 @@ Implemented a comprehensive credential validation/testing system for the CStrike
 - Service-specific validators: `_validate_ssh()`, `_validate_http()`, `_validate_ftp()`
 
 ### 2. Credential Storage & Tracking
-**File**: `/Users/soulofall/projects/cstrike/modules/loot_tracker.py`
+**File**: `modules/loot_tracker.py`
 
 - Extended loot tracker with credential-specific functions
 - Added credential storage with validation metadata
@@ -46,7 +46,7 @@ Implemented a comprehensive credential validation/testing system for the CStrike
   "id": "cred_0_timestamp",
   "target": "192.168.1.10",
   "username": "admin",
-  "password": "password123",
+  "password": "<test_password>",
   "source": "nmap-ssh-brute",
   "service": "ssh",
   "port": 22,
@@ -58,7 +58,7 @@ Implemented a comprehensive credential validation/testing system for the CStrike
 ```
 
 ### 3. REST API Endpoints
-**File**: `/Users/soulofall/projects/cstrike/api_server.py`
+**File**: `api_server.py`
 
 Implemented three new API endpoints:
 
@@ -87,7 +87,7 @@ Implemented three new API endpoints:
 - Thread-safe operations with proper cleanup
 
 ### 4. Frontend API Integration
-**File**: `/Users/soulofall/projects/cstrike/web/src/services/api.ts`
+**File**: `web/src/services/api.ts`
 
 Updated API service with three new methods:
 
@@ -108,7 +108,7 @@ async validateCredentialsBatch(
 ```
 
 ### 5. User Interface
-**File**: `/Users/soulofall/projects/cstrike/web/src/modules/loot/LootView.tsx`
+**File**: `web/src/modules/loot/LootView.tsx`
 
 Completely redesigned LootView with credential validation features:
 
@@ -174,7 +174,7 @@ Implemented comprehensive WebSocket event system:
 ## File Structure
 
 ```
-/Users/soulofall/projects/cstrike/
+
 ├── modules/
 │   ├── credential_validator.py       # NEW: Core validation logic
 │   └── loot_tracker.py                # UPDATED: Added credential functions
@@ -308,7 +308,7 @@ Implemented comprehensive WebSocket event system:
 
 ### 1. Install Dependencies
 ```bash
-cd /Users/soulofall/projects/cstrike
+cd 
 pip install -r requirements.txt
 ```
 
@@ -350,7 +350,7 @@ curl -X POST http://localhost:8000/api/v1/loot/credentials/validate \
     "credential_id": "cred_123",
     "target": "192.168.1.10",
     "username": "admin",
-    "password": "password123",
+    "password": "<test_password>",
     "service": "ssh",
     "port": 22
   }'

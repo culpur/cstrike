@@ -8,7 +8,7 @@ Implementation of credential scoring and heatmapping system for CStrike offensiv
 
 ### 1. Backend Implementation
 
-#### File: `/Users/soulofall/projects/cstrike/modules/loot_tracker.py`
+#### File: `modules/loot_tracker.py`
 
 **Added Functions**:
 - `_calculate_password_complexity(password)` - Analyzes password strength (0-20 scale)
@@ -31,7 +31,7 @@ score = (reuse_count * 10) + username_weight + service_weight - (complexity_scor
 
 ---
 
-#### File: `/Users/soulofall/projects/cstrike/api_server.py`
+#### File: `api_server.py`
 
 **Added Import**:
 ```python
@@ -67,7 +67,7 @@ def get_loot_heatmap():
 
 ### 2. Frontend Implementation
 
-#### File: `/Users/soulofall/projects/cstrike/web/src/types/index.ts`
+#### File: `web/src/types/index.ts`
 
 **Added Types**:
 ```typescript
@@ -98,7 +98,7 @@ export interface HeatmapResponse {
 
 ---
 
-#### File: `/Users/soulofall/projects/cstrike/web/src/services/api.ts`
+#### File: `web/src/services/api.ts`
 
 **Added Import**:
 ```typescript
@@ -117,7 +117,7 @@ async getLootHeatmap(limit = 50, minScore = 0): Promise<HeatmapResponse> {
 
 ---
 
-#### File: `/Users/soulofall/projects/cstrike/web/src/modules/loot/LootView.tsx`
+#### File: `web/src/modules/loot/LootView.tsx`
 
 **Added Imports**:
 ```typescript
@@ -160,7 +160,7 @@ const getPriorityColor = (score: number) => { /* Returns color gradient */ }
 
 ### 3. Documentation
 
-#### File: `/Users/soulofall/projects/cstrike/docs/LOOT_HEATMAP_API.md`
+#### File: `docs/LOOT_HEATMAP_API.md`
 
 Complete API documentation including:
 - Architecture overview
@@ -179,7 +179,7 @@ Complete API documentation including:
 
 ```bash
 # Terminal 1: Start API server
-cd /Users/soulofall/projects/cstrike
+cd 
 python3 api_server.py
 
 # Terminal 2: Test heatmap endpoint
@@ -191,7 +191,7 @@ curl "http://localhost:8000/api/v1/loot/heatmap?limit=100&min_score=10"
 
 ```bash
 # Start dev server
-cd /Users/soulofall/projects/cstrike/web
+cd web
 npm run dev
 
 # Access UI at http://localhost:3000
@@ -220,7 +220,7 @@ print(f"Top credential: {heatmap[0]}")
 ## File Locations Summary
 
 ```
-/Users/soulofall/projects/cstrike/
+
 ├── modules/
 │   └── loot_tracker.py                    [MODIFIED - Core scoring logic]
 ├── api_server.py                          [MODIFIED - New /loot/heatmap endpoint]

@@ -10,7 +10,7 @@ The Loot Heatmap feature provides intelligent credential scoring and prioritizat
 
 #### 1. Scoring Algorithm (`modules/loot_tracker.py`)
 
-**Location**: `/Users/soulofall/projects/cstrike/modules/loot_tracker.py`
+**Location**: `modules/loot_tracker.py`
 
 **Core Functions**:
 

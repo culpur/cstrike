@@ -8,7 +8,7 @@ From the project root directory:
 
 ```bash
 # Start both backend and frontend
-/Users/$user/projects/cstrike/START_DEV_SERVERS.sh
+./START_DEV_SERVERS.sh
 
 # The script will:
 # 1. Start backend API on port 8000
@@ -21,13 +21,12 @@ From the project root directory:
 
 Terminal 1 - Backend:
 ```bash
-cd /Users/$user/projects/cstrike
 python3 api_server.py
 ```
 
 Terminal 2 - Frontend:
 ```bash
-cd /Users/$user/projects/cstrike/web
+cd web
 npm run dev
 ```
 
@@ -57,7 +56,7 @@ fetch('http://localhost:8000/api/v1/targets')
 
 ## Proxy Configuration Details
 
-File: `/Users/$USER/projects/cstrike/web/vite.config.ts`
+File: `web/vite.config.ts`
 
 ```typescript
 export default defineConfig({
@@ -107,7 +106,7 @@ Response → Proxy → Browser
 lsof -i :3000
 
 # If not, start it
-cd /Users/soulofall/projects/cstrike/web
+cd web
 npm run dev
 ```
 
@@ -143,7 +142,7 @@ lsof -i :3000
 kill -9 <PID>
 
 # Or use the automated script
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh stop
+./START_DEV_SERVERS.sh stop
 ```
 
 ## Development Workflow
@@ -320,19 +319,19 @@ The production build is optimized and minified, output to `dist/` directory.
 
 ```bash
 # Start development
-/Users/$USER/projects/cstrike/START_DEV_SERVERS.sh
+./START_DEV_SERVERS.sh
 
 # Stop servers
-/Users/$USER/projects/cstrike/START_DEV_SERVERS.sh stop
+./START_DEV_SERVERS.sh stop
 
 # Check status
-/Users/$USER/projects/cstrike/START_DEV_SERVERS.sh status
+./START_DEV_SERVERS.sh status
 
 # Manual frontend start
-cd /Users/$USER/projects/cstrike/web && npm run dev
+cd web && npm run dev
 
 # Manual backend start
-cd /Users/$USER/projects/cstrike && python3 api_server.py
+python3 api_server.py
 
 # Test API directly
 curl http://localhost:8000/api/v1/targets
@@ -343,4 +342,4 @@ curl http://localhost:3000/api/v1/targets
 
 ---
 
-**Need help?** Check `/Users/$USER/projects/cstrike/FRONTEND_BACKEND_TROUBLESHOOTING.md` for detailed troubleshooting.
+**Need help?** Check `FRONTEND_BACKEND_TROUBLESHOOTING.md` for detailed troubleshooting.

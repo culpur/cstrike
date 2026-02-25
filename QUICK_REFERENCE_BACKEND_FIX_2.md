@@ -40,10 +40,10 @@ curl "http://localhost:8000/api/v1/logs?limit=1000&level=INFO"
 
 ```bash
 # 1. Syntax check
-python3 -m py_compile /Users/soulofall/projects/cstrike/api_server.py
+python3 -m py_compile api_server.py
 
 # 2. Verify old references removed
-grep "services_status\['metasploit'\]" /Users/soulofall/projects/cstrike/api_server.py
+grep "services_status\['metasploit'\]" api_server.py
 # Expected: No matches
 
 # 3. Test service status
@@ -57,9 +57,9 @@ curl -X POST http://localhost:8000/api/v1/services/metasploitRpc/restart
 ```
 
 ## Key Files
-- **Modified**: `/Users/soulofall/projects/cstrike/api_server.py`
-- **Documentation**: `/Users/soulofall/projects/cstrike/BACKEND_FIX_SERVICE_STATUS_AND_LOGS.md`
-- **This File**: `/Users/soulofall/projects/cstrike/QUICK_REFERENCE_BACKEND_FIX_2.md`
+- **Modified**: `api_server.py`
+- **Documentation**: `BACKEND_FIX_SERVICE_STATUS_AND_LOGS.md`
+- **This File**: `QUICK_REFERENCE_BACKEND_FIX_2.md`
 
 ## Verification Status
 - Syntax validation: PASSED

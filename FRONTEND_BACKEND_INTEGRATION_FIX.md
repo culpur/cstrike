@@ -245,7 +245,7 @@ lsof -i :8000
 Expected output:
 ```
 COMMAND   PID      USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
-Python  63476 soulofall   10u  IPv4 ...      0t0  TCP *:irdmi (LISTEN)
+Python  63476 operator   10u  IPv4 ...      0t0  TCP *:irdmi (LISTEN)
 ```
 
 ### 2. Test API Endpoints
@@ -323,7 +323,7 @@ VITE v7.3.0  ready in 217 ms
   "allowed_tools": ["nmap", "ffuf", "curl", "whois", ...],
   "openai_api_key": "",
   "msf_username": "msf",
-  "msf_password": "mypassword",
+  "msf_password": "",
   "msf_host": "127.0.0.1",
   "msf_port": 55552,
   "zap_host": "127.0.0.1",

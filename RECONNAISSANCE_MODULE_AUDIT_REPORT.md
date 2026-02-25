@@ -1,7 +1,7 @@
 # Reconnaissance Module - Comprehensive Audit Report
 **Date:** December 25, 2025
 **Auditor:** EMS Frontend TypeScript/React Expert
-**Module:** `/Users/soulofall/projects/cstrike/web/src/modules/reconnaissance/ReconnaissanceView.tsx`
+**Module:** `web/src/modules/reconnaissance/ReconnaissanceView.tsx`
 
 ---
 
@@ -195,7 +195,7 @@ All API integrations, WebSocket listeners, and user interactions are properly wi
 ### 7. Scan Results Display (100% Real)
 
 #### ScanResultsView Component
-- **Location:** `/Users/soulofall/projects/cstrike/web/src/modules/reconnaissance/components/ScanResultsView.tsx`
+- **Location:** `web/src/modules/reconnaissance/components/ScanResultsView.tsx`
 - **Input Type:** `CompleteScanResults` (fully typed interface)
 - **Data Sources:** Real scan data from backend
 - **Features:**
@@ -308,7 +308,7 @@ After comprehensive analysis of:
 
 ## Reconnaissance Tools (Backend Execution)
 
-**File:** `/Users/soulofall/projects/cstrike/modules/recon.py`
+**File:** `modules/recon.py`
 
 All tools execute real commands via `subprocess`:
 
@@ -415,16 +415,16 @@ The Reconnaissance module is **100% functional** with **zero mock data** and **z
 ## File References
 
 ### Frontend Files Audited
-- `/Users/soulofall/projects/cstrike/web/src/modules/reconnaissance/ReconnaissanceView.tsx`
-- `/Users/soulofall/projects/cstrike/web/src/modules/reconnaissance/components/ScanResultsView.tsx`
-- `/Users/soulofall/projects/cstrike/web/src/services/api.ts`
-- `/Users/soulofall/projects/cstrike/web/src/services/websocket.ts`
-- `/Users/soulofall/projects/cstrike/web/src/stores/reconStore.ts`
-- `/Users/soulofall/projects/cstrike/web/src/types/index.ts`
+- `web/src/modules/reconnaissance/ReconnaissanceView.tsx`
+- `web/src/modules/reconnaissance/components/ScanResultsView.tsx`
+- `web/src/services/api.ts`
+- `web/src/services/websocket.ts`
+- `web/src/stores/reconStore.ts`
+- `web/src/types/index.ts`
 
 ### Backend Files Audited
-- `/Users/soulofall/projects/cstrike/api_server.py` (lines 213-539)
-- `/Users/soulofall/projects/cstrike/modules/recon.py` (full file)
+- `api_server.py` (lines 213-539)
+- `modules/recon.py` (full file)
 
 ---
 

@@ -193,13 +193,13 @@ Get detailed scan results for a specific target.
     }
   ],
   "dns_records": {
-    "A": ["172.67.152.215", "104.21.23.162"],
-    "MX": ["mail.culpur.net"],
-    "TXT": ["v=spf1 include:_spf.google.com ~all"]
+    "A": ["203.0.113.10", "203.0.113.11"],
+    "MX": ["mail.example.com"],
+    "TXT": ["v=spf1 include:_spf.example.com ~all"]
   },
   "loot": {
     "usernames": ["admin", "root", "user"],
-    "passwords": ["password123", "admin123"],
+    "passwords": ["<redacted>", "<redacted>"],
     "urls": ["https://culpur.net/admin"],
     "ports": ["80", "443", "22"]
   }

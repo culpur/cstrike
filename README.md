@@ -150,7 +150,7 @@ All commands as `redteam` will now use the VPN route.
   "max_threads": 10,
   "max_runtime": 300,
   "msf_username": "msf",
-  "msf_password": "mypassword",
+  "msf_password": "",
   "msf_host": "127.0.0.1",
   "msf_port": 55552,
   "zap_host": "127.0.0.1",

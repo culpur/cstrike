@@ -430,10 +430,10 @@ def start_recon():
 
 ## File Locations
 
-- **Backend API:** `/Users/soulofall/projects/cstrike/api_server.py`
-- **Frontend View:** `/Users/soulofall/projects/cstrike/web/src/modules/reconnaissance/ReconnaissanceView.tsx`
-- **API Service:** `/Users/soulofall/projects/cstrike/web/src/services/api.ts`
-- **Documentation:** `/Users/soulofall/projects/cstrike/docs/CONCURRENT_SCANNING_GUIDE.md`
+- **Backend API:** `api_server.py`
+- **Frontend View:** `web/src/modules/reconnaissance/ReconnaissanceView.tsx`
+- **API Service:** `web/src/services/api.ts`
+- **Documentation:** `docs/CONCURRENT_SCANNING_GUIDE.md`
 
 ## Summary
 

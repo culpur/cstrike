@@ -15,7 +15,7 @@ POST /api/v1/loot/credentials/validate
   "credential_id": "cred_123",
   "target": "192.168.1.10",
   "username": "admin",
-  "password": "password123",
+  "password": "<test_password>",
   "service": "ssh",
   "port": 22
 }
@@ -173,8 +173,8 @@ curl -X POST http://localhost:8000/api/v1/loot/credentials/validate \
 
 ## Documentation
 
-Full docs: `/Users/soulofall/projects/cstrike/docs/CREDENTIAL_VALIDATION_SYSTEM.md`
-Setup guide: `/Users/soulofall/projects/cstrike/docs/CREDENTIAL_VALIDATION_SETUP.md`
+Full docs: `docs/CREDENTIAL_VALIDATION_SYSTEM.md`
+Setup guide: `docs/CREDENTIAL_VALIDATION_SETUP.md`
 
 ---
 

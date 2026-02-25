@@ -677,6 +677,6 @@ Some tools may not respond to interruption immediately. Wait 30 seconds and chec
 ## Support
 
 For issues or questions, check:
-- Documentation: `/Users/soulofall/projects/cstrike/docs/`
-- Backend code: `/Users/soulofall/projects/cstrike/api_server.py`
-- Frontend code: `/Users/soulofall/projects/cstrike/web/src/`
+- Documentation: `docs/`
+- Backend code: `api_server.py`
+- Frontend code: `web/src/`

@@ -8,7 +8,7 @@ A quick reference guide for using the new Configuration Management and Results B
 
 1. Start the API server:
 ```bash
-cd /Users/soulofall/projects/cstrike
+cd 
 python3 api_server.py
 ```
 
@@ -171,7 +171,7 @@ sio.wait()
 ### Run Automated Tests
 
 ```bash
-cd /Users/soulofall/projects/cstrike
+cd 
 python3 test_new_endpoints.py
 ```
 
@@ -325,10 +325,10 @@ const socket = io('http://localhost:8000', {
 ## API Reference
 
 Full documentation available at:
-- `/Users/soulofall/projects/cstrike/API_DOCUMENTATION_CONFIG_RESULTS.md`
+- `API_DOCUMENTATION_CONFIG_RESULTS.md`
 
 Implementation details:
-- `/Users/soulofall/projects/cstrike/IMPLEMENTATION_SUMMARY_CONFIG_RESULTS.md`
+- `IMPLEMENTATION_SUMMARY_CONFIG_RESULTS.md`
 
 ---
 

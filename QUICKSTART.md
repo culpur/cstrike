@@ -3,7 +3,7 @@
 ## 🚀 Start Development (One Command)
 
 ```bash
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh
+START_DEV_SERVERS.sh
 ```
 
 This starts both backend and frontend with health checks.
@@ -24,13 +24,13 @@ This starts both backend and frontend with health checks.
 
 ### Terminal 1: Backend
 ```bash
-cd /Users/soulofall/projects/cstrike
+cd 
 python3 api_server.py
 ```
 
 ### Terminal 2: Frontend
 ```bash
-cd /Users/soulofall/projects/cstrike/web
+cd web
 npm run dev
 ```
 
@@ -56,7 +56,7 @@ curl http://localhost:3000/api/v1/targets
 ## 🛑 Stop Development
 
 ```bash
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh stop
+START_DEV_SERVERS.sh stop
 ```
 
 Or press `Ctrl+C` in the terminal running the script.
@@ -66,7 +66,7 @@ Or press `Ctrl+C` in the terminal running the script.
 ## 📊 Check Status
 
 ```bash
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh status
+START_DEV_SERVERS.sh status
 ```
 
 ---
@@ -79,7 +79,7 @@ Or press `Ctrl+C` in the terminal running the script.
 
 **Fix**:
 ```bash
-cd /Users/soulofall/projects/cstrike/web
+cd web
 npm run dev
 ```
 
@@ -94,7 +94,7 @@ lsof -ti:3000 | xargs kill -9
 lsof -ti:8000 | xargs kill -9
 
 # Then restart
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh
+START_DEV_SERVERS.sh
 ```
 
 ### Issue: API requests not working
@@ -110,13 +110,13 @@ lsof -ti:8000 | xargs kill -9
 
 ```bash
 # Backend logs
-tail -f /Users/soulofall/projects/cstrike/logs/backend.log
+tail -f logs/backend.log
 
 # Frontend logs
-tail -f /Users/soulofall/projects/cstrike/logs/frontend.log
+tail -f logs/frontend.log
 
 # Both logs (when using automated script, this happens automatically)
-tail -f /Users/soulofall/projects/cstrike/logs/*.log
+tail -f logs/*.log
 ```
 
 ---
@@ -133,9 +133,9 @@ tail -f /Users/soulofall/projects/cstrike/logs/*.log
 
 ## 📚 Full Documentation
 
-- **Troubleshooting**: `/Users/soulofall/projects/cstrike/FRONTEND_BACKEND_TROUBLESHOOTING.md`
-- **Development Guide**: `/Users/soulofall/projects/cstrike/web/README_DEVELOPMENT.md`
-- **Issue Resolution**: `/Users/soulofall/projects/cstrike/ISSUE_RESOLUTION_SUMMARY.md`
+- **Troubleshooting**: `FRONTEND_BACKEND_TROUBLESHOOTING.md`
+- **Development Guide**: `web/README_DEVELOPMENT.md`
+- **Issue Resolution**: `ISSUE_RESOLUTION_SUMMARY.md`
 
 ---
 
@@ -143,7 +143,7 @@ tail -f /Users/soulofall/projects/cstrike/logs/*.log
 
 ```bash
 # 1. Start servers
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh
+START_DEV_SERVERS.sh
 
 # 2. Open browser
 open http://localhost:3000

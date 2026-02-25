@@ -8,22 +8,22 @@ The Credential Validation System provides automated testing of discovered creden
 
 ### Components
 
-1. **Backend Validator** (`/Users/soulofall/projects/cstrike/modules/credential_validator.py`)
+1. **Backend Validator** (`modules/credential_validator.py`)
    - Core validation logic for different service types
    - Handles connection attempts with proper timeout and error handling
    - Returns detailed validation results with metadata
 
-2. **Loot Tracker** (`/Users/soulofall/projects/cstrike/modules/loot_tracker.py`)
+2. **Loot Tracker** (`modules/loot_tracker.py`)
    - Stores credentials with validation metadata
    - Tracks validation status and results
    - Provides credential retrieval and update functions
 
-3. **API Endpoints** (`/Users/soulofall/projects/cstrike/api_server.py`)
+3. **API Endpoints** (`api_server.py`)
    - POST `/api/v1/loot/credentials/validate` - Single credential validation
    - POST `/api/v1/loot/credentials/validate/batch` - Batch validation
    - GET `/api/v1/loot/credentials` - Retrieve credentials
 
-4. **Frontend UI** (`/Users/soulofall/projects/cstrike/web/src/modules/loot/LootView.tsx`)
+4. **Frontend UI** (`web/src/modules/loot/LootView.tsx`)
    - Credential table with validation status indicators
    - Individual "Test" buttons per credential
    - "Test All" button for batch validation
@@ -450,7 +450,7 @@ curl -X POST http://localhost:8000/api/v1/loot/credentials/validate \
 ## File Locations
 
 ```
-/Users/soulofall/projects/cstrike/
+
 ├── modules/
 │   ├── credential_validator.py     # Core validation logic
 │   └── loot_tracker.py              # Credential storage

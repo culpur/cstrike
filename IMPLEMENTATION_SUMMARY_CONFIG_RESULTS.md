@@ -11,7 +11,7 @@ Successfully implemented new backend API endpoints for Configuration Management 
 ### 1. Configuration Management Endpoints
 
 #### GET /api/v1/config
-- **Location**: `/Users/soulofall/projects/cstrike/api_server.py` (lines 295-328)
+- **Location**: `api_server.py` (lines 295-328)
 - **Functionality**:
   - Reads configuration from `.env` file
   - Automatically masks sensitive fields:
@@ -20,7 +20,7 @@ Successfully implemented new backend API endpoints for Configuration Management 
   - Returns complete configuration with masked secrets
 
 #### PUT /api/v1/config
-- **Location**: `/Users/soulofall/projects/cstrike/api_server.py` (lines 331-388)
+- **Location**: `api_server.py` (lines 331-388)
 - **Functionality**:
   - Updates configuration in `.env` file
   - Preserves masked secrets (if value ends with "..." or is "***")
@@ -34,7 +34,7 @@ Successfully implemented new backend API endpoints for Configuration Management 
 ### 2. Results Management Endpoints
 
 #### GET /api/v1/results
-- **Location**: `/Users/soulofall/projects/cstrike/api_server.py` (lines 1193-1270)
+- **Location**: `api_server.py` (lines 1193-1270)
 - **Functionality**:
   - Lists all targets with scan results
   - Checks for results.json and loot.json in each target directory
@@ -44,7 +44,7 @@ Successfully implemented new backend API endpoints for Configuration Management 
   - Returns array of targets with metadata
 
 #### GET /api/v1/results/<target>
-- **Location**: `/Users/soulofall/projects/cstrike/api_server.py` (lines 1273-1300)
+- **Location**: `api_server.py` (lines 1273-1300)
 - **Functionality**:
   - Returns detailed scan results for specific target
   - Loads results.json from target directory
@@ -53,7 +53,7 @@ Successfully implemented new backend API endpoints for Configuration Management 
   - Handles missing targets with 404 error
 
 #### GET /api/v1/results/<target>/download
-- **Location**: `/Users/soulofall/projects/cstrike/api_server.py` (lines 1392-1448)
+- **Location**: `api_server.py` (lines 1392-1448)
 - **Functionality**:
   - Downloads scan results in JSON or Markdown format
   - Query parameter: `format=json` or `format=markdown`
@@ -67,7 +67,7 @@ Successfully implemented new backend API endpoints for Configuration Management 
 ### 3. Markdown Report Generation
 
 #### generate_markdown_report() Function
-- **Location**: `/Users/soulofall/projects/cstrike/api_server.py` (lines 1303-1389)
+- **Location**: `api_server.py` (lines 1303-1389)
 - **Functionality**:
   - Generates professional markdown reports from scan results
   - Sections included:
@@ -85,7 +85,7 @@ Successfully implemented new backend API endpoints for Configuration Management 
 ### 4. WebSocket Log Streaming
 
 #### WebSocketLogHandler Class
-- **Location**: `/Users/soulofall/projects/cstrike/api_server.py` (lines 57-79)
+- **Location**: `api_server.py` (lines 57-79)
 - **Functionality**:
   - Custom logging.Handler that emits logs via WebSocket
   - Extracts metadata from log records (target, scan_id, tool)
@@ -93,7 +93,7 @@ Successfully implemented new backend API endpoints for Configuration Management 
   - Gracefully handles errors without crashing app
 
 #### emit_log() Function
-- **Location**: `/Users/soulofall/projects/cstrike/api_server.py` (lines 45-54)
+- **Location**: `api_server.py` (lines 45-54)
 - **Functionality**:
   - Emits log entries via WebSocket 'log_entry' event
   - Generates unique log IDs (timestamp + random hex)
@@ -101,7 +101,7 @@ Successfully implemented new backend API endpoints for Configuration Management 
   - Includes metadata for context
 
 #### Integration
-- **Location**: `/Users/soulofall/projects/cstrike/api_server.py` (lines 1588-1591)
+- **Location**: `api_server.py` (lines 1588-1591)
 - WebSocket handler added to root logger in main block
 - Automatically streams all INFO+ level logs to connected clients
 
@@ -175,7 +175,7 @@ Successfully implemented new backend API endpoints for Configuration Management 
 - Includes realistic scan data with ports, subdomains, vulnerabilities, loot
 
 ### Test Script
-- **File**: `/Users/soulofall/projects/cstrike/test_new_endpoints.py`
+- **File**: `test_new_endpoints.py`
 - **Tests**:
   1. GET /api/v1/config - Verify secret masking
   2. PUT /api/v1/config - Update and verify changes
@@ -352,14 +352,14 @@ Potential improvements for future iterations:
 ## File Paths Reference
 
 **Modified Files:**
-- `/Users/soulofall/projects/cstrike/api_server.py`
+- `api_server.py`
 
 **Created Files:**
-- `/Users/soulofall/projects/cstrike/results/culpur.net/results.json`
-- `/Users/soulofall/projects/cstrike/results/culpur.net/loot.json`
-- `/Users/soulofall/projects/cstrike/test_new_endpoints.py`
-- `/Users/soulofall/projects/cstrike/API_DOCUMENTATION_CONFIG_RESULTS.md`
-- `/Users/soulofall/projects/cstrike/IMPLEMENTATION_SUMMARY_CONFIG_RESULTS.md`
+- `results/culpur.net/results.json`
+- `results/culpur.net/loot.json`
+- `test_new_endpoints.py`
+- `API_DOCUMENTATION_CONFIG_RESULTS.md`
+- `IMPLEMENTATION_SUMMARY_CONFIG_RESULTS.md`
 
 ---
 

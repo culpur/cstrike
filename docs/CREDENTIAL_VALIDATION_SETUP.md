@@ -8,7 +8,7 @@ The credential validation system requires the following Python packages:
 
 ```bash
 # Navigate to project root
-cd /Users/soulofall/projects/cstrike
+cd 
 
 # Install required packages
 pip install paramiko requests
@@ -257,7 +257,7 @@ pip install paramiko
 
 ### Adjust Timeout
 
-Edit `/Users/soulofall/projects/cstrike/modules/credential_validator.py`:
+Edit `modules/credential_validator.py`:
 
 ```python
 # Increase timeout for slow networks
@@ -266,7 +266,7 @@ CONNECTION_TIMEOUT = 30  # Default: 10
 
 ### Adjust Batch Size
 
-Edit `/Users/soulofall/projects/cstrike/api_server.py`:
+Edit `api_server.py`:
 
 ```python
 # Increase max batch size
@@ -275,7 +275,7 @@ MAX_BATCH_SIZE = 100  # Default: 50
 
 ### Enable Debug Logging
 
-Edit `/Users/soulofall/projects/cstrike/api_server.py`:
+Edit `api_server.py`:
 
 ```python
 logging.basicConfig(
@@ -334,9 +334,9 @@ sed -i 's/"password":"[^"]*"/"password":"REDACTED"/g' logs/driver.log
 ## Support
 
 For issues or questions:
-1. Check backend logs: `/Users/soulofall/projects/cstrike/logs/driver.log`
+1. Check backend logs: `logs/driver.log`
 2. Check browser console for frontend errors
-3. Review API documentation: `/Users/soulofall/projects/cstrike/docs/CREDENTIAL_VALIDATION_SYSTEM.md`
+3. Review API documentation: `docs/CREDENTIAL_VALIDATION_SYSTEM.md`
 4. Verify all dependencies installed correctly
 
 ## Summary

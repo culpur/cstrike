@@ -4,7 +4,7 @@
 
 ### Before You Start Coding
 
-- [ ] Navigate to project directory: `cd /Users/soulofall/projects/cstrike`
+- [ ] Navigate to project directory: `cd `
 - [ ] Pull latest changes: `git pull`
 - [ ] Start development servers: `./START_DEV_SERVERS.sh`
 - [ ] Wait for health checks to pass

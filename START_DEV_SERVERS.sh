@@ -23,7 +23,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Project paths
-PROJECT_ROOT="/Users/soulofall/projects/cstrike"
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 WEB_DIR="$PROJECT_ROOT/web"
 BACKEND_SCRIPT="$PROJECT_ROOT/api_server.py"
 

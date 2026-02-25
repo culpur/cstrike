@@ -43,7 +43,7 @@ lsof -i :3000
 ```
 
 ### Vite Proxy Configuration - CORRECT
-File: `/Users/soulofall/projects/cstrike/web/vite.config.ts`
+File: `web/vite.config.ts`
 
 ```typescript
 export default defineConfig({
@@ -74,27 +74,27 @@ This configuration is PERFECT - no changes needed!
 
 ```bash
 # Start both backend and frontend
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh
+START_DEV_SERVERS.sh
 
 # Or start only frontend (if backend is already running)
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh frontend
+START_DEV_SERVERS.sh frontend
 
 # Check status
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh status
+START_DEV_SERVERS.sh status
 
 # Stop all servers
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh stop
+START_DEV_SERVERS.sh stop
 ```
 
 ### Option 2: Manual Startup
 
 ```bash
 # Terminal 1: Backend (if not running)
-cd /Users/soulofall/projects/cstrike
+cd 
 python3 api_server.py
 
 # Terminal 2: Frontend
-cd /Users/soulofall/projects/cstrike/web
+cd web
 npm run dev
 ```
 
@@ -102,11 +102,11 @@ npm run dev
 
 ```bash
 # Start backend in background
-cd /Users/soulofall/projects/cstrike
+cd 
 nohup python3 api_server.py > logs/backend.log 2>&1 &
 
 # Start frontend in background
-cd /Users/soulofall/projects/cstrike/web
+cd web
 nohup npm run dev > ../logs/frontend.log 2>&1 &
 
 # Monitor logs
@@ -168,14 +168,14 @@ lsof -ti:8000 | xargs kill -9
 ### Issue 3: npm dependencies not installed
 
 ```bash
-cd /Users/soulofall/projects/cstrike/web
+cd web
 npm install
 ```
 
 ### Issue 4: Vite build errors
 
 ```bash
-cd /Users/soulofall/projects/cstrike/web
+cd web
 
 # Clear cache
 rm -rf node_modules/.vite
@@ -276,21 +276,21 @@ Response Headers:
 ## Files Checked and Verified
 
 ### ✅ Backend Configuration
-- **File**: `/Users/soulofall/projects/cstrike/api_server.py`
+- **File**: `api_server.py`
 - **Status**: CORRECT
 - **CORS**: Properly configured for `http://localhost:3000`
 - **Port**: 8000
 - **Process**: Running (PID can be found with `ps aux | grep api_server.py`)
 
 ### ✅ Frontend Vite Configuration
-- **File**: `/Users/soulofall/projects/cstrike/web/vite.config.ts`
+- **File**: `web/vite.config.ts`
 - **Status**: CORRECT
 - **Proxy**: Properly configured for `/api` and `/socket.io`
 - **Port**: 3000
 - **Process**: NOT RUNNING ❌ (This is the problem!)
 
 ### ✅ Frontend Package Configuration
-- **File**: `/Users/soulofall/projects/cstrike/web/package.json`
+- **File**: `web/package.json`
 - **Status**: CORRECT
 - **Dependencies**: All necessary packages installed
 - **Scripts**: `npm run dev` command available
@@ -304,7 +304,7 @@ Response Headers:
 lsof -i :3000 :8000
 
 # Start both servers (recommended)
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh
+START_DEV_SERVERS.sh
 
 # Test backend
 curl http://localhost:8000/api/v1/targets
@@ -313,11 +313,11 @@ curl http://localhost:8000/api/v1/targets
 curl http://localhost:3000/api/v1/targets
 
 # View logs
-tail -f /Users/soulofall/projects/cstrike/logs/backend.log
-tail -f /Users/soulofall/projects/cstrike/logs/frontend.log
+tail -f logs/backend.log
+tail -f logs/frontend.log
 
 # Stop all servers
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh stop
+START_DEV_SERVERS.sh stop
 ```
 
 ---
@@ -377,5 +377,5 @@ If issues persist after following this guide:
 5. Clear browser cache and try again
 
 **Log Locations:**
-- Backend: `/Users/soulofall/projects/cstrike/logs/backend.log`
-- Frontend: `/Users/soulofall/projects/cstrike/logs/frontend.log`
+- Backend: `logs/backend.log`
+- Frontend: `logs/frontend.log`

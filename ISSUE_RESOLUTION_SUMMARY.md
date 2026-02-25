@@ -35,7 +35,7 @@ When the Vite dev server is not running:
 - **Test**: `curl http://localhost:8000/api/v1/targets` returned `{"targets": ["culpur.net"]}`
 
 #### ✅ Vite Configuration - CORRECT (No changes needed)
-- **File**: `/Users/soulofall/projects/cstrike/web/vite.config.ts`
+- **File**: `web/vite.config.ts`
 - **Proxy**: Properly configured
   - `/api` → `http://localhost:8000`
   - `/socket.io` → `http://localhost:8000` (WebSocket support)
@@ -52,7 +52,7 @@ When the Vite dev server is not running:
 ## Solution Implemented
 
 ### 1. Automated Startup Script
-**File**: `/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh`
+**File**: `START_DEV_SERVERS.sh`
 
 **Features**:
 - Starts backend API server on port 8000
@@ -66,25 +66,25 @@ When the Vite dev server is not running:
 **Usage**:
 ```bash
 # Start both servers
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh
+START_DEV_SERVERS.sh
 
 # Start only frontend
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh frontend
+START_DEV_SERVERS.sh frontend
 
 # Start only backend
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh backend
+START_DEV_SERVERS.sh backend
 
 # Check status
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh status
+START_DEV_SERVERS.sh status
 
 # Stop all servers
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh stop
+START_DEV_SERVERS.sh stop
 ```
 
 ### 2. Comprehensive Documentation
 
 #### Frontend Development Guide
-**File**: `/Users/soulofall/projects/cstrike/web/README_DEVELOPMENT.md`
+**File**: `web/README_DEVELOPMENT.md`
 
 **Contents**:
 - Quick start instructions
@@ -96,7 +96,7 @@ When the Vite dev server is not running:
 - Path aliases documentation
 
 #### Troubleshooting Guide
-**File**: `/Users/soulofall/projects/cstrike/FRONTEND_BACKEND_TROUBLESHOOTING.md`
+**File**: `FRONTEND_BACKEND_TROUBLESHOOTING.md`
 
 **Contents**:
 - Detailed root cause analysis
@@ -113,7 +113,7 @@ When the Vite dev server is not running:
 Tested the solution:
 ```bash
 # Started Vite dev server
-cd /Users/soulofall/projects/cstrike/web && npm run dev
+cd web && npm run dev
 
 # Verified port binding
 lsof -i :3000
@@ -135,15 +135,15 @@ All tests passed successfully!
 ## Files Created/Modified
 
 ### Created Files
-1. `/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh` - Automated startup script
-2. `/Users/soulofall/projects/cstrike/FRONTEND_BACKEND_TROUBLESHOOTING.md` - Troubleshooting guide
-3. `/Users/soulofall/projects/cstrike/web/README_DEVELOPMENT.md` - Developer documentation
-4. `/Users/soulofall/projects/cstrike/ISSUE_RESOLUTION_SUMMARY.md` - This file
+1. `START_DEV_SERVERS.sh` - Automated startup script
+2. `FRONTEND_BACKEND_TROUBLESHOOTING.md` - Troubleshooting guide
+3. `web/README_DEVELOPMENT.md` - Developer documentation
+4. `ISSUE_RESOLUTION_SUMMARY.md` - This file
 
 ### Verified (No Changes Needed)
-1. `/Users/soulofall/projects/cstrike/web/vite.config.ts` - Already correct
-2. `/Users/soulofall/projects/cstrike/api_server.py` - Already correct
-3. `/Users/soulofall/projects/cstrike/web/package.json` - Already correct
+1. `web/vite.config.ts` - Already correct
+2. `api_server.py` - Already correct
+3. `web/package.json` - Already correct
 
 ---
 
@@ -152,7 +152,7 @@ All tests passed successfully!
 ### For Immediate Fix
 ```bash
 # Quick fix: Just start the frontend dev server
-cd /Users/soulofall/projects/cstrike/web
+cd web
 npm run dev
 
 # Then access: http://localhost:3000
@@ -161,7 +161,7 @@ npm run dev
 ### For Development Workflow
 ```bash
 # Use the automated script (recommended)
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh
+START_DEV_SERVERS.sh
 
 # This will:
 # 1. Start backend on port 8000
@@ -290,11 +290,11 @@ After implementing the solution:
 ```bash
 # Backend running
 $ lsof -i :8000
-Python  80103 soulofall  11u  IPv4  0x2fe3578e0f031123  0t0  TCP *:irdmi (LISTEN) ✅
+Python  80103 operator  11u  IPv4  0x2fe3578e0f031123  0t0  TCP *:irdmi (LISTEN) ✅
 
 # Frontend running
 $ lsof -i :3000
-node    82783 soulofall  13u  IPv6  0xa2f3f21bf943350e  0t0  TCP localhost:hbci (LISTEN) ✅
+node    82783 operator  13u  IPv6  0xa2f3f21bf943350e  0t0  TCP localhost:hbci (LISTEN) ✅
 
 # Backend direct access works
 $ curl http://localhost:8000/api/v1/targets
@@ -333,7 +333,7 @@ The issue is now fixed and documented. Future developers can use:
 
 ### Start Development Environment
 ```bash
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh
+START_DEV_SERVERS.sh
 ```
 
 ### Verify Everything Is Working
@@ -353,7 +353,7 @@ open http://localhost:3000
 
 ### Stop Development Environment
 ```bash
-/Users/soulofall/projects/cstrike/START_DEV_SERVERS.sh stop
+START_DEV_SERVERS.sh stop
 ```
 
 ---

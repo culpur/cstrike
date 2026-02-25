@@ -13,7 +13,7 @@
 
 ### 1. Backup Current Version
 ```bash
-cd /Users/soulofall/projects/cstrike
+cd 
 cp api_server.py api_server.py.backup.$(date +%Y%m%d_%H%M%S)
 ```
 
@@ -45,7 +45,7 @@ ps aux | grep api_server.py
 
 ### 4. Start New API Server
 ```bash
-cd /Users/soulofall/projects/cstrike
+cd 
 python3 api_server.py
 
 # Or with systemd
@@ -198,7 +198,7 @@ pkill -f "python.*api_server.py"
 
 ### 2. Restore Backup
 ```bash
-cd /Users/soulofall/projects/cstrike
+cd 
 cp api_server.py.backup.* api_server.py
 # Choose the most recent backup
 ```
@@ -238,7 +238,7 @@ Document:
 ### 1. Document Issues
 ```bash
 # Create deployment log
-cat > /Users/soulofall/projects/cstrike/DEPLOYMENT_LOG_FIX_2.txt << EOF
+cat > DEPLOYMENT_LOG_FIX_2.txt << EOF
 Date: $(date)
 Deployed: Backend Fix #2
 Status: SUCCESS
@@ -261,19 +261,19 @@ EOF
 ### 4. Clean Up Old Backups
 ```bash
 # After 7 days of stable operation
-find /Users/soulofall/projects/cstrike -name "api_server.py.backup.*" -mtime +7 -delete
+find  -name "api_server.py.backup.*" -mtime +7 -delete
 ```
 
 ## Support Resources
 
 ### Documentation
-- `/Users/soulofall/projects/cstrike/BACKEND_FIX_SERVICE_STATUS_AND_LOGS.md`
-- `/Users/soulofall/projects/cstrike/QUICK_REFERENCE_BACKEND_FIX_2.md`
-- `/Users/soulofall/projects/cstrike/VERIFICATION_SUMMARY_FIX_2.txt`
+- `BACKEND_FIX_SERVICE_STATUS_AND_LOGS.md`
+- `QUICK_REFERENCE_BACKEND_FIX_2.md`
+- `VERIFICATION_SUMMARY_FIX_2.txt`
 
 ### Key Files
-- Modified: `/Users/soulofall/projects/cstrike/api_server.py`
-- Logs: `/Users/soulofall/projects/cstrike/logs/driver.log`
+- Modified: `api_server.py`
+- Logs: `logs/driver.log`
 
 ### Testing Commands
 ```bash
@@ -281,7 +281,7 @@ find /Users/soulofall/projects/cstrike -name "api_server.py.backup.*" -mtime +7 
 curl http://localhost:8000/api/v1/status
 
 # Full test suite
-cd /Users/soulofall/projects/cstrike
+cd 
 bash DEPLOYMENT_CHECKLIST_FIX_2.md  # Use test commands above
 ```
 

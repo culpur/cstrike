@@ -9,7 +9,7 @@ echo "[+] Enabling Tor service..."
 systemctl enable --now tor
 
 echo "[+] Setting up WireGuard config..."
-WG_CONFIG="/etc/wireguard/nord_lith.conf"
+WG_CONFIG="/etc/wireguard/wg0.conf"
 if [ ! -f "$WG_CONFIG" ]; then
   echo "WireGuard config $WG_CONFIG not found. Aborting."
   exit 1
@@ -24,13 +24,13 @@ ENDPOINT=$(grep Endpoint "$WG_CONFIG" | awk '{print $3}' | cut -d: -f1)
 # Replace eth1 and eth0 with your actual interface names if different
 VPN_IFACE="eth1"
 MGMT_IFACE="eth0"
-GATEWAY_IP="10.0.70.5"
+GATEWAY_IP="10.0.0.1"
 
 echo "[+] Adding custom route to VPN endpoint ($ENDPOINT) via $VPN_IFACE..."
 ip route add "$ENDPOINT" via "$GATEWAY_IP" dev "$VPN_IFACE" || true
 
 echo "[+] Starting WireGuard..."
-wg-quick up nord_lith
+wg-quick up wg0
 
 echo "[+] Confirming routes:"
 ip route get 1.1.1.1
