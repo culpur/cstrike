@@ -1,0 +1,341 @@
+// CStrike v2 — Prisma Schema
+// PostgreSQL 16 — Full persistence layer for the offensive security platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Configuration — Versioned key-value store (replaces .env / JSON config)
+// ============================================================================
+
+model ConfigEntry {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  version   Int      @default(1)
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@map("config_entries")
+}
+
+// ============================================================================
+// Targets — Scan targets with lifecycle tracking
+// ============================================================================
+
+model Target {
+  id        String       @id @default(cuid())
+  url       String
+  ip        String?
+  hostname  String?
+  status    TargetStatus @default(PENDING)
+  tags      String[]     @default([])
+  notes     String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  // Relations
+  scans       Scan[]
+  lootItems   LootItem[]
+  credentials CredentialPair[]
+
+  @@unique([url])
+  @@index([status])
+  @@map("targets")
+}
+
+enum TargetStatus {
+  PENDING
+  SCANNING
+  COMPLETE
+  FAILED
+}
+
+// ============================================================================
+// Scans — Full scan lifecycle with multi-phase pipeline
+// ============================================================================
+
+model Scan {
+  id        String     @id @default(cuid())
+  targetId  String
+  status    ScanStatus @default(QUEUED)
+  phase     ScanPhase  @default(IDLE)
+  mode      String     @default("full")
+  tools     String[]   @default([])
+  progress  String?    // "5/15" format
+  startedAt DateTime?
+  endedAt   DateTime?
+  error     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  target     Target       @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  results    ScanResult[]
+  aiThoughts AIThought[]
+  logEntries LogEntry[]
+
+  @@index([targetId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("scans")
+}
+
+enum ScanStatus {
+  QUEUED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ScanPhase {
+  IDLE
+  RECON
+  AI_ANALYSIS_1
+  WEB_SCANS
+  VULNAPI
+  METASPLOIT
+  AI_ANALYSIS_2
+  EXPLOITATION
+  REPORTING
+  COMPLETE
+}
+
+// ============================================================================
+// Scan Results — Polymorphic results by type
+// ============================================================================
+
+model ScanResult {
+  id         String         @id @default(cuid())
+  scanId     String
+  resultType ScanResultType
+  data       Json
+  severity   Severity?
+  source     String?        // Tool that produced this result
+  createdAt  DateTime       @default(now())
+
+  // Relations
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([resultType])
+  @@index([severity])
+  @@map("scan_results")
+}
+
+enum ScanResultType {
+  PORT_SCAN
+  SUBDOMAIN
+  HTTP_ENDPOINT
+  TECHNOLOGY
+  VULNERABILITY
+  WEB_SCAN
+  EXPLOIT_RESULT
+  VULNAPI_FINDING
+  RAW_OUTPUT
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+// ============================================================================
+// Loot — Collected intelligence from scans
+// ============================================================================
+
+model LootItem {
+  id        String       @id @default(cuid())
+  targetId  String?
+  category  LootCategory
+  value     String
+  source    String       // Tool or method that found this
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  // Relations
+  target Target? @relation(fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@index([targetId])
+  @@index([category])
+  @@index([createdAt])
+  @@map("loot_items")
+}
+
+enum LootCategory {
+  USERNAME
+  PASSWORD
+  HASH
+  URL
+  PORT
+  CREDENTIAL
+  FILE
+  TOKEN
+  API_KEY
+  SESSION
+}
+
+// ============================================================================
+// Credentials — Credential pairs with scoring and validation
+// ============================================================================
+
+model CredentialPair {
+  id               String           @id @default(cuid())
+  targetId         String?
+  username         String
+  password         String
+  service          String?          // ssh, ftp, http, smb, rdp, etc.
+  port             Int?
+  validationStatus ValidationStatus @default(UNTESTED)
+  score            Float?
+  scoreBreakdown   Json?
+  source           String           // How this was discovered
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relations
+  target Target? @relation(fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@index([targetId])
+  @@index([validationStatus])
+  @@index([score])
+  @@map("credential_pairs")
+}
+
+enum ValidationStatus {
+  UNTESTED
+  VALID
+  INVALID
+  ERROR
+  EXPIRED
+}
+
+// ============================================================================
+// AI Thoughts — AI reasoning stream and decision log
+// ============================================================================
+
+model AIThought {
+  id          String        @id @default(cuid())
+  scanId      String?
+  thoughtType AIThoughtType
+  content     String
+  command     String?
+  metadata    Json?
+  createdAt   DateTime      @default(now())
+
+  // Relations
+  scan Scan? @relation(fields: [scanId], references: [id], onDelete: SetNull)
+
+  @@index([scanId])
+  @@index([thoughtType])
+  @@index([createdAt])
+  @@map("ai_thoughts")
+}
+
+enum AIThoughtType {
+  REASONING
+  COMMAND
+  DECISION
+  OBSERVATION
+  AI_PROMPT
+  AI_RESPONSE
+  AI_DECISION
+  AI_EXECUTION
+}
+
+// ============================================================================
+// Log Entries — Structured application logs
+// ============================================================================
+
+model LogEntry {
+  id        String   @id @default(cuid())
+  scanId    String?
+  level     LogLevel
+  source    String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  // Relations
+  scan Scan? @relation(fields: [scanId], references: [id], onDelete: SetNull)
+
+  @@index([scanId])
+  @@index([level])
+  @@index([createdAt])
+  @@map("log_entries")
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+  CRITICAL
+}
+
+// ============================================================================
+// Services — Service health tracking
+// ============================================================================
+
+model Service {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  status    ServiceStatus @default(STOPPED)
+  port      Int?
+  pid       Int?
+  error     String?
+  uptime    Int?          // seconds
+  optional  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("services")
+}
+
+enum ServiceStatus {
+  RUNNING
+  STOPPED
+  ERROR
+  STARTING
+  STOPPING
+}
+
+// ============================================================================
+// VPN Connections — VPN state and routing
+// ============================================================================
+
+model VpnConnection {
+  id          String    @id @default(cuid())
+  provider    String    // wireguard, openvpn, tailscale, nordvpn, mullvad
+  interface   String?   // wg0, tun0, tailscale0, nordlynx
+  status      VpnStatus @default(DISCONNECTED)
+  publicIp    String?
+  assignedIp  String?
+  server      String?   // VPN server/region
+  connectedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([provider])
+  @@map("vpn_connections")
+}
+
+enum VpnStatus {
+  CONNECTED
+  CONNECTING
+  DISCONNECTED
+  ERROR
+}

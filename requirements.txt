@@ -33,6 +33,9 @@ click>=8.1.8
 colorama>=0.4.6
 rich>=13.9.4
 
+# Terminal UI
+textual>=8.0.0
+
 # Data parsing
 PyYAML>=6.0.2
 beautifulsoup4>=4.13.4

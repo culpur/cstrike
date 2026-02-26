@@ -99,6 +99,25 @@ class ApiService {
     await this.client.post(`/services/${service}/restart`);
   }
 
+  async getAIProvider(): Promise<{ provider: string; model: string; status: string }> {
+    const { data } = await this.client.get('/ai/provider');
+    return data;
+  }
+
+  async switchAIProvider(provider: string, model?: string): Promise<void> {
+    await this.client.put('/ai/provider', { provider, model });
+  }
+
+  async getMCPTools(): Promise<Array<{ name: string; description: string }>> {
+    const { data } = await this.client.get('/mcp/tools');
+    return data.tools || [];
+  }
+
+  async invokeMCPTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
+    const { data } = await this.client.post(`/mcp/tools/${toolName}`, args);
+    return data;
+  }
+
   // ============================================================================
   // Reconnaissance
   // ============================================================================

@@ -1,36 +1,45 @@
 @import "tailwindcss";
 
 :root {
-  /* Grok Dark Theme Variables */
+  /* CStrike Dark Ops Theme */
   --grok-void: #000000;
-  --grok-surface-1: #111111;
-  --grok-surface-2: #1E1E1E;
-  --grok-surface-3: #2A2A2A;
-  --grok-border: #333333;
-  --grok-text-heading: #FFFFFF;
-  --grok-text-body: #E0E0E0;
-  --grok-text-muted: #888888;
-  --grok-hover: #2A2A2A;
-  --grok-rail-bg: #0A0A0A;
+  --grok-surface-1: #0a0a0f;
+  --grok-surface-2: #12121a;
+  --grok-surface-3: #1a1a26;
+  --grok-border: #2a2a3a;
+  --grok-border-glow: #3a3a5a;
+  --grok-text-heading: #e8e8f0;
+  --grok-text-body: #b8b8c8;
+  --grok-text-muted: #6a6a80;
+  --grok-hover: #1e1e2e;
+  --grok-rail-bg: #060609;
 
-  /* Status colors */
-  --grok-success: #10B981;
-  --grok-warning: #F59E0B;
-  --grok-error: #EF4444;
-  --grok-info: #3B82F6;
+  /* Status — neon accents */
+  --grok-success: #00ff88;
+  --grok-warning: #ffaa00;
+  --grok-error: #ff3344;
+  --grok-info: #4488ff;
 
-  /* Offensive security themed */
-  --grok-exploit-red: #DC2626;
-  --grok-recon-blue: #2563EB;
-  --grok-loot-green: #059669;
-  --grok-ai-purple: #7C3AED;
+  /* Offensive security — signature colors */
+  --grok-exploit-red: #ff2040;
+  --grok-recon-blue: #2266ff;
+  --grok-loot-green: #00cc66;
+  --grok-ai-purple: #8844ff;
+  --grok-scan-cyan: #00ccdd;
+  --grok-crit-red: #ff0033;
+
+  /* Glow effects */
+  --glow-red: 0 0 12px rgba(255, 32, 64, 0.3);
+  --glow-blue: 0 0 12px rgba(34, 102, 255, 0.3);
+  --glow-green: 0 0 12px rgba(0, 255, 136, 0.3);
+  --glow-purple: 0 0 12px rgba(136, 68, 255, 0.3);
+  --glow-cyan: 0 0 12px rgba(0, 204, 221, 0.3);
 
   /* Typography */
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  /* Rendering optimizations */
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -56,40 +65,234 @@ body {
   color: var(--grok-text-body);
 }
 
-/* Custom scrollbar for dark theme */
+/* Scrollbar — minimal, dark */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--grok-surface-1);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--grok-surface-3);
-  border-radius: 4px;
+  background: var(--grok-border);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--grok-border);
+  background: var(--grok-border-glow);
 }
 
-/* Selection styling */
 ::selection {
-  background-color: var(--grok-recon-blue);
+  background-color: rgba(34, 102, 255, 0.4);
   color: var(--grok-text-heading);
 }
 
-/* Focus visible for accessibility */
 :focus-visible {
-  outline: 2px solid var(--grok-recon-blue);
-  outline-offset: 2px;
+  outline: 1px solid var(--grok-recon-blue);
+  outline-offset: 1px;
 }
 
-/* Monospace font for code/logs */
+/* Monospace — terminal aesthetic */
 code,
 pre,
 .font-mono {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* ── Animations ──────────────────────────────────────────────── */
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes border-glow {
+  0%, 100% { border-color: var(--grok-border); }
+  50% { border-color: var(--grok-border-glow); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-border-glow {
+  animation: border-glow 3s ease-in-out infinite;
+}
+
+/* ── Glow utilities ──────────────────────────────────────────── */
+
+.glow-red { box-shadow: var(--glow-red); }
+.glow-blue { box-shadow: var(--glow-blue); }
+.glow-green { box-shadow: var(--glow-green); }
+.glow-purple { box-shadow: var(--glow-purple); }
+.glow-cyan { box-shadow: var(--glow-cyan); }
+
+.text-glow-red { text-shadow: 0 0 8px rgba(255, 32, 64, 0.5); }
+.text-glow-green { text-shadow: 0 0 8px rgba(0, 255, 136, 0.5); }
+.text-glow-blue { text-shadow: 0 0 8px rgba(34, 102, 255, 0.5); }
+
+/* ── Status dot ──────────────────────────────────────────────── */
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot-running {
+  background: var(--grok-success);
+  box-shadow: 0 0 6px var(--grok-success);
+}
+
+.status-dot-stopped {
+  background: var(--grok-text-muted);
+}
+
+.status-dot-error {
+  background: var(--grok-error);
+  box-shadow: 0 0 6px var(--grok-error);
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+.status-dot-starting {
+  background: var(--grok-warning);
+  animation: pulse-glow 1s ease-in-out infinite;
+}
+
+/* ── Panel styling ───────────────────────────────────────────── */
+
+.cs-panel {
+  background: var(--grok-surface-1);
+  border: 1px solid var(--grok-border);
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+
+.cs-panel:hover {
+  border-color: var(--grok-border-glow);
+}
+
+.cs-panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--grok-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--grok-text-muted);
+}
+
+/* ── Service card ────────────────────────────────────────────── */
+
+.svc-card {
+  background: var(--grok-surface-2);
+  border: 1px solid var(--grok-border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  transition: all 0.2s;
+}
+
+.svc-card:hover {
+  border-color: var(--grok-border-glow);
+  background: var(--grok-surface-3);
+}
+
+.svc-card-healthy {
+  border-left: 3px solid var(--grok-success);
+}
+
+.svc-card-error {
+  border-left: 3px solid var(--grok-error);
+}
+
+.svc-card-stopped {
+  border-left: 3px solid var(--grok-text-muted);
+}
+
+.svc-card-starting {
+  border-left: 3px solid var(--grok-warning);
+}
+
+/* ── Metric value ────────────────────────────────────────────── */
+
+.metric-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--grok-text-heading);
+}
+
+.metric-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--grok-text-muted);
+}
+
+/* ── Action button ───────────────────────────────────────────── */
+
+.cs-btn {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--grok-border);
+  background: var(--grok-surface-2);
+  color: var(--grok-text-body);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cs-btn:hover {
+  background: var(--grok-surface-3);
+  border-color: var(--grok-border-glow);
+}
+
+.cs-btn-primary {
+  background: var(--grok-recon-blue);
+  border-color: var(--grok-recon-blue);
+  color: white;
+}
+
+.cs-btn-primary:hover {
+  box-shadow: var(--glow-blue);
+}
+
+.cs-btn-danger {
+  background: transparent;
+  border-color: var(--grok-error);
+  color: var(--grok-error);
+}
+
+.cs-btn-danger:hover {
+  background: rgba(255, 51, 68, 0.1);
+  box-shadow: var(--glow-red);
+}
+
+.cs-btn-success {
+  background: transparent;
+  border-color: var(--grok-success);
+  color: var(--grok-success);
+}
+
+.cs-btn-success:hover {
+  background: rgba(0, 255, 136, 0.1);
+  box-shadow: var(--glow-green);
 }

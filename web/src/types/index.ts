@@ -21,10 +21,21 @@ export interface SystemMetrics {
   timestamp: number;
 }
 
+export interface ServiceInfo {
+  status: ServiceStatus;
+  port: number;
+  pid?: number | null;
+  error?: string;
+  optional?: boolean;
+  uptime?: number;
+}
+
 export interface ServiceState {
   metasploitRpc: ServiceStatus;
   zap: ServiceStatus;
   burp: ServiceStatus;
+  api_server?: ServiceStatus;
+  frontend?: ServiceStatus;
 }
 
 export interface PhaseProgress {
@@ -426,15 +437,58 @@ export interface ToastNotification {
 
 export interface Config {
   openai_api_key: string;
+  anthropic_api_key?: string;
+  grok_api_key?: string;
+  ai_provider: string;
+  ollama_model?: string;
+  ollama_host?: string;
+  openai_model?: string;
+  anthropic_model?: string;
+  grok_model?: string;
   allow_exploitation: boolean;
   scan_modes: string[];
   allowed_tools: string[];
   max_threads: number;
   max_runtime: number;
+  ai_max_iterations?: number;
+  ai_max_tokens?: number;
+  ai_temperature?: number;
+  mcp_enabled?: boolean;
   msf_username: string;
   msf_password: string;
   msf_host: string;
   msf_port: number;
   zap_host: string;
   zap_port: number;
+  target_scope?: string[];
+}
+
+// ============================================================================
+// VPN Types
+// ============================================================================
+
+export type VpnProvider = 'wireguard' | 'openvpn' | 'tailscale' | 'nordvpn' | 'mullvad';
+
+export type VpnStatusType = 'connected' | 'connecting' | 'disconnected' | 'error';
+
+export interface VpnConnection {
+  provider: VpnProvider;
+  interface: string;
+  status: VpnStatusType;
+  publicIp: string | null;
+  assignedIp: string | null;
+  server: string | null;
+  connectedAt: number | null;
+}
+
+// ============================================================================
+// Feature Status Types
+// ============================================================================
+
+export interface FeatureStatus {
+  name: string;
+  category: 'recon' | 'exploit' | 'ai' | 'service' | 'network';
+  enabled: boolean;
+  available: boolean;
+  detail?: string;
 }

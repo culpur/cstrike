@@ -1,0 +1,207 @@
+/* CStrike TUI — Textual CSS */
+
+/* ── Global ───────────────────────────────────────── */
+Screen {
+    background: $surface;
+}
+
+/* ── Startup screen ──────────────────────────────── */
+StartupScreen {
+    align: center middle;
+}
+
+#startup-container {
+    width: 70;
+    height: auto;
+    max-height: 80%;
+    border: heavy $accent;
+    padding: 1 2;
+    background: $surface;
+}
+
+#startup-title {
+    text-align: center;
+    text-style: bold;
+    color: $text;
+    margin-bottom: 1;
+}
+
+#startup-log {
+    height: auto;
+    max-height: 20;
+    margin-top: 1;
+    border: round $primary-background-lighten-2;
+    padding: 0 1;
+}
+
+.service-row {
+    height: 1;
+    margin: 0 1;
+}
+
+.service-name {
+    width: 20;
+    color: $text;
+}
+
+.service-indicator {
+    width: 12;
+    text-align: right;
+}
+
+.status-healthy {
+    color: $success;
+}
+
+.status-starting {
+    color: $warning;
+}
+
+.status-failed {
+    color: $error;
+}
+
+.status-stopped {
+    color: $text-muted;
+}
+
+/* ── Dashboard screen ────────────────────────────── */
+#header-bar {
+    dock: top;
+    height: 1;
+    background: $accent;
+    color: $text;
+    padding: 0 2;
+    text-style: bold;
+}
+
+#footer-bar {
+    dock: bottom;
+    height: 1;
+    background: $primary-background-lighten-1;
+    color: $text-muted;
+    padding: 0 1;
+}
+
+#main-content {
+    height: 1fr;
+}
+
+#sidebar {
+    width: 22;
+    dock: left;
+    border-right: solid $primary-background-lighten-2;
+    padding: 1 0;
+}
+
+#sidebar-services {
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+#sidebar-services-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#sidebar-phase {
+    height: auto;
+    padding: 0 1;
+}
+
+#sidebar-phase-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#phase-label {
+    color: $warning;
+}
+
+#tab-content {
+    height: 1fr;
+}
+
+/* ── Tab panes ───────────────────────────────────── */
+#dashboard-pane {
+    padding: 1;
+}
+
+#logs-pane {
+    padding: 0;
+}
+
+#ai-pane {
+    padding: 1;
+}
+
+#findings-pane {
+    padding: 1;
+}
+
+/* ── Service status widget ───────────────────────── */
+ServiceStatusPanel {
+    height: auto;
+}
+
+.svc-line {
+    height: 1;
+}
+
+.svc-dot {
+    width: 3;
+}
+
+.dot-healthy {
+    color: $success;
+}
+
+.dot-starting {
+    color: $warning;
+}
+
+.dot-stopped {
+    color: $text-muted;
+}
+
+.dot-failed {
+    color: $error;
+}
+
+.svc-label {
+    width: 1fr;
+}
+
+/* ── Log viewer ──────────────────────────────────── */
+LogViewer {
+    height: 1fr;
+}
+
+#log-output {
+    height: 1fr;
+    border: round $primary-background-lighten-2;
+}
+
+/* ── AI thoughts ─────────────────────────────────── */
+AIThoughtsPanel {
+    height: 1fr;
+}
+
+#ai-log {
+    height: 1fr;
+    border: round $primary-background-lighten-2;
+}
+
+/* ── Target table ────────────────────────────────── */
+TargetTable {
+    height: auto;
+    max-height: 50%;
+}
+
+/* ── Loot summary ────────────────────────────────── */
+LootSummary {
+    height: 1fr;
+}

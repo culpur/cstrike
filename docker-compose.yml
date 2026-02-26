@@ -1,0 +1,140 @@
+# CStrike v2 — Docker Compose Stack
+# All services use network_mode: host for direct host tool access
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+#   docker exec -it cstrike-api python -m tui
+
+services:
+  # ── PostgreSQL 16 ──────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: cstrike-postgres
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cstrike}
+      POSTGRES_USER: ${POSTGRES_USER:-cstrike}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cstrike}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cstrike} -d ${POSTGRES_DB:-cstrike}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Redis 7 ────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: cstrike-redis
+    network_mode: host
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-cstrike}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-cstrike}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── CStrike API ────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: cstrike-api
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cstrike}:${POSTGRES_PASSWORD:-cstrike}@127.0.0.1:5432/${POSTGRES_DB:-cstrike}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-cstrike}@127.0.0.1:6379
+      CORS_ORIGINS: http://localhost:3000,https://cstrike,https://cstrike.local
+      HOST_BIN_PATH: /host/usr/bin
+      HOST_SBIN_PATH: /host/usr/sbin
+      HOST_LOCAL_BIN_PATH: /host/usr/local/bin
+      HOST_OPT_PATH: /host/opt
+      LOG_LEVEL: info
+      METRICS_INTERVAL: "2000"
+    volumes:
+      # Host tool access (read-only bind mounts)
+      - /usr/bin:/host/usr/bin:ro
+      - /usr/sbin:/host/usr/sbin:ro
+      - /usr/local/bin:/host/usr/local/bin:ro
+      - /opt:/host/opt:ro
+      # Shared data
+      - /usr/share/wordlists:/usr/share/wordlists:ro
+      - apidata:/opt/cstrike/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ── CStrike Web Frontend ───────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: cstrike-frontend
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Traefik Reverse Proxy ──────────────────────────────────
+  traefik:
+    image: traefik:v3.3
+    container_name: cstrike-traefik
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      - api
+      - frontend
+    command:
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      - "--providers.file.watch=true"
+      - "--entryPoints.web.address=:80"
+      - "--entryPoints.websecure.address=:443"
+      - "--entryPoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entryPoints.web.http.redirections.entryPoint.scheme=https"
+      - "--log.level=INFO"
+      - "--accesslog=true"
+      - "--api.dashboard=false"
+    volumes:
+      - ./docker/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./docker/certs:/certs:ro
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  apidata:
+    driver: local

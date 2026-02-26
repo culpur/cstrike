@@ -1,0 +1,69 @@
+#cloud-config
+# CStrike VM — Cloud-Init Configuration
+# Debian 12 (Bookworm) base for Proxmox deployment
+
+hostname: cstrike
+fqdn: cstrike.local
+manage_etc_hosts: true
+timezone: UTC
+
+locale: en_US.UTF-8
+
+users:
+  - name: soulofall
+    groups: sudo
+    shell: /bin/zsh
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINxbkRVj+GuR6+l0TfQa97TosRkiwDn2/EtFCC1migB+ soulofall@guard
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - net-tools
+  - curl
+  - wget
+  - jq
+  - git
+  - zsh
+  - tmux
+  - htop
+  - vim
+  - unzip
+  - gnupg
+  - ca-certificates
+  - apt-transport-https
+  - lsb-release
+  - python3
+  - python3-pip
+  - python3-venv
+  - sudo
+
+write_files:
+  - path: /etc/network/interfaces.d/eth0
+    content: |
+      auto eth0
+      iface eth0 inet dhcp
+    permissions: '0644'
+
+  - path: /etc/network/interfaces.d/eth1
+    content: |
+      auto eth1
+      iface eth1 inet dhcp
+    permissions: '0644'
+
+  - path: /etc/issue.net
+    content: |
+      ################################################################
+      #  AUTHORIZED ACCESS ONLY — All activity is monitored and logged
+      #  Unauthorized access is prohibited and will be prosecuted
+      ################################################################
+    permissions: '0644'
+
+runcmd:
+  - systemctl enable --now qemu-guest-agent 2>/dev/null || true
+  - echo "cloud-init complete" > /var/log/cloud-init-done
+
+final_message: "CStrike VM cloud-init complete after $UPTIME seconds"

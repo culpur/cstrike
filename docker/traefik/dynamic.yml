@@ -1,0 +1,107 @@
+# CStrike v2 — Traefik Dynamic Configuration
+# Routes traffic to API (:3001) and Frontend (:3000)
+
+http:
+  # ── Routers ──────────────────────────────────────────────
+  routers:
+    # API routes (higher priority)
+    api:
+      rule: "PathPrefix(`/api/`)"
+      service: api
+      priority: 10
+      entryPoints:
+        - websecure
+      tls: {}
+      middlewares:
+        - security-headers
+        - rate-limit
+        - compress
+
+    # WebSocket route
+    websocket:
+      rule: "PathPrefix(`/socket.io/`)"
+      service: api
+      priority: 10
+      entryPoints:
+        - websecure
+      tls: {}
+
+    # Health check
+    health:
+      rule: "Path(`/health`)"
+      service: api
+      priority: 10
+      entryPoints:
+        - websecure
+      tls: {}
+
+    # Frontend catch-all (lowest priority)
+    frontend:
+      rule: "PathPrefix(`/`)"
+      service: frontend
+      priority: 1
+      entryPoints:
+        - websecure
+      tls: {}
+      middlewares:
+        - security-headers
+        - compress
+
+  # ── Services ─────────────────────────────────────────────
+  services:
+    api:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:3001"
+
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:3000"
+
+  # ── Middlewares ──────────────────────────────────────────
+  middlewares:
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        customResponseHeaders:
+          X-Powered-By: ""
+          Server: ""
+        contentSecurityPolicy: >-
+          default-src 'self';
+          script-src 'self' 'unsafe-inline';
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data:;
+          connect-src 'self' ws: wss:;
+          font-src 'self';
+          object-src 'none';
+          base-uri 'self';
+          form-action 'self'
+
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1s
+
+    compress:
+      compress:
+        excludedContentTypes:
+          - text/event-stream
+
+# ── TLS ────────────────────────────────────────────────────
+tls:
+  certificates:
+    - certFile: /certs/cstrike.crt
+      keyFile: /certs/cstrike.key
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/cstrike.crt
+        keyFile: /certs/cstrike.key

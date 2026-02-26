@@ -1,5 +1,5 @@
 /**
- * Sidebar Component - Collapsible rail navigation
+ * Sidebar Component — Collapsible rail navigation with dark-ops aesthetic
  */
 
 import {
@@ -13,134 +13,202 @@ import {
   ChevronRight,
   Swords,
   Trophy,
+  Server,
+  Skull,
 } from 'lucide-react';
 import { useUIStore } from '@stores/uiStore';
+import { useSystemStore } from '@stores/systemStore';
 import { cn } from '@utils/index';
 
 const navigationItems = [
   {
     id: 'dashboard',
-    label: 'Dashboard',
+    label: 'Command Center',
     icon: LayoutDashboard,
-    path: '/dashboard',
+    section: 'ops',
+  },
+  {
+    id: 'services',
+    label: 'Services',
+    icon: Server,
+    section: 'ops',
   },
   {
     id: 'targets',
     label: 'Targets',
     icon: Target,
-    path: '/targets',
+    section: 'attack',
   },
   {
     id: 'ai-stream',
     label: 'AI Stream',
     icon: Brain,
-    path: '/ai-stream',
+    section: 'attack',
   },
   {
     id: 'exploitation',
     label: 'Exploitation',
     icon: Swords,
-    path: '/exploitation',
-  },
-  {
-    id: 'results',
-    label: 'Results',
-    icon: FolderOpen,
-    path: '/results',
+    section: 'attack',
   },
   {
     id: 'loot',
     label: 'Loot',
     icon: Trophy,
-    path: '/loot',
+    section: 'intel',
+  },
+  {
+    id: 'results',
+    label: 'Results',
+    icon: FolderOpen,
+    section: 'intel',
   },
   {
     id: 'logs',
     label: 'Logs',
     icon: FileText,
-    path: '/logs',
+    section: 'system',
   },
   {
     id: 'config',
     label: 'Configuration',
     icon: Settings,
-    path: '/config',
+    section: 'system',
   },
+];
+
+const sections = [
+  { id: 'ops', label: 'Operations' },
+  { id: 'attack', label: 'Attack' },
+  { id: 'intel', label: 'Intel' },
+  { id: 'system', label: 'System' },
 ];
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, activeView, setActiveView } =
     useUIStore();
+  const { connected } = useSystemStore();
 
   return (
     <div
       className={cn(
-        'h-full bg-grok-rail-bg border-r border-grok-border flex flex-col transition-all duration-300',
-        sidebarCollapsed ? 'w-16' : 'w-64'
+        'h-full flex flex-col transition-all duration-300',
+        'bg-[var(--grok-rail-bg)] border-r border-[var(--grok-border)]',
+        sidebarCollapsed ? 'w-16' : 'w-56'
       )}
     >
-      {/* Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-grok-border">
+      {/* Logo */}
+      <div className="h-14 flex items-center justify-between px-3 border-b border-[var(--grok-border)]">
         {!sidebarCollapsed && (
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-grok-exploit-red rounded flex items-center justify-center">
-              <span className="text-white font-bold text-sm">CS</span>
+            <div className="w-7 h-7 bg-[var(--grok-exploit-red)] rounded flex items-center justify-center glow-red">
+              <Skull className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-grok-text-heading">CStrike</span>
+            <span className="font-bold text-sm text-[var(--grok-text-heading)] tracking-wide">
+              CSTRIKE
+            </span>
           </div>
         )}
-        <button
-          onClick={toggleSidebar}
-          className="p-1.5 hover:bg-grok-surface-2 rounded transition-colors"
-          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="w-5 h-5 text-grok-text-muted" />
-          ) : (
-            <ChevronLeft className="w-5 h-5 text-grok-text-muted" />
-          )}
-        </button>
+        {sidebarCollapsed && (
+          <div className="w-7 h-7 bg-[var(--grok-exploit-red)] rounded flex items-center justify-center glow-red mx-auto">
+            <Skull className="w-4 h-4 text-white" />
+          </div>
+        )}
+        {!sidebarCollapsed && (
+          <button
+            onClick={toggleSidebar}
+            className="p-1 hover:bg-[var(--grok-surface-2)] rounded transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4 text-[var(--grok-text-muted)]" />
+          </button>
+        )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-        {navigationItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeView === item.id;
-
-          return (
+      <nav className="flex-1 py-2 overflow-y-auto">
+        {sidebarCollapsed ? (
+          /* Collapsed — just icons */
+          <div className="space-y-1 px-2">
+            {navigationItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveView(item.id)}
+                  className={cn(
+                    'w-full flex items-center justify-center p-2.5 rounded transition-all',
+                    isActive
+                      ? 'bg-[var(--grok-recon-blue)] text-white glow-blue'
+                      : 'text-[var(--grok-text-muted)] hover:text-[var(--grok-text-body)] hover:bg-[var(--grok-surface-2)]'
+                  )}
+                  title={item.label}
+                >
+                  <Icon className="w-4 h-4" />
+                </button>
+              );
+            })}
             <button
-              key={item.id}
-              onClick={() => setActiveView(item.id)}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors',
-                'hover:bg-grok-surface-2',
-                isActive
-                  ? 'bg-grok-recon-blue text-white'
-                  : 'text-grok-text-body'
-              )}
-              title={sidebarCollapsed ? item.label : undefined}
+              onClick={toggleSidebar}
+              className="w-full flex items-center justify-center p-2.5 rounded text-[var(--grok-text-muted)] hover:bg-[var(--grok-surface-2)] mt-2"
+              title="Expand"
             >
-              <Icon className="w-5 h-5 flex-shrink-0" />
-              {!sidebarCollapsed && (
-                <span className="text-sm font-medium">{item.label}</span>
-              )}
-              {isActive && !sidebarCollapsed && (
-                <div className="ml-auto w-1.5 h-1.5 bg-white rounded-full" />
-              )}
+              <ChevronRight className="w-4 h-4" />
             </button>
-          );
-        })}
-      </nav>
-
-      {/* Footer */}
-      <div className="p-4 border-t border-grok-border">
-        {!sidebarCollapsed && (
-          <div className="text-xs text-grok-text-muted">
-            <p>CStrike v1.0.0</p>
-            <p className="mt-1">Offensive Security Framework</p>
+          </div>
+        ) : (
+          /* Expanded — grouped sections */
+          <div className="space-y-3 px-2">
+            {sections.map((section) => {
+              const items = navigationItems.filter((i) => i.section === section.id);
+              return (
+                <div key={section.id}>
+                  <div className="px-2 py-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--grok-text-muted)]">
+                      {section.label}
+                    </span>
+                  </div>
+                  {items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeView === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveView(item.id)}
+                        className={cn(
+                          'w-full flex items-center gap-2.5 px-2.5 py-2 rounded transition-all text-left',
+                          isActive
+                            ? 'bg-[var(--grok-recon-blue)]/15 text-[var(--grok-recon-blue)] border-l-2 border-[var(--grok-recon-blue)]'
+                            : 'text-[var(--grok-text-body)] hover:bg-[var(--grok-surface-2)] border-l-2 border-transparent'
+                        )}
+                      >
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="text-xs font-medium">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
         )}
+      </nav>
+
+      {/* Connection indicator */}
+      <div className="px-3 py-3 border-t border-[var(--grok-border)]">
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              'status-dot',
+              connected ? 'status-dot-running' : 'status-dot-error'
+            )}
+          />
+          {!sidebarCollapsed && (
+            <span className="text-[10px] text-[var(--grok-text-muted)] font-mono">
+              {connected ? 'CONNECTED' : 'OFFLINE'}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

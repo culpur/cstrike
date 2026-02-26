@@ -9,25 +9,28 @@ export default {
       colors: {
         grok: {
           void: '#000000',
-          'surface-1': '#111111',
-          'surface-2': '#1E1E1E',
-          'surface-3': '#2A2A2A',
-          border: '#333333',
-          'text-heading': '#FFFFFF',
-          'text-body': '#E0E0E0',
-          'text-muted': '#888888',
-          hover: '#2A2A2A',
-          'rail-bg': '#0A0A0A',
-          // Accent colors for status indicators
-          success: '#10B981',
-          warning: '#F59E0B',
-          error: '#EF4444',
-          info: '#3B82F6',
-          // Offensive security themed accents
-          'exploit-red': '#DC2626',
-          'recon-blue': '#2563EB',
-          'loot-green': '#059669',
-          'ai-purple': '#7C3AED',
+          'surface-1': '#0a0a0f',
+          'surface-2': '#12121a',
+          'surface-3': '#1a1a26',
+          border: '#2a2a3a',
+          'border-glow': '#3a3a5a',
+          'text-heading': '#e8e8f0',
+          'text-body': '#b8b8c8',
+          'text-muted': '#6a6a80',
+          hover: '#1e1e2e',
+          'rail-bg': '#060609',
+          // Neon status
+          success: '#00ff88',
+          warning: '#ffaa00',
+          error: '#ff3344',
+          info: '#4488ff',
+          // Offensive security
+          'exploit-red': '#ff2040',
+          'recon-blue': '#2266ff',
+          'loot-green': '#00cc66',
+          'ai-purple': '#8844ff',
+          'scan-cyan': '#00ccdd',
+          'crit-red': '#ff0033',
         }
       },
       fontFamily: {
@@ -36,13 +39,23 @@ export default {
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'scan': 'scan 2s linear infinite',
+        'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'fade-in': 'fade-in 0.2s ease-out',
+        'border-glow': 'border-glow 3s ease-in-out infinite',
       },
       keyframes: {
-        scan: {
-          '0%, 100%': { opacity: 0.3 },
-          '50%': { opacity: 1 },
-        }
+        'pulse-glow': {
+          '0%, 100%': { opacity: 1 },
+          '50%': { opacity: 0.5 },
+        },
+        'fade-in': {
+          from: { opacity: 0, transform: 'translateY(4px)' },
+          to: { opacity: 1, transform: 'translateY(0)' },
+        },
+        'border-glow': {
+          '0%, 100%': { borderColor: '#2a2a3a' },
+          '50%': { borderColor: '#3a3a5a' },
+        },
       }
     },
   },

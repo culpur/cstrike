@@ -1,5 +1,5 @@
 /**
- * System Store - Manages system metrics, services, and phase state
+ * System Store — system metrics, services, phase state
  */
 
 import { create } from 'zustand';
@@ -9,6 +9,7 @@ import type {
   PhaseProgress,
   PhaseType,
   ServiceStatus,
+  VpnConnection,
 } from '@/types';
 
 interface SystemStore {
@@ -17,13 +18,15 @@ interface SystemStore {
   services: ServiceState;
   phaseProgress: PhaseProgress;
   connected: boolean;
+  vpnConnections: VpnConnection[];
 
   // Actions
   updateMetrics: (metrics: Partial<SystemMetrics>) => void;
-  updateServiceStatus: (service: keyof ServiceState, status: ServiceStatus) => void;
+  updateServiceStatus: (service: string, status: ServiceStatus) => void;
   updatePhase: (phase: PhaseType) => void;
-  setPhaseComplete: (phase: keyof Omit<PhaseProgress, 'currentPhase'>, complete: boolean) => void;
+  setPhaseComplete: (phase: string, complete: boolean) => void;
   setConnected: (connected: boolean) => void;
+  setVpnConnections: (connections: VpnConnection[]) => void;
   reset: () => void;
 }
 
@@ -51,13 +54,12 @@ const initialPhaseProgress: PhaseProgress = {
 };
 
 export const useSystemStore = create<SystemStore>((set) => ({
-  // Initial state
   metrics: initialMetrics,
   services: initialServices,
   phaseProgress: initialPhaseProgress,
   connected: false,
+  vpnConnections: [],
 
-  // Actions
   updateMetrics: (metrics) =>
     set((state) => ({
       metrics: {
@@ -93,11 +95,14 @@ export const useSystemStore = create<SystemStore>((set) => ({
 
   setConnected: (connected) => set({ connected }),
 
+  setVpnConnections: (connections) => set({ vpnConnections: connections }),
+
   reset: () =>
     set({
       metrics: initialMetrics,
       services: initialServices,
       phaseProgress: initialPhaseProgress,
       connected: false,
+      vpnConnections: [],
     }),
 }));

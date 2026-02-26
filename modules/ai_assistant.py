@@ -7,6 +7,9 @@ from pathlib import Path
 # Live thoughts queue (used by TUI for streaming sidebar)
 AI_THOUGHTS = []
 
+# Observer pattern for TUI thought streaming
+_thought_observers: list = []
+
 # Load config
 try:
     CONFIG = json.loads(Path(".env").read_text())
@@ -35,11 +38,35 @@ def _get_provider():
     return _provider
 
 
+def register_thought_observer(callback):
+    """Register a callback to receive new thoughts in real time.
+
+    Args:
+        callback: Callable that receives a single thought string.
+    """
+    if callback not in _thought_observers:
+        _thought_observers.append(callback)
+
+
+def unregister_thought_observer(callback):
+    """Remove a previously registered thought observer."""
+    try:
+        _thought_observers.remove(callback)
+    except ValueError:
+        pass
+
+
 def stream_thought(thought):
-    """Send a new thought to the global stream queue."""
+    """Send a new thought to the global stream queue and notify observers."""
     if len(AI_THOUGHTS) >= 20:
         AI_THOUGHTS.pop(0)
-    AI_THOUGHTS.append(f"🧠 {thought}")
+    formatted = f"🧠 {thought}"
+    AI_THOUGHTS.append(formatted)
+    for observer in _thought_observers:
+        try:
+            observer(formatted)
+        except Exception:
+            pass
 
 
 SYSTEM_PROMPT = (
