@@ -67,9 +67,33 @@ api.use('/loot/credentials', credentialsRouter);
 
 app.use('/api/v1', api);
 
-// Health check (outside versioned API)
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now() });
+// Health check (outside versioned API) — verifies DB + Redis connectivity
+app.get('/health', async (_req, res) => {
+  const checks: Record<string, string> = {};
+  let healthy = true;
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    checks.database = 'ok';
+  } catch {
+    checks.database = 'error';
+    healthy = false;
+  }
+
+  try {
+    const pong = await redis.ping();
+    checks.redis = pong === 'PONG' ? 'ok' : 'error';
+  } catch {
+    checks.redis = 'error';
+    healthy = false;
+  }
+
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    checks,
+    uptime: Math.floor(process.uptime()),
+    timestamp: Date.now(),
+  });
 });
 
 // ── Error handler (must be last) ────────────────────────────
