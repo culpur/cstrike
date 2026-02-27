@@ -1,6 +1,14 @@
 <p align="center">
-  <strong>CStrike</strong><br>
-  Autonomous Offensive Security Framework
+  <img src="assets/cstrike-banner-800.png" alt="CStrike v2" width="800" />
+</p>
+
+<p align="center">
+  <strong>Autonomous Offensive Security Platform</strong><br>
+  <sub>Containerized Docker stack | 35+ integrated tools | AI-driven 9-phase attack pipeline</sub>
+</p>
+
+<p align="center">
+  <img src="assets/cstrike-icon-100.png" alt="" width="40" />
 </p>
 
 <p align="center">
@@ -13,7 +21,7 @@
 
 ---
 
-CStrike is an autonomous penetration testing framework that chains reconnaissance, AI-driven analysis, vulnerability scanning, exploitation, and reporting into a single orchestrated workflow. It operates in two modes: a headless CLI pipeline (`cstrike.py`) and a full-stack web application with real-time dashboards.
+CStrike v2 is an autonomous offensive security platform with a containerized Docker stack, real-time web dashboard, and AI-driven scan orchestration across 35+ integrated tools. Features a 9-phase attack pipeline (recon through exploitation), multi-provider AI reasoning (OpenAI, Anthropic, Ollama, Grok) with MCP tool server, nftables VPN kill switch across 5 providers, Metasploit RPC automation, and remote browser access via KasmVNC. Built for red team operations on isolated infrastructure with engagement lifecycle management, OPSEC gating, and emergency wipe capability.
 
 Built for authorized red team engagements. Requires explicit scope authorization before use.
 

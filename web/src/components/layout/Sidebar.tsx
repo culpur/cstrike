@@ -14,11 +14,11 @@ import {
   Swords,
   Trophy,
   Server,
-  Skull,
 } from 'lucide-react';
 import { useUIStore } from '@stores/uiStore';
 import { useSystemStore } from '@stores/systemStore';
 import { cn } from '@utils/index';
+import cstrikeIcon from '@assets/cstrike-icon-64.png';
 
 const navigationItems = [
   {
@@ -101,18 +101,14 @@ export function Sidebar() {
       <div className="h-14 flex items-center justify-between px-3 border-b border-[var(--grok-border)]">
         {!sidebarCollapsed && (
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-[var(--grok-exploit-red)] rounded flex items-center justify-center glow-red">
-              <Skull className="w-4 h-4 text-white" />
-            </div>
+            <img src={cstrikeIcon} alt="CStrike" className="w-8 h-8 rounded" />
             <span className="font-bold text-sm text-[var(--grok-text-heading)] tracking-wide">
-              CSTRIKE
+              CSTRIKE<span className="text-[var(--grok-exploit-red)]">v2</span>
             </span>
           </div>
         )}
         {sidebarCollapsed && (
-          <div className="w-7 h-7 bg-[var(--grok-exploit-red)] rounded flex items-center justify-center glow-red mx-auto">
-            <Skull className="w-4 h-4 text-white" />
-          </div>
+          <img src={cstrikeIcon} alt="CStrike" className="w-8 h-8 rounded mx-auto" />
         )}
         {!sidebarCollapsed && (
           <button
