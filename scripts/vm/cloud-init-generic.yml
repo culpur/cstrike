@@ -1,0 +1,88 @@
+#cloud-config
+# CStrike v2 — Generic Cloud-Init Configuration
+# Compatible with AWS EC2, GCP Compute Engine, Azure VMs, DigitalOcean Droplets,
+# Hetzner Cloud, Vultr, and any cloud provider supporting cloud-init.
+#
+# Usage:
+#   AWS:          Paste into "User data" when launching an EC2 instance (Debian 12 AMI)
+#   GCP:          --metadata-from-file user-data=cloud-init-generic.yml
+#   Azure:        --custom-data cloud-init-generic.yml
+#   DigitalOcean: --user-data cloud-init-generic.yml
+#   Proxmox:      qm set <vmid> --cicustom "user=local:snippets/cloud-init-generic.yml"
+#
+# Requirements:
+#   - Debian 12 (Bookworm) base image
+#   - Minimum: 4 vCPU, 8 GB RAM, 50 GB disk
+#   - Ports 22, 80, 443, 6901 open in security group / firewall
+
+# ── System ──────────────────────────────────────────────────
+hostname: cstrike
+fqdn: cstrike.local
+manage_etc_hosts: true
+timezone: UTC
+locale: en_US.UTF-8
+
+# ── Users ───────────────────────────────────────────────────
+users:
+  - name: cstrike
+    gecos: CStrike Operator
+    groups: sudo, docker
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      # Replace with your SSH public key:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA_REPLACE_WITH_YOUR_KEY operator@workstation
+
+# ── Packages ────────────────────────────────────────────────
+package_update: true
+package_upgrade: true
+packages:
+  - curl
+  - wget
+  - git
+  - jq
+  - ca-certificates
+  - gnupg
+  - apt-transport-https
+  - lsb-release
+  - sudo
+
+# ── Bootstrap ──────────────────────────────────────────────
+# Clones CStrike and runs the master installer.
+# Full provisioning takes ~30-45 minutes depending on instance size.
+runcmd:
+  # Install Docker first (needed by install.sh)
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  - chmod a+r /etc/apt/keyrings/docker.gpg
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update -qq
+  - apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - systemctl enable --now docker
+  - usermod -aG docker cstrike
+
+  # Clone CStrike
+  - git clone https://github.com/culpur/cstrike.git /opt/cstrike
+
+  # Run master installer (non-interactive)
+  - bash /opt/cstrike/install.sh 2>&1 | tee /var/log/cstrike-install.log
+
+  # Write completion marker
+  - echo "CStrike v2 installation completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /opt/cstrike/.install-complete
+
+  # Log access info
+  - echo ""
+  - echo "══════════════════════════════════════════════════════"
+  - echo "  CStrike v2 installed. Access:"
+  - echo "  Dashboard  — https://$(hostname -I | awk '{print $1}')/"
+  - echo "  Kasm VNC   — https://$(hostname -I | awk '{print $1}'):6901/"
+  - echo "  Credentials — /opt/cstrike/.env"
+  - echo "══════════════════════════════════════════════════════"
+
+# ── Output ──────────────────────────────────────────────────
+final_message: |
+  CStrike v2 cloud-init complete.
+  Installation log: /var/log/cstrike-install.log
+  Completion marker: /opt/cstrike/.install-complete
+  System uptime: $UPTIME

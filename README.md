@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Autonomous Offensive Security Platform</strong><br>
-  <sub>Containerized Docker stack | 35+ integrated tools | AI-driven 9-phase attack pipeline</sub>
+  <sub>6-container Docker stack | 35+ integrated tools | AI-driven 9-phase attack pipeline</sub>
 </p>
 
 <p align="center">
@@ -13,33 +13,19 @@
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> |
+  <a href="#architecture">Architecture</a> |
   <a href="#web-ui">Web UI</a> |
-  <a href="#cli-mode">CLI Mode</a> |
+  <a href="#tui-mode">TUI</a> |
   <a href="#api-reference">API</a> |
+  <a href="#distribution">Distribution</a> |
   <a href="#documentation">Docs</a>
 </p>
 
 ---
 
-CStrike v2 is an autonomous offensive security platform with a containerized Docker stack, real-time web dashboard, and AI-driven scan orchestration across 35+ integrated tools. Features a 9-phase attack pipeline (recon through exploitation), multi-provider AI reasoning (OpenAI, Anthropic, Ollama, Grok) with MCP tool server, nftables VPN kill switch across 5 providers, Metasploit RPC automation, and remote browser access via KasmVNC. Built for red team operations on isolated infrastructure with engagement lifecycle management, OPSEC gating, and emergency wipe capability.
+CStrike v2 is an autonomous offensive security platform built on a containerized Docker stack with a real-time web dashboard and AI-driven scan orchestration across 35+ integrated tools. Features a 9-phase attack pipeline (recon through exploitation), multi-provider AI reasoning (OpenAI, Anthropic, Ollama, Grok) with MCP tool server, nftables VPN kill switch across 5 providers (WireGuard, OpenVPN, Tailscale, NordVPN, Mullvad), Metasploit RPC automation, and remote browser access via KasmVNC. Built for red team operations on isolated infrastructure with engagement lifecycle management, OPSEC gating, and emergency wipe capability.
 
 Built for authorized red team engagements. Requires explicit scope authorization before use.
-
----
-
-## Prerequisites
-
-| Dependency | Version | Purpose |
-|-----------|---------|---------|
-| Python | 3.11+ | Backend runtime |
-| Node.js | 20+ | Web UI frontend |
-| nmap | 7.x | Port scanning / service detection |
-| OpenAI API key | GPT-4o | AI-driven command chaining |
-| Metasploit Framework | 6.x | Exploit automation (optional) |
-| OWASP ZAP | 2.14+ | Web app scanning (optional) |
-| VulnAPI | latest | API security scanning (optional) |
-
-**Recon tools** (install as needed): `amass`, `subfinder`, `httpx`, `nikto`, `wafw00f`, `whatweb`, `dnsrecon`, `dnsenum`, `nuclei`, `ffuf`, `sqlmap`, `hydra`, `masscan`, `theHarvester`, `wpscan`, `enum4linux-ng`
 
 ---
 
@@ -52,44 +38,87 @@ cd cstrike
 
 # Configure
 cp .env.example .env
-# Edit .env — set target_scope and openai_api_key at minimum
+# Edit .env — set POSTGRES_PASSWORD, REDIS_PASSWORD, KASM_PASSWORD
 
-# Install Python dependencies
-bash setup.sh
-source venv/bin/activate
+# Generate TLS certificates
+bash docker/generate-certs.sh
 
-# Run (choose one)
-python3 cstrike.py                  # CLI — headless 9-phase pipeline
-bash START_CSTRIKE.sh               # Web — API server + React frontend
+# Start the stack
+docker compose up -d
+
+# Seed the database (first run only)
+docker exec cstrike-api npx prisma db seed
 ```
 
-The web UI launches at **http://localhost:3000** with the API backend on **http://localhost:8000**.
+| Access Point | URL |
+|-------------|-----|
+| HTTPS Dashboard | `https://localhost/` |
+| Remote Browser (Kasm) | `https://localhost:6901/` |
+| TUI | `docker exec -it cstrike-api python -m tui` |
+| Health Check | `curl -sk https://localhost/health` |
+
+> **Full install** from bare metal? Run `sudo bash install.sh` on Debian 12. See [Distribution](#distribution).
 
 ---
 
 ## Architecture
 
 ```
-                          ┌──────────────────────────────────┐
-                          │          React Web UI             │
-                          │  localhost:3000 (Vite dev server) │
-                          └──────────┬───────────────────────┘
-                                     │ REST + WebSocket
-                          ┌──────────▼───────────────────────┐
-                          │   Flask + Socket.IO API Server    │
-                          │        localhost:8000              │
-                          └──────────┬───────────────────────┘
-                                     │
-          ┌──────────┬───────────┬───┴───┬───────────┬──────────┐
-          ▼          ▼           ▼       ▼           ▼          ▼
-       recon.py  zap_burp.py vulnapi.py metasploit.py exploit.py ai_assistant.py
-          │          │           │       │           │          │
-          ▼          ▼           ▼       ▼           ▼          ▼
-       nmap,dig   ZAP/Burp   VulnAPI  msfrpcd   nuclei,    OpenAI
-       amass...   proxies    DAST      RPC      ffuf,hydra  GPT-4o
+                          ┌─────────────────────────────────────┐
+                          │   Traefik v3.3 Reverse Proxy         │
+                          │   :80 (redirect) → :443 (HTTPS)      │
+                          └─────────────┬───────────────────────┘
+                     ┌──────────────────┼──────────────────┐
+                     │                  │                  │
+              /api/* + /socket.io/*     │           /* (catch-all)
+                     │                  │                  │
+          ┌──────────▼──────────┐       │      ┌───────────▼──────────┐
+          │  Express 5 API       │       │      │  React 19 Frontend    │
+          │  :3001               │       │      │  :3000                │
+          │  TypeScript + Prisma │       │      │  Vite 7 + Tailwind 4  │
+          └────┬───────────┬────┘       │      └──────────────────────┘
+               │           │            │
+        ┌──────▼──┐  ┌─────▼─────┐      │      ┌─────────────────────┐
+        │ PG 16   │  │ Redis 7   │      │      │  KasmVNC :6901       │
+        │ :5432   │  │ :6379     │      │      │  Remote Chrome       │
+        └─────────┘  └───────────┘      │      │  (bridge network)    │
+                                        │      └─────────────────────┘
+          ┌─────────────────────────────┘
+          │  Host bind mounts (read-only)
+          │  /usr/bin, /usr/local/bin, /opt → 35+ security tools
+          │  nmap, nuclei, ffuf, hydra, sqlmap, impacket, ...
 ```
 
-**CLI mode** (`cstrike.py`) runs the same module stack directly without the API layer.
+All containers use `network_mode: host` for direct access to host tools and VPN interfaces, except Kasm which uses bridge networking with port mapping.
+
+---
+
+## Prerequisites
+
+| Dependency | Version | Purpose |
+|-----------|---------|---------|
+| Docker Engine | 24+ | Container runtime |
+| Docker Compose | v2 (plugin) | Stack orchestration |
+| Debian 12 | Bookworm | Host OS (recommended) |
+
+**Hardware:** 4 CPU cores, 8 GB RAM, 50 GB disk minimum.
+
+**Host tools:** The API container executes security tools via bind-mounted host directories. Without tools installed on the host, scans will fail. Run `scripts/vm/provision-host.sh` for full installation, or see [Bare Metal Install](docs/BARE_METAL_INSTALL.md).
+
+---
+
+## Docker Stack
+
+| Container | Image | Port | Purpose |
+|-----------|-------|------|---------|
+| `cstrike-postgres` | `postgres:16-alpine` | 5432 | Primary database (10 models, Prisma ORM) |
+| `cstrike-redis` | `redis:7-alpine` | 6379 | LRU cache + AOF persistence |
+| `cstrike-api` | Custom (Node 22 + Python 3.12) | 3001 | REST API + WebSocket + MCP server |
+| `cstrike-frontend` | Custom (Node 22 Alpine) | 3000 | React web dashboard (served by `serve@14`) |
+| `cstrike-traefik` | `traefik:v3.3` | 80, 443 | TLS reverse proxy, security headers, rate limiting |
+| `cstrike-kasm` | `kasmweb/chrome:1.16.0` | 6901 | Remote browser session (KasmVNC) |
+
+Named volumes: `pgdata`, `redisdata`, `apidata`.
 
 ---
 
@@ -100,72 +129,63 @@ CStrike executes a 9-phase pipeline per target. Each phase feeds results forward
 | # | Phase | Modules | Output |
 |---|-------|---------|--------|
 | 1 | **Reconnaissance** | nmap, dig, amass, subfinder, httpx, nikto, wafw00f, whatweb, dnsrecon | Port map, subdomains, tech stack, headers |
-| 2 | **AI Analysis** | OpenAI GPT-4o | Suggested commands, attack vectors |
+| 2 | **AI Analysis** | OpenAI / Anthropic / Ollama / Grok | Suggested commands, attack vectors |
 | 3 | **Web Scanning** | OWASP ZAP, Burp Suite | Web vulnerabilities, injection points |
 | 4 | **Web Exploitation** | nuclei, ffuf, sqlmap, hydra | CVEs, directory findings, SQLi, brute-force |
 | 5 | **API Security** | VulnAPI (discover, curl, openapi) | API endpoints, OWASP API Top 10 findings |
 | 6 | **Metasploit** | msfrpcd RPC | Exploit sessions, post-exploitation data |
 | 7 | **Exploitation Chains** | Auto-chained from phases 2-6 | Credential reuse, lateral movement |
-| 8 | **AI Follow-up** | OpenAI GPT-4o | Pivot suggestions, missed vectors |
+| 8 | **AI Follow-up** | OpenAI / Anthropic / Ollama / Grok | Pivot suggestions, missed vectors |
 | 9 | **Reporting** | loot_tracker, results compiler | JSON results, loot summary, credentials |
 
 ---
 
 ## Web UI
 
-The frontend is a React 19 / TypeScript / Tailwind CSS application with a dark theme.
+The frontend is a React 19 / TypeScript / Tailwind CSS 4 application with a dark theme and 9 view modules.
 
 | Module | Description |
 |--------|-------------|
-| **Dashboard** | System metrics (CPU, RAM, VPN IP), service status, phase progress |
-| **Targets** | Add/manage targets, launch scans, view results per target |
-| **AI Stream** | Real-time GPT-4o thought stream and command decisions |
+| **Command Center** | System metrics (CPU, RAM, VPN IP), service status, scan launcher, AI feed |
+| **Services** | Service health panel (API, Metasploit, ZAP, Burp) |
+| **Targets** | Add/manage targets, launch scans, view per-target results |
+| **AI Stream** | Real-time AI thought stream and command decisions |
 | **Exploitation** | Web vuln exploitation controls, brute-force configuration |
 | **Loot** | Credential tracker with sensitivity heatmaps and export |
-| **Live Logs** | Streaming log viewer with ERROR/WARN filtering |
-| **Configuration** | Scan mode toggles, tool allowlist, service connections |
+| **Results** | Scan results browser with severity filtering |
+| **Logs** | Streaming log viewer with level filtering |
+| **Configuration** | AI provider selection, scan modes, tool allowlist, service connections |
 
 ### WebSocket Events
 
-The frontend receives real-time updates via Socket.IO:
+Real-time updates via Socket.IO:
 
 | Event | Payload |
 |-------|---------|
-| `recon_output` | Tool progress, output previews, completion status |
-| `ai_thought` | AI reasoning stream |
-| `phase_change` | Pipeline phase transitions |
-| `vulnapi_output` | API scan progress and findings |
-| `loot_item` | New credential/vulnerability discoveries |
-| `log_entry` | Runtime log lines |
-
-### Starting the Web UI
-
-```bash
-# Option 1: Combined startup with health checks
-bash START_CSTRIKE.sh
-
-# Option 2: Dev servers with log tailing
-./START_DEV_SERVERS.sh              # both
-./START_DEV_SERVERS.sh backend      # API only
-./START_DEV_SERVERS.sh frontend     # React only
-./START_DEV_SERVERS.sh stop         # stop all
-
-# Option 3: Manual
-python3 api_server.py &             # API on :8000
-cd web && npm run dev               # React on :3000
-```
+| `system_metrics` | CPU %, memory %, VPN IP, uptime |
+| `recon_output` | Tool name, target, output, completion status |
+| `ai_thought` | Thought type, content, command |
+| `ai_command_execution` | Command, status, output |
+| `phase_change` | Phase name, target, status |
+| `scan_complete` | Target, scan ID, stats |
+| `exploit_started` | Target |
+| `exploit_result` | Vulnerability, severity, target |
+| `exploit_completed` | Target |
+| `loot_item` | Category, value, source, target |
+| `vulnapi_output` | Target, findings |
+| `log_entry` | Level, source, message |
+| `status_update` | Metrics, services, phase |
+| `service_auto_start` | Service name, status |
 
 ---
 
-## CLI Mode
+## TUI Mode
 
-The CLI pipeline runs all 9 phases headless with a curses TUI dashboard.
+The Textual-based terminal UI runs inside the API container:
 
 ```bash
-python3 cstrike.py
+docker exec -it cstrike-api python -m tui
 ```
-
-The TUI shows live phase progress, AI thoughts, service status, and system metrics.
 
 | Key | Action |
 |-----|--------|
@@ -175,84 +195,98 @@ The TUI shows live phase progress, AI thoughts, service status, and system metri
 | `f` | Filter logs (ERROR/WARN) |
 | `q` | Quit |
 
-For single-target recon without the full pipeline:
-
-```bash
-python3 manual_recon_runner.py <target>
-```
-
 ---
 
 ## Configuration
 
-CStrike uses a JSON `.env` file (not dotenv format).
+CStrike uses a two-tier configuration model:
 
-```json
-{
-  "target_scope": ["example.com"],
-  "openai_api_key": "sk-...",
-  "allow_exploitation": true,
-  "scan_modes": ["port", "http", "dirbusting", "dns", "subdomain", "osint", "vulnscan", "apiscan"],
-  "allowed_tools": ["nmap", "ffuf", "httpx", "sqlmap", "dig", "subfinder", "amass", "nikto", "wafw00f", "nuclei", "hydra", "vulnapi"],
-  "max_threads": 10,
-  "max_runtime": 300,
-  "msf_username": "msf",
-  "msf_password": "",
-  "msf_host": "127.0.0.1",
-  "msf_port": 55552,
-  "zap_host": "127.0.0.1",
-  "zap_port": 8090
-}
-```
+### Infrastructure (`.env` file)
 
-| Field | Description |
-|-------|-------------|
-| `target_scope` | Authorized target domains/IPs |
-| `openai_api_key` | OpenAI API key for AI phases |
-| `allow_exploitation` | Enable/disable active exploitation |
-| `scan_modes` | Which scan categories to run |
-| `allowed_tools` | Allowlist of permitted external tools |
-| `max_runtime` | Per-tool timeout in seconds |
-| `msf_*` | Metasploit RPC connection settings |
-| `zap_*` | OWASP ZAP proxy connection settings |
+Controls Docker container settings. Edit before `docker compose up`:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `POSTGRES_PASSWORD` | PostgreSQL password | `changeme` |
+| `REDIS_PASSWORD` | Redis password | `changeme` |
+| `KASM_PASSWORD` | KasmVNC remote browser password | `CStr1k3!` |
+| `CORS_ORIGINS` | Allowed API origins | `http://localhost:3000,...` |
+| `LOG_LEVEL` | API log verbosity | `info` |
+
+### Operational (Web UI / REST API)
+
+AI providers, scan modes, target scope, and tool allowlists are stored in the PostgreSQL `ConfigEntry` table and managed via the Configuration module or `/api/v1/config` endpoints:
+
+| Setting | Options |
+|---------|---------|
+| AI Provider | OpenAI (GPT-4o/5), Anthropic (Claude), Ollama (local), Grok |
+| Scan Modes | port, http, dirbusting, dns, subdomain, osint, vulnscan, apiscan, web_exploit, smb, ldap, snmp, network, ssl, password, cloud |
+| Tool Allowlist | 60+ tools individually toggleable |
+| Target Scope | Authorized domains/IPs |
+| Exploitation Gate | Enable/disable active exploitation |
 
 ---
 
 ## API Reference
 
-The Flask API server exposes REST endpoints and WebSocket events.
+The Express 5 API server exposes 14 route groups under `/api/v1/` with Zod request validation, rate limiting (100 req/min per IP), and Helmet security headers.
 
 ### Scan Control
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/scan/start` | Start full pipeline for a target |
-| GET | `/api/v1/scan/status` | Current scan status |
-| POST | `/api/v1/vulnapi/scan` | Start VulnAPI scan (modes: full, curl, openapi) |
-| GET | `/api/v1/vulnapi/results/<target>` | VulnAPI results for target |
+| POST | `/api/v1/recon/start` | Start scan for a target |
+| GET | `/api/v1/recon/status/:id` | Scan status by ID |
+| GET | `/api/v1/recon/active` | List active scans |
+| POST | `/api/v1/recon/batch` | Start batch scan (up to 10 targets) |
+| DELETE | `/api/v1/recon/scans/:id` | Cancel a scan |
 
 ### Targets & Results
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/targets` | List all scanned targets |
-| GET | `/api/v1/results/<target>` | Compiled results for target |
-| GET | `/api/v1/loot/<target>` | Loot (credentials, vulns) for target |
+| GET | `/api/v1/targets` | List all targets |
+| POST | `/api/v1/targets` | Add a target |
+| GET | `/api/v1/results` | Query scan results |
+| GET | `/api/v1/loot` | Loot items (credentials, vulns) |
+| GET | `/api/v1/loot/credentials` | Credential pairs with scoring |
 
-### Services
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/services/status` | Metasploit/ZAP/Burp status |
-| POST | `/api/v1/services/<name>/start` | Start a service |
-| POST | `/api/v1/services/<name>/stop` | Stop a service |
-
-### System
+### AI & Exploitation
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/system/metrics` | CPU, RAM, VPN IP |
-| GET | `/api/v1/logs` | Recent log entries |
+| POST | `/api/v1/ai/analyze` | Trigger AI analysis |
+| GET | `/api/v1/ai/thoughts` | AI thought stream |
+| PUT | `/api/v1/ai/provider` | Switch AI provider |
+| POST | `/api/v1/exploit/start` | Start exploitation |
+| POST | `/api/v1/exploit/bruteforce` | Brute-force attack |
+
+### Services & System
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/status` | System metrics (CPU, RAM, VPN, uptime) |
+| GET | `/api/v1/services` | Service health states |
+| GET | `/api/v1/config` | Read configuration entries |
+| PUT | `/api/v1/config` | Update configuration |
+| GET | `/api/v1/logs` | Query log entries |
+
+### Integrations
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/vulnapi/scan` | Start VulnAPI DAST scan |
+| GET | `/api/v1/vulnapi/results/:target` | VulnAPI results |
+| GET | `/api/v1/mcp/tools` | List MCP tools |
+| POST | `/api/v1/mcp/tools/:name` | Execute MCP tool |
+| GET | `/api/v1/vpn` | VPN connection status |
+| POST | `/api/v1/vpn/:provider/connect` | Connect VPN provider |
+
+### Health
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Database + Redis health check (200/503) |
 
 ---
 
@@ -260,80 +294,115 @@ The Flask API server exposes REST endpoints and WebSocket events.
 
 ```
 cstrike/
-├── cstrike.py                   # CLI orchestrator — 9-phase pipeline
-├── api_server.py                # Flask + Socket.IO API server
-├── dashboard.py                 # Curses TUI dashboard
-├── manual_recon_runner.py       # Single-target recon runner
-├── run_command.py               # Tool allowlist gateway
-│
-├── modules/
-│   ├── recon.py                 # Layered reconnaissance (15+ tools)
-│   ├── exploitation.py          # Web exploitation chains
-│   ├── vulnapi.py               # VulnAPI DAST integration
-│   ├── zap_burp.py              # ZAP / Burp Suite integration
-│   ├── metasploit.py            # Metasploit RPC automation
-│   ├── ai_assistant.py          # OpenAI GPT integration
-│   ├── loot_tracker.py          # Credential & vuln loot tracking
-│   ├── credential_validator.py  # Credential validation (SSH, FTP)
-│   ├── black_ops.py             # Proxy chaining & agent routing
-│   └── utils/
-│       ├── __init__.py          # Command runner, result storage
-│       ├── command.py           # Command execution helpers
-│       └── logger.py            # Logging configuration
-│
-├── web/                         # React 19 / TypeScript / Tailwind frontend
+├── api/                            # Express 5 + TypeScript API
 │   ├── src/
-│   │   ├── modules/             # dashboard, targets, ai-stream, exploitation,
-│   │   │                        # loot, logs, results, configuration
-│   │   ├── components/          # Shared UI components
-│   │   ├── services/            # API client + WebSocket
-│   │   ├── stores/              # Zustand state management
-│   │   └── types/               # TypeScript interfaces
+│   │   ├── server.ts               # Entry point — Express + Socket.IO
+│   │   ├── config/                 # env, database, redis
+│   │   ├── routes/                 # 14 route modules
+│   │   ├── services/               # AI, metrics, scans, tools, VPN, MCP
+│   │   ├── middleware/             # guardrails, rate limiter, validation
+│   │   ├── schemas/                # Zod request validation
+│   │   ├── utils/                  # credential scoring, safe paths
+│   │   └── websocket/             # Socket.IO setup + typed emitter
+│   └── prisma/
+│       ├── schema.prisma           # 10 models, PostgreSQL 16
+│       └── seed.ts                 # Database seeder
+│
+├── web/                            # React 19 + TypeScript + Tailwind 4
+│   ├── src/
+│   │   ├── modules/               # 9 view modules (dashboard, targets, ai, ...)
+│   │   ├── components/            # Shared UI components
+│   │   ├── services/              # API client + WebSocket
+│   │   ├── stores/                # 7 Zustand state stores
+│   │   └── types/                 # TypeScript interfaces
 │   └── package.json
 │
-├── docs/                        # User-facing documentation
-│   ├── archive/                 # Historical dev docs
-│   └── legacy/                  # Deprecated files
+├── mcp_server/                     # Python MCP tool server (16 categories)
+│   ├── tools/                     # recon, web_exploit, metasploit, credentials, ...
+│   ├── guardrails.py              # Scope + tool + exploitation validation
+│   └── config.py                  # JSON config loader
 │
-├── results/                     # Per-target scan output (JSON)
-├── logs/                        # Runtime logs
-├── data/                        # Agent registry, runtime data
+├── tui/                            # Textual terminal UI
+│   ├── app.py                     # Main TUI app
+│   ├── screens/                   # dashboard, startup
+│   └── widgets/                   # ai_thoughts, log_viewer, loot_summary, ...
 │
-├── .env                         # Configuration (JSON format)
-├── .env.example                 # Configuration template
-├── requirements.txt             # Python dependencies (full)
-├── api_requirements.txt         # Python dependencies (API server)
-├── setup.sh                     # Python virtualenv setup
-├── setup_redteam_env.sh         # Redteam user + VPN routing setup
-├── setup_anon_env.sh            # Anonymous environment setup
-├── START_CSTRIKE.sh             # Web UI startup script
-├── START_DEV_SERVERS.sh         # Dev environment with health checks
-├── start_cstrike_web.sh         # Alternative web startup
-├── start_services.sh            # Start background services
-└── stop_services.sh             # Stop background services
+├── modules/                        # Python scan modules (recon, exploit, AI, loot)
+├── docker/
+│   ├── Dockerfile.api             # Multi-stage Node 22 + Python 3.12
+│   ├── Dockerfile.frontend        # Multi-stage Node 22 + serve@14
+│   ├── traefik/dynamic.yml        # Traefik routing + security headers
+│   ├── certs/                     # TLS certificates (generated)
+│   └── generate-certs.sh          # Self-signed cert generator
+│
+├── scripts/vm/                     # VM provisioning & distribution
+│   ├── provision-host.sh          # 7-step host setup (Kali tools, Go, Docker)
+│   ├── harden-host.sh             # Security hardening (SSH, PAM, auditd, fail2ban)
+│   ├── setup-redteam.sh           # Redteam user + VPN routing
+│   ├── create-vm.sh               # Proxmox API VM creation
+│   ├── export-ova.sh              # VirtualBox OVA export
+│   ├── cloud-init.yml             # Proxmox cloud-init
+│   └── cloud-init-generic.yml     # Generic cloud-init (AWS/GCP/Azure)
+│
+├── docker-compose.yml              # 6-container Docker stack
+├── install.sh                      # Master bare-metal installer
+├── .env.example                    # Infrastructure secrets template
+├── results/                        # Per-target scan output (JSON)
+└── data/                           # Agent registry, runtime data
 ```
 
 ---
 
-## VPN Split Routing
+## Security Tools
 
-CStrike supports isolating all scan traffic through a dedicated VPN tunnel using a separate OS user.
+35+ tools accessible from the API container via host bind mounts:
 
-```bash
-# Bootstrap the redteam environment (run as root)
-sudo bash setup_redteam_env.sh
-```
+| Category | Tools |
+|----------|-------|
+| Port Scanning | nmap, masscan, rustscan |
+| Web Recon | nikto, whatweb, wafw00f, httpx, gowitness |
+| Subdomain Enumeration | subfinder, amass, dnsrecon, dnsenum |
+| Directory Fuzzing | ffuf, gobuster, feroxbuster, dirb, wfuzz |
+| Vulnerability Scanning | nuclei, sqlmap, xsstrike, commix |
+| Credential Attacks | hydra, john, hashcat, cewl |
+| Network Enumeration | enum4linux, smbclient, ldapsearch, snmpwalk, rpcclient |
+| SSL/TLS Analysis | testssl.sh, sslscan, sslyze |
+| Post-Exploitation | impacket (secretsdump, psexec, wmiexec), chisel, bloodhound |
+| Container Security | trivy, kube-hunter |
+| OSINT | theHarvester, sherlock, gau, waybackurls |
+| Exploitation Frameworks | Metasploit (msfrpcd RPC), OWASP ZAP |
 
-This creates:
-- A `redteam` user with zsh shell
-- Project files deployed to `/opt/cstrike`
-- iptables + ip rule routing through `wg0`
-- Shell aliases: `cstrike` launches the CLI pipeline
+---
 
-```bash
-su - redteam
-cstrike              # all traffic routes through VPN
-```
+## VPN & OPSEC
+
+CStrike supports 5 VPN providers with nftables kill switch enforcement:
+
+| Provider | Interface | Kill Switch |
+|----------|-----------|-------------|
+| WireGuard | `wg0` | nftables DROP on tunnel down |
+| OpenVPN | `tun0` | nftables DROP on tunnel down |
+| Tailscale | `tailscale0` | Management overlay |
+| NordVPN | `nordlynx` | Mullvad-style lockdown |
+| Mullvad | `wg-mullvad` | Built-in lockdown mode |
+
+**Split routing:** The `redteam` user's traffic is marked with iptables fwmark and routed through a dedicated VPN tunnel. Management traffic (SSH, web UI) stays on the primary interface.
+
+**OPSEC gating:** All scans enforce target scope validation and tool allowlist checks at both the API middleware layer and the MCP server guardrails.
+
+---
+
+## Distribution
+
+CStrike v2 ships in 5 formats. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for details.
+
+| Format | Command |
+|--------|---------|
+| **Docker Compose** | `docker compose up -d` |
+| **Bare Metal** | `sudo bash install.sh` |
+| **VirtualBox OVA** | `scripts/vm/export-ova.sh --vm-name "CStrike v2"` |
+| **Cloud-Init** | User data: `scripts/vm/cloud-init-generic.yml` |
+| **Proxmox** | `scripts/vm/create-vm.sh` + `install.sh` |
 
 ---
 
@@ -341,14 +410,17 @@ cstrike              # all traffic routes through VPN
 
 | Document | Description |
 |----------|-------------|
+| [Distribution Guide](docs/DISTRIBUTION.md) | All deployment formats and comparison |
+| [Docker Deployment](docs/DOCKER_DEPLOYMENT.md) | Docker-only deployment guide |
+| [Bare Metal Install](docs/BARE_METAL_INSTALL.md) | Full Debian 12 → CStrike walkthrough |
 | [API Concurrent Scanning](docs/API_CONCURRENT_SCANNING.md) | Parallel scan architecture |
 | [Concurrent Scanning Guide](docs/CONCURRENT_SCANNING_GUIDE.md) | Multi-target scanning |
 | [Credential Validation Setup](docs/CREDENTIAL_VALIDATION_SETUP.md) | SSH/FTP credential testing |
 | [Credential Validation System](docs/CREDENTIAL_VALIDATION_SYSTEM.md) | Validator architecture |
 | [Heatmap Quick Start](docs/HEATMAP_QUICK_START.md) | Credential sensitivity heatmaps |
 | [Loot Heatmap API](docs/LOOT_HEATMAP_API.md) | Heatmap API endpoints |
-| [Loot Heatmap Implementation](docs/LOOT_HEATMAP_IMPLEMENTATION_SUMMARY.md) | Heatmap internals |
 | [Web UI README](web/README.md) | Frontend architecture and development |
+| [v2 Changelog](v2-changelog.md) | Full change history from v1 to v2 |
 
 ---
 
