@@ -73,19 +73,24 @@ function getVpnIp(): string | null {
 }
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
+let latestMetrics = { cpu: 0, memory: 0, vpnIp: null as string | null, uptime: 0, timestamp: 0 };
+
+export function getLatestMetrics() {
+  return latestMetrics;
+}
 
 export function startMetricsCollector() {
   if (intervalId) return;
 
   intervalId = setInterval(() => {
-    const metrics = {
+    latestMetrics = {
       cpu: getCpuUsage(),
       memory: getMemoryUsage(),
       vpnIp: getVpnIp(),
       uptime: Math.floor((Date.now() - startTime) / 1000),
       timestamp: Date.now(),
     };
-    emitSystemMetrics(metrics);
+    emitSystemMetrics(latestMetrics);
   }, env.METRICS_INTERVAL);
 
   console.log(`[Metrics] Collecting every ${env.METRICS_INTERVAL}ms`);

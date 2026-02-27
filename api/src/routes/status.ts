@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import { prisma } from '../config/database.js';
+import { getLatestMetrics } from '../services/metricsCollector.js';
 
 export const statusRouter = Router();
 
@@ -21,13 +22,16 @@ statusRouter.get('/', async (_req, res, next) => {
     const vpns = await prisma.vpnConnection.findMany();
     const activeVpn = vpns.find((v) => v.status === 'CONNECTED');
 
+    // Get real-time metrics from collector
+    const metrics = getLatestMetrics();
+
     res.json({
       success: true,
       data: {
         metrics: {
-          cpu: 0,
-          memory: 0,
-          vpnIp: activeVpn?.assignedIp ?? activeVpn?.publicIp ?? null,
+          cpu: metrics.cpu,
+          memory: metrics.memory,
+          vpnIp: activeVpn?.assignedIp ?? activeVpn?.publicIp ?? metrics.vpnIp,
           uptime: Math.floor(process.uptime()),
           timestamp: Date.now(),
         },
