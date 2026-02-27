@@ -15,6 +15,8 @@ import type {
   CompleteScanResults,
   VulnAPIFinding,
   VulnAPIScanResult,
+  VpnConnection,
+  VpnProvider,
 } from '@/types';
 
 class ApiService {
@@ -411,6 +413,41 @@ class ApiService {
       responseType: 'blob',
     });
     return data;
+  }
+
+  // ============================================================================
+  // VPN
+  // ============================================================================
+
+  async getVpnConnections(): Promise<VpnConnection[]> {
+    // Backend: GET /vpn — returns {success, data: VpnConnection[], timestamp}
+    const { data } = await this.client.get('/vpn');
+    return (data.data || []).map((c: Record<string, unknown>) => ({
+      provider: c.provider as VpnProvider,
+      interface: c.interface as string,
+      status: (c.status as string) as VpnConnection['status'],
+      publicIp: (c.publicIp as string | null) ?? null,
+      assignedIp: (c.assignedIp as string | null) ?? null,
+      server: (c.server as string | null) ?? null,
+      connectedAt: (c.connectedAt as number | null) ?? null,
+    }));
+  }
+
+  async connectVpn(
+    provider: VpnProvider,
+    opts: { server?: string; config?: string } = {},
+  ): Promise<{ provider: VpnProvider; status: string; assignedIp: string | null }> {
+    // Backend: POST /vpn/:provider/connect  body: {server?, config?}
+    const { data } = await this.client.post(`/vpn/${provider}/connect`, opts);
+    return data.data;
+  }
+
+  async disconnectVpn(
+    provider: VpnProvider,
+  ): Promise<{ provider: VpnProvider; status: string }> {
+    // Backend: POST /vpn/:provider/disconnect
+    const { data } = await this.client.post(`/vpn/${provider}/disconnect`);
+    return data.data;
   }
 }
 

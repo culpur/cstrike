@@ -24,10 +24,14 @@ import {
   ChevronRight,
   X,
   Plus,
+  Wifi,
+  WifiOff,
+  AlertTriangle,
 } from 'lucide-react';
 import { useUIStore } from '@stores/uiStore';
+import { useSystemStore } from '@stores/systemStore';
 import { apiService } from '@services/api';
-import type { Config } from '@/types';
+import type { Config, VpnConnection, VpnProvider } from '@/types';
 
 // ── Scan Modes (all 18 backend-supported modes) ─────────────────────────────
 
@@ -276,6 +280,23 @@ const AI_PROVIDERS = [
   { id: 'grok', label: 'xAI (Grok)', defaultModel: 'grok-3' },
 ];
 
+// ── VPN Provider Metadata ────────────────────────────────────────────────────
+
+interface VpnProviderInfo {
+  id: VpnProvider;
+  label: string;
+  description: string;
+  defaultInterface: string;
+}
+
+const VPN_PROVIDERS: VpnProviderInfo[] = [
+  { id: 'tailscale',  label: 'Tailscale',  description: 'Mesh VPN via tailscale up',        defaultInterface: 'tailscale0' },
+  { id: 'wireguard',  label: 'WireGuard',  description: 'Kernel WireGuard (wg-quick)',       defaultInterface: 'wg0' },
+  { id: 'nordvpn',    label: 'NordVPN',    description: 'nordvpn CLI (nordlynx)',             defaultInterface: 'nordlynx' },
+  { id: 'mullvad',    label: 'Mullvad',    description: 'mullvad CLI daemon',                defaultInterface: 'wg-mullvad' },
+  { id: 'openvpn',    label: 'OpenVPN',    description: 'openvpn --daemon (tun0)',            defaultInterface: 'tun0' },
+];
+
 // ── Component ───────────────────────────────────────────────────────────────
 
 export function ConfigurationView() {
@@ -301,8 +322,15 @@ export function ConfigurationView() {
   const [scopeInput, setScopeInput] = useState('');
   const { addToast } = useUIStore();
 
+  // ── VPN state ─────────────────────────────────────────────────────────────
+  const { vpnConnections, setVpnConnections } = useSystemStore();
+  const [vpnLoading, setVpnLoading] = useState(false);
+  const [vpnActionLoading, setVpnActionLoading] = useState<Record<string, boolean>>({});
+  const [splitRouting, setSplitRouting] = useState(false);
+
   useEffect(() => {
     loadConfig();
+    loadVpnStatus();
   }, []); // eslint-disable-line
 
   const loadConfig = async () => {
@@ -316,6 +344,50 @@ export function ConfigurationView() {
       setIsLoading(false);
     }
   };
+
+  const loadVpnStatus = async () => {
+    setVpnLoading(true);
+    try {
+      const connections = await apiService.getVpnConnections();
+      setVpnConnections(connections);
+    } catch {
+      addToast({ type: 'error', message: 'Failed to load VPN status' });
+    } finally {
+      setVpnLoading(false);
+    }
+  };
+
+  const handleVpnConnect = async (provider: VpnProvider) => {
+    setVpnActionLoading((prev) => ({ ...prev, [provider]: true }));
+    try {
+      await apiService.connectVpn(provider);
+      addToast({ type: 'success', message: `${provider} connecting...` });
+      // Refresh after a short delay to let the backend state settle
+      setTimeout(loadVpnStatus, 2000);
+    } catch {
+      addToast({ type: 'error', message: `Failed to connect ${provider}` });
+    } finally {
+      setVpnActionLoading((prev) => ({ ...prev, [provider]: false }));
+    }
+  };
+
+  const handleVpnDisconnect = async (provider: VpnProvider) => {
+    setVpnActionLoading((prev) => ({ ...prev, [provider]: true }));
+    try {
+      await apiService.disconnectVpn(provider);
+      addToast({ type: 'success', message: `${provider} disconnected` });
+      setTimeout(loadVpnStatus, 1000);
+    } catch {
+      addToast({ type: 'error', message: `Failed to disconnect ${provider}` });
+    } finally {
+      setVpnActionLoading((prev) => ({ ...prev, [provider]: false }));
+    }
+  };
+
+  // Build a quick-lookup map from the store connections
+  const vpnStatusMap = new Map<VpnProvider, VpnConnection>(
+    vpnConnections.map((c) => [c.provider, c]),
+  );
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -760,6 +832,69 @@ export function ConfigurationView() {
           <ConfigInput label="Port" type="number" value={config.zap_port} onChange={(v) => setConfig({ ...config, zap_port: parseInt(v) || 8090 })} />
         </div>
       </SectionPanel>
+
+      {/* ── VPN Management ─────────────────────────────────────── */}
+      <SectionPanel
+        title="VPN Management"
+        icon={<Network className="w-4 h-4 text-[var(--grok-recon-blue)]" />}
+        badge={
+          vpnLoading
+            ? 'loading...'
+            : `${vpnConnections.filter((c) => c.status === 'connected').length}/${VPN_PROVIDERS.length} connected`
+        }
+      >
+        <div className="space-y-3">
+          {/* Split routing toggle */}
+          <ToggleRow
+            label="Split Routing"
+            description="Route only tool traffic through VPN — keep management traffic on direct path (requires ip route / fwmark)"
+            checked={splitRouting}
+            onChange={setSplitRouting}
+          />
+
+          <div className="h-px bg-[var(--grok-border)]" />
+
+          {/* Refresh button */}
+          <div className="flex justify-end">
+            <button
+              onClick={loadVpnStatus}
+              disabled={vpnLoading}
+              className="cs-btn flex items-center gap-1.5"
+            >
+              {vpnLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5" />
+              )}
+              Refresh
+            </button>
+          </div>
+
+          {/* Provider rows */}
+          <div className="space-y-2">
+            {VPN_PROVIDERS.map((providerInfo) => {
+              const conn = vpnStatusMap.get(providerInfo.id);
+              const status = conn?.status ?? 'disconnected';
+              const isActionLoading = vpnActionLoading[providerInfo.id] ?? false;
+              const isConnected = status === 'connected';
+              const isConnecting = status === 'connecting';
+
+              return (
+                <VpnProviderRow
+                  key={providerInfo.id}
+                  info={providerInfo}
+                  connection={conn ?? null}
+                  isActionLoading={isActionLoading}
+                  isConnected={isConnected}
+                  isConnecting={isConnecting}
+                  onConnect={() => handleVpnConnect(providerInfo.id)}
+                  onDisconnect={() => handleVpnDisconnect(providerInfo.id)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </SectionPanel>
     </div>
   );
 }
@@ -820,6 +955,122 @@ function ConfigInput({
         className="w-full px-3 py-1.5 text-xs font-mono bg-[var(--grok-surface-2)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
       />
     </div>
+  );
+}
+
+// ── VpnProviderRow ────────────────────────────────────────────────────────────
+
+function VpnProviderRow({
+  info,
+  connection,
+  isActionLoading,
+  isConnected,
+  isConnecting,
+  onConnect,
+  onDisconnect,
+}: {
+  info: VpnProviderInfo;
+  connection: VpnConnection | null;
+  isActionLoading: boolean;
+  isConnected: boolean;
+  isConnecting: boolean;
+  onConnect: () => void;
+  onDisconnect: () => void;
+}) {
+  const status = connection?.status ?? 'disconnected';
+  const isError = status === 'error';
+
+  return (
+    <div
+      className={`flex items-center gap-3 px-3 py-2.5 rounded border transition-colors ${
+        isConnected
+          ? 'border-[var(--grok-recon-blue)]/40 bg-[var(--grok-recon-blue)]/5'
+          : isError
+            ? 'border-[var(--grok-error)]/40 bg-[var(--grok-error)]/5'
+            : 'border-[var(--grok-border)] bg-[var(--grok-surface-2)]'
+      }`}
+    >
+      {/* Status dot */}
+      <VpnStatusDot status={status} />
+
+      {/* Provider info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-[var(--grok-text-heading)]">
+            {info.label}
+          </span>
+          <span className="text-[9px] font-mono text-[var(--grok-text-muted)]">
+            {info.defaultInterface}
+          </span>
+        </div>
+        <p className="text-[9px] text-[var(--grok-text-muted)] truncate">{info.description}</p>
+        {/* IP display when connected */}
+        {isConnected && (connection?.assignedIp || connection?.publicIp) && (
+          <p className="text-[9px] font-mono text-[var(--grok-recon-blue)] mt-0.5">
+            {connection.assignedIp ?? connection.publicIp}
+          </p>
+        )}
+      </div>
+
+      {/* Status label */}
+      <span
+        className={`text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded ${
+          isConnected
+            ? 'text-[var(--grok-recon-blue)] bg-[var(--grok-recon-blue)]/10'
+            : isConnecting
+              ? 'text-[var(--grok-warning)] bg-[var(--grok-warning)]/10'
+              : isError
+                ? 'text-[var(--grok-error)] bg-[var(--grok-error)]/10'
+                : 'text-[var(--grok-text-muted)] bg-[var(--grok-surface-3)]'
+        }`}
+      >
+        {status}
+      </span>
+
+      {/* Action button */}
+      <button
+        onClick={isConnected ? onDisconnect : onConnect}
+        disabled={isActionLoading || isConnecting}
+        className={`flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+          isConnected
+            ? 'border-[var(--grok-error)]/50 text-[var(--grok-error)] hover:bg-[var(--grok-error)]/10'
+            : 'border-[var(--grok-recon-blue)]/50 text-[var(--grok-recon-blue)] hover:bg-[var(--grok-recon-blue)]/10'
+        }`}
+      >
+        {isActionLoading || isConnecting ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : isConnected ? (
+          <WifiOff className="w-3 h-3" />
+        ) : (
+          <Wifi className="w-3 h-3" />
+        )}
+        {isConnected ? 'Disconnect' : 'Connect'}
+      </button>
+    </div>
+  );
+}
+
+function VpnStatusDot({ status }: { status: string }) {
+  if (status === 'connected') {
+    return (
+      <span className="relative flex h-2.5 w-2.5 shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--grok-recon-blue)] opacity-60" />
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--grok-recon-blue)]" />
+      </span>
+    );
+  }
+  if (status === 'connecting') {
+    return (
+      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--grok-warning)] animate-pulse" />
+    );
+  }
+  if (status === 'error') {
+    return (
+      <AlertTriangle className="w-2.5 h-2.5 shrink-0 text-[var(--grok-error)]" />
+    );
+  }
+  return (
+    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--grok-surface-3)] border border-[var(--grok-border)]" />
   );
 }
 
