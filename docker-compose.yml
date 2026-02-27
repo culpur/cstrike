@@ -131,6 +131,31 @@ services:
       - ./docker/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - ./docker/certs:/certs:ro
 
+  # ── Kasm Browser (Web-based CStrike Access) ──────────────
+  # Remote browser session that auto-opens the CStrike frontend
+  # Access via https://<mgmt-ip>:6901 or https://<tailscale-ip>:6901
+  kasm-browser:
+    image: kasmweb/chrome:1.16.0
+    container_name: cstrike-kasm
+    restart: unless-stopped
+    shm_size: '512m'
+    ports:
+      - "6901:6901"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      VNC_PW: ${KASM_PASSWORD:-CStr1k3!}
+      LAUNCH_URL: http://host.docker.internal:3000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk -o /dev/null -w '' https://127.0.0.1:6901 || [ $? -eq 22 ]"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
 volumes:
   pgdata:
     driver: local
