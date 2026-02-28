@@ -1,4 +1,4 @@
-# CStrike v2 — Complete Changelog From Original to Current Build
+# CStrike v2.0.0 — Complete Changelog From Original to Current Build
 
 ### What it started as:
 > *"An elite, modular offensive security automation framework with full TUI integration, OpenAI-enhanced command chaining, real-time recon, exploitation, and pivoting. Built for serious red team operations with support for split-VPN routing, ZAP/Burp Suite integration, Metasploit RPC automation, and interactive dashboards."*
@@ -219,3 +219,18 @@ Plus: Metasploit Framework (msfrpcd on port 55552), subfinder, amass, katana, ga
 | Documentation | 5 | README rewrite, API reference, deployment docs |
 | Dependency fixes | 18 | Python 3.13 compat, pip resolution, version pins |
 | DevOps/infra | 3 | Docker Compose, Traefik, VM provisioning scripts |
+
+---
+
+## VM Distribution & Release (February 2026)
+
+| Category | Scope |
+|----------|-------|
+| VM packaging | `package-vm.sh` — export Proxmox VM to QCOW2/VDI/VMDK/OVA with data scrubbing |
+| First-boot service | `cstrike-firstboot.sh` — partition expansion, SSH key regen, password randomization, Docker stack startup |
+| OVF descriptor | `cstrike-v2.ovf` — standard VM metadata for cross-platform import |
+| Static hosting | nginx `/dist/` endpoint on registry.culpur.net for direct HTTP downloads |
+| BitTorrent | 4 `.torrent` files with webseed (BEP19), aria2 seeder daemon |
+| Network setup | `cstrike-netsetup` — interactive interface configuration on first login |
+| Cloud-init | `cloud-init-generic.yml` — deploy on AWS, GCP, Azure, DigitalOcean |
+| Documentation | README, DISTRIBUTION.md, and deployment guides updated for v2.0 release |

@@ -1,6 +1,6 @@
 # CStrike v2 — Distribution Guide
 
-CStrike v2 can be deployed in five formats depending on your environment and requirements.
+CStrike v2 can be deployed in seven formats depending on your environment and requirements.
 
 ---
 
@@ -10,9 +10,50 @@ CStrike v2 can be deployed in five formats depending on your environment and req
 |--------|----------|:-------------------:|:----------:|-------|
 | **Docker Compose** | Existing Debian host with tools | No | ~10 min | [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) |
 | **Bare Metal** (`install.sh`) | Fresh Debian 12 | Yes (80+ tools) | ~45 min | [BARE_METAL_INSTALL.md](BARE_METAL_INSTALL.md) |
-| **VirtualBox OVA** | Lab / training / air-gapped | Yes (pre-built) | ~5 min (import) | Below |
+| **VM Package** (`.tar.gz`) | Air-gapped / offline / any hypervisor | Yes (pre-built) | ~5 min (import) | Below |
+| **VirtualBox OVA** | Lab / training / desktop | Yes (pre-built) | ~5 min (import) | Below |
+| **Proxmox/KVM Import** | Homelab / enterprise / KVM | Yes (pre-built) | ~5 min (import) | Below |
 | **Cloud-Init** | AWS / GCP / Azure / DO | Yes (provisioned at boot) | ~30 min | Below |
-| **Proxmox** | Homelab / enterprise infra | Yes (API-driven) | ~20 min | Below |
+| **Proxmox (Fresh)** | Homelab / enterprise infra | Yes (API-driven) | ~20 min | Below |
+
+---
+
+## Downloads
+
+Pre-built VM images are available for direct download and via BitTorrent from `registry.culpur.net`.
+
+### Direct Download
+
+| Format | Use Case | Size | Download |
+|--------|----------|------|----------|
+| **QCOW2** | Proxmox / KVM / libvirt | ~14 GB | [cstrike-v2.qcow2](https://registry.culpur.net/dist/cstrike-v2.qcow2) |
+| **OVA** | VirtualBox / VMware (OVF + VMDK bundled) | ~14 GB | [cstrike-v2.ova](https://registry.culpur.net/dist/cstrike-v2.ova) |
+| **VDI** | VirtualBox (native) | ~31 GB | [cstrike-v2.vdi](https://registry.culpur.net/dist/cstrike-v2.vdi) |
+| **VMDK** | VMware ESXi / Workstation | ~14 GB | [cstrike-v2.vmdk](https://registry.culpur.net/dist/cstrike-v2.vmdk) |
+| **Checksums** | Integrity verification | — | [checksums.sha256](https://registry.culpur.net/dist/checksums.sha256) |
+
+### BitTorrent (recommended for large files)
+
+Torrents include [webseed](https://www.bittorrent.org/beps/bep_0019.html) — downloads work immediately even with zero peers via HTTP fallback.
+
+| Format | Torrent |
+|--------|---------|
+| QCOW2 | [cstrike-v2.qcow2.torrent](https://registry.culpur.net/dist/torrents/cstrike-v2.qcow2.torrent) |
+| OVA | [cstrike-v2.ova.torrent](https://registry.culpur.net/dist/torrents/cstrike-v2.ova.torrent) |
+| VDI | [cstrike-v2.vdi.torrent](https://registry.culpur.net/dist/torrents/cstrike-v2.vdi.torrent) |
+| VMDK | [cstrike-v2.vmdk.torrent](https://registry.culpur.net/dist/torrents/cstrike-v2.vmdk.torrent) |
+
+```bash
+# Download with any BitTorrent client, or use aria2:
+aria2c https://registry.culpur.net/dist/torrents/cstrike-v2.qcow2.torrent
+```
+
+### Verify Integrity
+
+```bash
+curl -O https://registry.culpur.net/dist/checksums.sha256
+sha256sum -c checksums.sha256
+```
 
 ---
 
@@ -94,22 +135,75 @@ The installer handles everything: Kali tools, Go/Rust binaries, Python security 
 
 ---
 
+## VM Distribution Packaging
+
+Package a live, working CStrike VM into multiple distribution formats for offline deployment.
+
+### Packaging from Proxmox
+
+Run `package-vm.sh` on the Proxmox host to extract a VM and produce all distribution artifacts:
+
+```bash
+# Set Proxmox credentials
+export PVE_HOST=https://proxmox.local:8006
+export PVE_TOKEN_ID="user@pam!token"
+export PVE_TOKEN_SECRET="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Package VM 122 with sensitive data scrubbed
+bash scripts/vm/package-vm.sh --vmid 122 --clean --output ./dist/
+
+# Minimal export (no OVA, no Docker pre-save)
+bash scripts/vm/package-vm.sh --no-ova --no-docker-save
+```
+
+### Distribution Artifacts
+
+The `.tar.gz` distribution package contains:
+
+| File | Description |
+|------|-------------|
+| `cstrike-v2.raw.gz` | Compressed raw disk image |
+| `cstrike-v2.qcow2` | QEMU/KVM/Proxmox-ready disk |
+| `cstrike-docker-images.tar.gz` | Pre-saved Docker images (offline mode) |
+| `import-raw.sh` | Proxmox/KVM import helper |
+| `import-ova.sh` | VirtualBox import helper |
+| `cloud-init-generic.yml` | Cloud-init configuration |
+| `cstrike-firstboot.sh` | First-boot setup script |
+| `install.sh` | Bare-metal installer (fallback) |
+| `checksums.sha256` | SHA256 integrity verification |
+
+### Compact Disk Images
+
+Exported images contain only used blocks — a 50GB disk with ~15GB used compresses to ~5-8GB. The `--clean` flag zero-fills free space before export for even better compression.
+
+On import, the first-boot service automatically expands the partition to fill whatever disk size the user allocates (50GB, 100GB, 200GB, etc.).
+
+---
+
 ## VirtualBox OVA
 
-Export a configured CStrike VM as a portable OVA appliance.
+Download the pre-built OVA: [cstrike-v2.ova](https://registry.culpur.net/dist/cstrike-v2.ova) (~14 GB)
 
-### Export an existing VirtualBox VM
+### Export from an existing VirtualBox VM
 
 ```bash
 ./scripts/vm/export-ova.sh --vm-name "CStrike v2" --output cstrike-v2.ova
 ```
 
-### Import the OVA
+### Import an OVA
 
+```bash
+# Using the import helper (recommended)
+./scripts/vm/import-ova.sh cstrike-v2.ova
+
+# With overrides
+./scripts/vm/import-ova.sh --name "My CStrike" --cpus 8 --memory 16384 --start cstrike-v2.ova
+
+# Manual import
+VBoxManage import cstrike-v2.ova
 ```
-VirtualBox GUI:  File → Import Appliance → select cstrike-v2.ova
-CLI:             VBoxManage import cstrike-v2.ova
-```
+
+The import helper configures host-only networking for lab access and prints connection instructions.
 
 ### Build an OVA from scratch
 
@@ -118,6 +212,52 @@ CLI:             VBoxManage import cstrike-v2.ova
 3. Clone CStrike and run `install.sh`
 4. Clean up: `sudo rm -f /etc/ssh/ssh_host_* ~/.bash_history`
 5. Export: `./scripts/vm/export-ova.sh --vm-name "CStrike v2"`
+
+---
+
+## Proxmox / KVM / QEMU Import
+
+Download the pre-built QCOW2: [cstrike-v2.qcow2](https://registry.culpur.net/dist/cstrike-v2.qcow2) (~14 GB)
+
+Import from the `.tar.gz` distribution package or standalone disk images.
+
+### Proxmox Import
+
+```bash
+# Using the import helper (recommended — run on Proxmox host)
+./import-raw.sh --proxmox --vmid 300 --storage local-lvm
+
+# With custom specs
+./import-raw.sh --proxmox --vmid 300 --storage local-lvm --cpus 8 --memory 16384
+```
+
+### KVM/libvirt Import
+
+```bash
+./import-raw.sh --kvm --name cstrike --cpus 4 --memory 8192
+```
+
+### QEMU Direct Boot
+
+```bash
+# Prints the qemu-system-x86_64 command with port forwarding
+./import-raw.sh --qemu
+```
+
+---
+
+## Offline / Air-Gapped Deployment
+
+The distribution package supports fully offline deployment:
+
+1. **Docker images pre-saved**: `package-vm.sh` saves all 6 container images into `cstrike-docker-images.tar.gz` before export
+2. **First-boot auto-loads**: The first-boot service detects the archive and runs `docker load` — no internet required
+3. **Cloud-init support**: `cloud-init-generic.yml` checks for the pre-saved archive and loads images if present, falling back to `docker compose build` if not
+
+To deploy offline:
+1. Transfer the `.tar.gz` distribution to the target machine
+2. Import the disk image using `import-raw.sh` or `import-ova.sh`
+3. Boot — the first-boot service handles everything automatically
 
 ---
 
@@ -169,13 +309,13 @@ Monitor provisioning: `ssh cstrike@<ip> tail -f /var/log/cstrike-install.log`
 
 ---
 
-## Proxmox
+## Proxmox (Fresh VM)
 
-API-driven VM creation on Proxmox VE. Requires a Proxmox API token.
+API-driven VM creation on Proxmox VE from a Debian 12 cloud image. Use this for fresh installs; for importing a pre-built VM image, see [Proxmox / KVM / QEMU Import](#proxmox--kvm--qemu-import) above.
 
 ```bash
 # Set Proxmox credentials
-export PVE_HOST=proxmox.local
+export PVE_HOST=https://proxmox.local:8006
 export PVE_TOKEN_ID="user@pam!token"
 export PVE_TOKEN_SECRET="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 export PVE_NODE=pve
@@ -200,10 +340,23 @@ Regardless of deployment method:
 4. **Launch your first scan** — the 9-phase pipeline runs automatically
 5. **Remote browser** at `https://<ip>:6901/` for isolated browsing
 
+### Post-Import Checklist
+
+For VM imports (OVA, raw, qcow2), the first-boot service automatically handles:
+
+- [x] Partition expansion to fill available disk space
+- [x] SSH host key regeneration
+- [x] .env password randomization
+- [x] Docker image loading (from pre-saved archive)
+- [x] Docker Compose stack startup
+- [x] Self-disabling (runs only once)
+
+Verify with: `cat /opt/cstrike/.firstboot-complete`
+
 ---
 
 ## Legal
 
 CStrike v2 is intended exclusively for authorized penetration testing and red team operations. You must have explicit written authorization before scanning any target.
 
-MIT License (c) 2025 Culpur Defense Inc.
+MIT License (c) 2025-2026 Culpur Defense Inc.

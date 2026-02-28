@@ -68,6 +68,17 @@ runcmd:
   # Run master installer (non-interactive)
   - bash /opt/cstrike/install.sh 2>&1 | tee /var/log/cstrike-install.log
 
+  # If pre-saved Docker images exist, load them (offline/air-gapped mode)
+  # This allows deployment without internet access to container registries.
+  # Images are pre-saved by package-vm.sh and bundled into the distribution.
+  - |
+    if [ -f /opt/cstrike/cstrike-docker-images.tar.gz ]; then
+      echo "Loading pre-saved Docker images (offline mode)..."
+      docker load < /opt/cstrike/cstrike-docker-images.tar.gz
+      docker compose -f /opt/cstrike/docker-compose.yml up -d
+      echo "Docker images loaded from archive"
+    fi
+
   # Write completion marker
   - echo "CStrike v2 installation completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /opt/cstrike/.install-complete
 

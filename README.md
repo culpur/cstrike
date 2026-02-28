@@ -13,6 +13,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> |
+  <a href="#downloads">Downloads</a> |
   <a href="#architecture">Architecture</a> |
   <a href="#web-ui">Web UI</a> |
   <a href="#tui-mode">TUI</a> |
@@ -30,6 +31,8 @@ Built for authorized red team engagements. Requires explicit scope authorization
 ---
 
 ## Quick Start
+
+> **Fastest path:** Download a [pre-built VM image](#downloads) — boot and go in 5 minutes. The instructions below are for Docker-only or source deployment.
 
 ```bash
 # Clone
@@ -58,6 +61,23 @@ docker exec cstrike-api npx prisma db seed
 | Health Check | `curl -sk https://localhost/health` |
 
 > **Full install** from bare metal? Run `sudo bash install.sh` on Debian 12. See [Distribution](#distribution).
+
+---
+
+## Downloads
+
+Pre-built VM images — boot and go, no building required.
+
+| Format | Use Case | Size | Download |
+|--------|----------|------|----------|
+| **QCOW2** | Proxmox / KVM / libvirt | ~14 GB | [Download](https://registry.culpur.net/dist/cstrike-v2.qcow2) |
+| **OVA** | VirtualBox / VMware | ~14 GB | [Download](https://registry.culpur.net/dist/cstrike-v2.ova) |
+| **VDI** | VirtualBox (native) | ~31 GB | [Download](https://registry.culpur.net/dist/cstrike-v2.vdi) |
+| **VMDK** | VMware ESXi / Workstation | ~14 GB | [Download](https://registry.culpur.net/dist/cstrike-v2.vmdk) |
+
+[BitTorrent downloads](docs/DISTRIBUTION.md#bittorrent-recommended-for-large-files) | [Checksums](https://registry.culpur.net/dist/checksums.sha256) | [All formats](docs/DISTRIBUTION.md)
+
+> Pre-built images include Debian 12 + 35+ security tools + Docker stack. First boot auto-expands disk, regenerates SSH keys, randomizes passwords, and starts all services.
 
 ---
 
@@ -341,8 +361,11 @@ cstrike/
 │   ├── setup-redteam.sh           # Redteam user + VPN routing
 │   ├── create-vm.sh               # Proxmox API VM creation
 │   ├── export-ova.sh              # VirtualBox OVA export
+│   ├── package-vm.sh              # VM packaging & distribution builder
+│   ├── cstrike-firstboot.sh       # First-boot auto-setup (partition, SSH, passwords)
+│   ├── cstrike-v2.ovf             # OVF descriptor for OVA packaging
 │   ├── cloud-init.yml             # Proxmox cloud-init
-│   └── cloud-init-generic.yml     # Generic cloud-init (AWS/GCP/Azure)
+│   └── cloud-init-generic.yml     # Generic cloud-init (AWS/GCP/Azure/DO)
 │
 ├── docker-compose.yml              # 6-container Docker stack
 ├── install.sh                      # Master bare-metal installer
@@ -394,15 +417,15 @@ CStrike supports 5 VPN providers with nftables kill switch enforcement:
 
 ## Distribution
 
-CStrike v2 ships in 5 formats. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for details.
+CStrike v2 ships in 7 formats. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for details and downloads.
 
-| Format | Command |
-|--------|---------|
-| **Docker Compose** | `docker compose up -d` |
-| **Bare Metal** | `sudo bash install.sh` |
-| **VirtualBox OVA** | `scripts/vm/export-ova.sh --vm-name "CStrike v2"` |
-| **Cloud-Init** | User data: `scripts/vm/cloud-init-generic.yml` |
-| **Proxmox** | `scripts/vm/create-vm.sh` + `install.sh` |
+| Format | Setup Time | Command |
+|--------|:----------:|---------|
+| **Pre-built VM** (QCOW2/OVA/VDI/VMDK) | ~5 min | [Download](#downloads) → import → boot |
+| **Docker Compose** | ~10 min | `docker compose up -d` |
+| **Bare Metal** | ~45 min | `sudo bash install.sh` |
+| **Cloud-Init** (AWS/GCP/Azure/DO) | ~30 min | User data: `scripts/vm/cloud-init-generic.yml` |
+| **Proxmox (Fresh)** | ~20 min | `scripts/vm/create-vm.sh` + `install.sh` |
 
 ---
 
@@ -410,7 +433,7 @@ CStrike v2 ships in 5 formats. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) 
 
 | Document | Description |
 |----------|-------------|
-| [Distribution Guide](docs/DISTRIBUTION.md) | All deployment formats and comparison |
+| [Distribution Guide](docs/DISTRIBUTION.md) | Deployment formats, pre-built VM downloads, BitTorrent |
 | [Docker Deployment](docs/DOCKER_DEPLOYMENT.md) | Docker-only deployment guide |
 | [Bare Metal Install](docs/BARE_METAL_INSTALL.md) | Full Debian 12 → CStrike walkthrough |
 | [API Concurrent Scanning](docs/API_CONCURRENT_SCANNING.md) | Parallel scan architecture |
@@ -434,7 +457,7 @@ The authors assume no liability for misuse.
 
 ## License
 
-MIT License (c) 2025 Culpur Defense Inc.
+MIT License (c) 2025-2026 Culpur Defense Inc.
 
 ---
 
