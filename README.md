@@ -436,12 +436,6 @@ CStrike v2 ships in 7 formats. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) 
 | [Distribution Guide](docs/DISTRIBUTION.md) | Deployment formats, pre-built VM downloads, BitTorrent |
 | [Docker Deployment](docs/DOCKER_DEPLOYMENT.md) | Docker-only deployment guide |
 | [Bare Metal Install](docs/BARE_METAL_INSTALL.md) | Full Debian 12 → CStrike walkthrough |
-| [API Concurrent Scanning](docs/API_CONCURRENT_SCANNING.md) | Parallel scan architecture |
-| [Concurrent Scanning Guide](docs/CONCURRENT_SCANNING_GUIDE.md) | Multi-target scanning |
-| [Credential Validation Setup](docs/CREDENTIAL_VALIDATION_SETUP.md) | SSH/FTP credential testing |
-| [Credential Validation System](docs/CREDENTIAL_VALIDATION_SYSTEM.md) | Validator architecture |
-| [Heatmap Quick Start](docs/HEATMAP_QUICK_START.md) | Credential sensitivity heatmaps |
-| [Loot Heatmap API](docs/LOOT_HEATMAP_API.md) | Heatmap API endpoints |
 | [Web UI README](web/README.md) | Frontend architecture and development |
 | [v2 Changelog](v2-changelog.md) | Full change history from v1 to v2 |
 
