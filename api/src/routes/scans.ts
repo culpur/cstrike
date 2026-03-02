@@ -103,11 +103,18 @@ scansRouter.get('/status/:scanId', async (req, res, next) => {
   }
 });
 
-// Get active scans
+// Get active scans (includes recently completed within last 5 minutes)
 scansRouter.get('/active', async (_req, res, next) => {
   try {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+
     const scans = await prisma.scan.findMany({
-      where: { status: { in: ['QUEUED', 'RUNNING'] } },
+      where: {
+        OR: [
+          { status: { in: ['QUEUED', 'RUNNING'] } },
+          { status: { in: ['COMPLETED', 'FAILED', 'CANCELLED'] }, endedAt: { gte: fiveMinAgo } },
+        ],
+      },
       include: { target: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -117,10 +124,13 @@ scansRouter.get('/active', async (_req, res, next) => {
       data: scans.map((s) => ({
         scan_id: s.id,
         target: s.target.url,
+        tools: s.tools,
         status: s.status.toLowerCase(),
+        current_phase: s.phase.toLowerCase(),
         phase: s.phase.toLowerCase(),
         progress: s.progress,
         started_at: s.startedAt?.getTime(),
+        ended_at: s.endedAt?.getTime(),
       })),
       timestamp: Date.now(),
     });

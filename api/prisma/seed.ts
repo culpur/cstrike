@@ -43,14 +43,40 @@ async function main() {
     {
       key: 'allowed_tools',
       value: [
-        'nmap', 'subfinder', 'amass', 'nikto', 'httpx',
-        'waybackurls', 'gau', 'dnsenum', 'nuclei', 'ffuf',
-        'gobuster', 'dirb', 'wfuzz', 'sqlmap', 'xsstrike',
-        'whatweb', 'wafw00f', 'sslscan', 'sslyze', 'testssl',
-        'masscan', 'rustscan', 'feroxbuster', 'katana',
-        'hydra', 'john', 'hashcat', 'medusa',
-        'enum4linux', 'smbclient', 'nbtscan', 'snmpwalk',
-        'dnsrecon', 'wpscan', 'commix', 'gowitness',
+        // Reconnaissance
+        'nmap', 'masscan', 'rustscan', 'subfinder', 'amass',
+        'theHarvester', 'dnsenum', 'dnsrecon', 'whois', 'dig', 'host', 'traceroute',
+        // HTTP Probing
+        'httpx', 'httprobe', 'curl', 'whatweb', 'nikto',
+        'wafw00f', 'shcheck', 'aquatone',
+        // Web Exploitation
+        'sqlmap', 'xsstrike', 'commix', 'arjun', 'jwt_tool.py', 'wpscan',
+        // Directory / File Busting
+        'ffuf', 'gobuster', 'feroxbuster', 'waybackurls', 'gau',
+        // Vulnerability Scanning
+        'nuclei', 'vulnapi', 'enum4linux-ng',
+        // Network Enumeration
+        'smbmap', 'rpcclient', 'ldapsearch', 'snmpwalk', 'onesixtyone',
+        // Credentials & Brute Force
+        'hydra', 'smtp-user-enum',
+        // SSL / TLS Testing
+        'testssl', 'sslscan', 'sslyze',
+        // Password Cracking
+        'hashcat', 'john', 'cewl', 'hashid',
+        // OSINT
+        'shodan', 'sherlock',
+        // Impacket Post-Exploit
+        'impacket-secretsdump', 'impacket-psexec', 'impacket-wmiexec',
+        'impacket-smbexec', 'impacket-GetUserSPNs',
+        // Lateral Movement & Tunneling
+        'chisel', 'responder', 'bloodhound-python', 'proxychains4',
+        // Cloud & Container
+        'trivy', 'kube-hunter', 'gowitness', 'eyewitness',
+        // Service Daemons
+        'msfconsole', 'msfrpcd', 'zap.sh', 'burpsuite',
+        // Legacy compat
+        'dirb', 'wfuzz', 'katana', 'medusa', 'enum4linux',
+        'smbclient', 'nbtscan',
       ],
     },
 

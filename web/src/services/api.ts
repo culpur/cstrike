@@ -253,20 +253,28 @@ class ApiService {
   // ============================================================================
 
   async getLoot(target: string = 'all'): Promise<LootItem[]> {
-    // Backend expects GET /loot/<target>
-    // Returns {usernames, passwords, urls, ports} when no category specified
-    // URL-encode target to handle URLs with slashes (e.g., https://example.com)
+    // Backend: GET /loot/<target>
+    // Returns { success, data: { items: { username: [{id,value,source,...}], ... }, total } }
     const encodedTarget = encodeURIComponent(target);
     const { data } = await this.client.get(`/loot/${encodedTarget}`);
 
-    // Convert backend format to LootItem array (using 'category' to match LootItem interface)
     const items: LootItem[] = [];
-    const now = Date.now();
     const t = target === 'all' ? 'unknown' : target;
-    if (data.usernames) items.push(...data.usernames.map((u: string, i: number) => ({ id: `usr-${i}-${now}`, category: 'username' as const, value: u, source: 'api', target: t, timestamp: now })));
-    if (data.passwords) items.push(...data.passwords.map((p: string, i: number) => ({ id: `pwd-${i}-${now}`, category: 'password' as const, value: p, source: 'api', target: t, timestamp: now })));
-    if (data.urls) items.push(...data.urls.map((url: string, i: number) => ({ id: `url-${i}-${now}`, category: 'url' as const, value: url, source: 'api', target: t, timestamp: now })));
-    if (data.ports) items.push(...data.ports.map((port: number, i: number) => ({ id: `port-${i}-${now}`, category: 'port' as const, value: port.toString(), source: 'api', target: t, timestamp: now })));
+
+    // Parse the nested {category: [{id, value, source, metadata, timestamp}]} structure
+    const byCategory = data.data?.items || data.items || {};
+    for (const [category, categoryItems] of Object.entries(byCategory)) {
+      for (const item of categoryItems as Array<{ id: string; value: string; source: string; timestamp: number }>) {
+        items.push({
+          id: item.id || `${category}-${items.length}`,
+          category: category as LootCategory,
+          value: item.value,
+          source: item.source || 'unknown',
+          target: t,
+          timestamp: item.timestamp || Date.now(),
+        });
+      }
+    }
 
     return items;
   }
@@ -391,22 +399,72 @@ class ApiService {
   // ============================================================================
 
   async getResults(): Promise<Target[]> {
-    // Backend: GET /results returns { success, data: { items: [...], total, hasMore }, timestamp }
-    // Map to frontend Target interface
+    // Backend: GET /results returns { success, data: { items: [...], total, hasMore } }
+    // Each item is a scan result; we need to deduplicate into unique targets
     const { data } = await this.client.get('/results');
-    const items = data.data?.items || data.targets || [];
-    return items.map((t: Record<string, unknown>, i: number) => ({
-      id: String(t.target || i),
-      url: String(t.target || ''),
-      addedAt: t.started_at ? new Date(t.started_at as string).getTime() : Date.now(),
-      status: t.status === 'completed' ? 'complete' : (t.status as string || 'pending'),
-    }));
+    const items = data.data?.items || [];
+
+    // Group by target URL to build unique target list
+    const targetMap = new Map<string, Target>();
+    for (const item of items) {
+      const url = String(item.target || '');
+      if (!url) continue;
+      if (!targetMap.has(url)) {
+        targetMap.set(url, {
+          id: item.scan_id || url,
+          url,
+          addedAt: item.timestamp || Date.now(),
+          status: 'complete',
+        });
+      }
+    }
+
+    return Array.from(targetMap.values());
   }
 
   async getTargetResults(target: string): Promise<CompleteScanResults> {
-    // Backend: GET /results/<target>
+    // Backend: GET /results/<target> returns { data: { results: {port_scan: [...], ...}, total } }
     const { data } = await this.client.get(`/results/${encodeURIComponent(target)}`);
-    return data;
+    const grouped = data.data?.results || data.results || {};
+
+    // Map grouped backend results into CompleteScanResults shape
+    return {
+      scanId: '',
+      target,
+      startTime: Date.now(),
+      endTime: Date.now(),
+      status: 'completed',
+      toolsUsed: [],
+      ports: (grouped.port_scan || []).map((r: Record<string, unknown>) => {
+        const d = r.data as Record<string, unknown> || {};
+        return { port: Number(d.port || 0), protocol: String(d.protocol || 'tcp'), state: String(d.state || 'open'), service: String(d.service || 'unknown'), version: String(d.version || ''), raw: d.output || '' };
+      }),
+      subdomains: (grouped.subdomain || []).map((r: Record<string, unknown>) => {
+        const d = r.data as Record<string, unknown> || {};
+        return { subdomain: String(d.subdomain || d.value || d.output || ''), source: String(r.source || ''), alive: true, ip: '' };
+      }),
+      httpEndpoints: (grouped.http_endpoint || []).map((r: Record<string, unknown>) => {
+        const d = r.data as Record<string, unknown> || {};
+        return { url: String(d.url || d.output || ''), statusCode: Number(d.statusCode || 0), title: String(d.title || ''), contentLength: 0, technologies: [] };
+      }),
+      technologies: (grouped.technology || []).map((r: Record<string, unknown>) => {
+        const d = r.data as Record<string, unknown> || {};
+        return { name: String(d.name || d.output || ''), version: String(d.version || ''), categories: [] };
+      }),
+      vulnerabilities: (grouped.vulnerability || []).map((r: Record<string, unknown>) => {
+        const d = r.data as Record<string, unknown> || {};
+        return { id: String(r.id || ''), name: String(d.name || d.template || ''), severity: String(r.severity || d.severity || 'info'), description: String(d.description || d.output || ''), url: String(d.url || ''), reference: '', tool: String(r.source || '') };
+      }),
+      stats: {
+        totalPorts: (grouped.port_scan || []).length,
+        openPorts: (grouped.port_scan || []).length,
+        totalSubdomains: (grouped.subdomain || []).length,
+        aliveSubdomains: (grouped.subdomain || []).length,
+        totalEndpoints: (grouped.http_endpoint || []).length,
+        totalVulnerabilities: (grouped.vulnerability || []).length,
+        criticalVulns: 0, highVulns: 0, mediumVulns: 0, lowVulns: 0,
+      },
+    } as CompleteScanResults;
   }
 
   async downloadResults(target: string, format: 'json' | 'markdown'): Promise<Blob> {
