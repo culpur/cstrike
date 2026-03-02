@@ -78,12 +78,32 @@ async function monitorLoop(): Promise<void> {
       // If service has a PID and should be running, check it
       if (svc.status === 'RUNNING' && svc.pid) {
         if (!isProcessAlive(svc.pid)) {
-          console.warn(`[Monitor] ${svc.name} (pid ${svc.pid}) died — restarting...`);
-          await prisma.service.update({
-            where: { name: svc.name },
-            data: { status: 'STARTING', pid: null },
-          });
+          try {
+            console.warn(`[Monitor] ${svc.name} (pid ${svc.pid}) died — restarting...`);
+            await prisma.service.update({
+              where: { name: svc.name },
+              data: { status: 'STARTING', pid: null },
+            });
 
+            const result = await serviceManager.execute(svc.name, 'start');
+            await prisma.service.update({
+              where: { name: svc.name },
+              data: {
+                status: result.error ? 'ERROR' : 'RUNNING',
+                pid: result.pid ?? null,
+                error: result.error ?? null,
+              },
+            });
+          } catch (restartErr: any) {
+            console.warn(`[Monitor] Restart failed for ${svc.name}:`, restartErr.message);
+          }
+        }
+      }
+
+      // If service is in ERROR state and has autoStart, retry (but not too aggressively)
+      if (svc.status === 'ERROR') {
+        try {
+          console.log(`[Monitor] Retrying ${svc.name} (was in ERROR state)...`);
           const result = await serviceManager.execute(svc.name, 'start');
           await prisma.service.update({
             where: { name: svc.name },
@@ -93,21 +113,9 @@ async function monitorLoop(): Promise<void> {
               error: result.error ?? null,
             },
           });
+        } catch (retryErr: any) {
+          console.warn(`[Monitor] Retry failed for ${svc.name}:`, retryErr.message);
         }
-      }
-
-      // If service is in ERROR state and has autoStart, retry
-      if (svc.status === 'ERROR') {
-        console.log(`[Monitor] Retrying ${svc.name} (was in ERROR state)...`);
-        const result = await serviceManager.execute(svc.name, 'start');
-        await prisma.service.update({
-          where: { name: svc.name },
-          data: {
-            status: result.error ? 'ERROR' : 'RUNNING',
-            pid: result.pid ?? null,
-            error: result.error ?? null,
-          },
-        });
       }
     }
   } catch (err: any) {

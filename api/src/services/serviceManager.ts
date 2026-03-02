@@ -85,13 +85,19 @@ class ServiceManager {
           detached: true,
           stdio: 'ignore',
         });
+
+        // Handle async ENOENT / permission errors from spawn
+        child.on('error', (err: any) => {
+          resolve({ error: `${executable}: ${err.message}` });
+        });
+
         child.unref();
 
         if (action === 'start') {
-          // Give the service a moment to start
+          // Give the service a moment to start (or fail)
           setTimeout(() => {
             resolve({ pid: child.pid });
-          }, 1000);
+          }, 1500);
         } else {
           resolve({});
         }

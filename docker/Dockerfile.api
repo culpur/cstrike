@@ -83,17 +83,26 @@ COPY --from=tools /tmp/tools/katana /usr/local/bin/katana
 COPY --from=tools /tmp/tools/ffuf /usr/local/bin/ffuf
 COPY --from=tools /tmp/tools/gobuster /usr/local/bin/gobuster
 
-# Create wordlist directory and download SecLists common wordlist via GitHub API
-RUN mkdir -p /opt/cstrike/data/wordlists && \
-    curl -fsSL -o /opt/cstrike/data/wordlists/common.txt \
+# Download SecLists wordlists to /opt/wordlists (staging dir — not shadowed by volume mount)
+RUN mkdir -p /opt/wordlists && \
+    # Web content discovery
+    curl -fsSL -o /opt/wordlists/common.txt \
       "https://github.com/danielmiessler/SecLists/raw/refs/heads/master/Discovery/Web-Content/common.txt" || \
     printf '.git\n.env\nadmin\napi\nbackup\nconfig\ncss\nimages\nindex.html\ninfo.php\njs\nlogin\nphpinfo.php\nphpmyadmin\nrobots.txt\nserver-status\nsitemap.xml\ntest\nuploads\nwp-admin\nwp-login.php\n' \
-      > /opt/cstrike/data/wordlists/common.txt && \
-    printf 'admin\nroot\nuser\ntest\nguest\noperator\nmanager\ncstrike\n' \
-      > /opt/cstrike/data/wordlists/usernames.txt && \
-    printf 'password\npassword123\nadmin\n123456\nroot\ntoor\nletmein\nqwerty\ncstrike\n' \
-      > /opt/cstrike/data/wordlists/passwords.txt && \
-    echo "Wordlists installed: $(wc -l /opt/cstrike/data/wordlists/*)"
+      > /opt/wordlists/common.txt && \
+    # Passwords — SecLists Common-Credentials (top shortlist + 10k most common)
+    curl -fsSL -o /opt/wordlists/passwords.txt \
+      "https://github.com/danielmiessler/SecLists/raw/refs/heads/master/Passwords/Common-Credentials/top-passwords-shortlist.txt" || \
+    printf 'password\npassword123\nadmin\n123456\nroot\ntoor\nletmein\nqwerty\n' \
+      > /opt/wordlists/passwords.txt && \
+    curl -fsSL -o /opt/wordlists/passwords-10k.txt \
+      "https://github.com/danielmiessler/SecLists/raw/refs/heads/master/Passwords/Common-Credentials/10k-most-common.txt" || true && \
+    # Usernames — SecLists top shortlist
+    curl -fsSL -o /opt/wordlists/usernames.txt \
+      "https://github.com/danielmiessler/SecLists/raw/refs/heads/master/Usernames/top-usernames-shortlist.txt" || \
+    printf 'admin\nroot\nuser\ntest\nguest\noperator\nmanager\n' \
+      > /opt/wordlists/usernames.txt && \
+    echo "Wordlists installed:" && ls -lh /opt/wordlists/
 
 WORKDIR /app
 
@@ -121,5 +130,5 @@ RUN npx prisma generate
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=30s \
     CMD curl -sf http://127.0.0.1:3001/health || exit 1
 
-# Push schema, seed, and start
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss 2>/dev/null || true && psql \"$DATABASE_URL\" -f prisma/seed.sql 2>/dev/null || true && node dist/server.js"]
+# Push schema, seed, copy wordlists into volume, and start
+CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss 2>/dev/null || true && psql \"$DATABASE_URL\" -f prisma/seed.sql 2>/dev/null || true && mkdir -p /opt/cstrike/data/wordlists && cp -n /opt/wordlists/* /opt/cstrike/data/wordlists/ 2>/dev/null || true && node dist/server.js"]

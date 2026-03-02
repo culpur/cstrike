@@ -516,8 +516,14 @@ class ApiService {
 
 type RawResult = { id?: string; data?: { tool?: string; output?: string; duration?: number; exitCode?: number } & Record<string, unknown>; severity?: string; source?: string; timestamp?: number };
 
+/** Strip ANSI escape codes from raw tool output */
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '');
+}
+
 function getRawOutput(r: RawResult): string {
-  return String(r.data?.output || '');
+  return stripAnsi(String(r.data?.output || ''));
 }
 
 function collectToolsUsed(grouped: Record<string, RawResult[]>): string[] {
@@ -531,9 +537,10 @@ function collectToolsUsed(grouped: Record<string, RawResult[]>): string[] {
   return Array.from(tools);
 }
 
-/** Parse nmap output into individual port entries */
+/** Parse nmap output into individual port entries (deduped by port/protocol) */
 function parsePortResults(results: RawResult[], target = ''): Array<{ port: number; protocol: string; state: string; service: string; version: string; target: string; raw: string }> {
   const ports: Array<{ port: number; protocol: string; state: string; service: string; version: string; target: string; raw: string }> = [];
+  const seen = new Set<string>();
   // nmap line format: "22/tcp  open  ssh  OpenSSH 9.2p1 ..."
   const portLineRe = /^(\d+)\/(tcp|udp)\s+(open|closed|filtered)\s+(\S+)\s*(.*)/;
 
@@ -541,6 +548,9 @@ function parsePortResults(results: RawResult[], target = ''): Array<{ port: numb
     const output = getRawOutput(r);
     // If data has structured port/protocol, use directly
     if (r.data?.port && typeof r.data.port === 'number') {
+      const key = `${r.data.port}/${r.data.protocol || 'tcp'}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       ports.push({
         port: Number(r.data.port),
         protocol: String(r.data.protocol || 'tcp'),
@@ -557,6 +567,9 @@ function parsePortResults(results: RawResult[], target = ''): Array<{ port: numb
     for (const line of output.split('\n')) {
       const match = line.trim().match(portLineRe);
       if (match) {
+        const key = `${match[1]}/${match[2]}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         ports.push({
           port: parseInt(match[1], 10),
           protocol: match[2],
@@ -674,26 +687,32 @@ function parseTechnologies(results: RawResult[]): Array<{ name: string; version:
   return techs;
 }
 
-/** Parse vulnerability results from nuclei output */
-function parseVulnerabilities(results: RawResult[]): Array<{ id: string; name: string; severity: string; description: string; url: string; reference: string; tool: string }> {
-  const vulns: Array<{ id: string; name: string; severity: string; description: string; url: string; reference: string; tool: string }> = [];
+/** Parse vulnerability results from nuclei output (deduped, matches VulnerabilityFinding interface) */
+function parseVulnerabilities(results: RawResult[]): Array<{ id: string; title: string; severity: string; description: string; url: string; cve?: string; tool: string }> {
+  const vulns: Array<{ id: string; title: string; severity: string; description: string; url: string; cve?: string; tool: string }> = [];
+  const seen = new Set<string>();
 
   for (const r of results) {
     const output = getRawOutput(r);
     const tool = r.source || r.data?.tool || 'unknown';
 
-    // nuclei output format: "[template-id] [protocol] [severity] url"
-    // e.g., "[phpinfo-files] [http] [medium] http://localhost:8080/info.php"
-    const nucleiRe = /\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(\S+)/g;
-    let match;
-    while ((match = nucleiRe.exec(output)) !== null) {
+    // nuclei output: "[template-id] [protocol] [severity] url [extra-info...]"
+    // Process line-by-line to avoid /g crossing newline boundaries into next finding
+    const nucleiRe = /^\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(https?:\/\/\S+)/;
+    for (const line of output.split('\n')) {
+      const match = line.trim().match(nucleiRe);
+      if (!match) continue;
+      const key = `${match[1]}:${match[4]}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const cveMatch = match[1].match(/(CVE-\d{4}-\d+)/i);
       vulns.push({
         id: match[1],
-        name: match[1].replace(/-/g, ' '),
+        title: match[1].replace(/-/g, ' '),
         severity: match[3].toLowerCase(),
         description: `${match[1]} detected via ${match[2]}`,
         url: match[4],
-        reference: '',
+        cve: cveMatch ? cveMatch[1] : undefined,
         tool,
       });
     }
@@ -702,15 +721,18 @@ function parseVulnerabilities(results: RawResult[]): Array<{ id: string; name: s
     if (vulns.length === 0 && output.length > 0) {
       // Generic: if result has severity set at top level
       if (r.severity && r.severity !== 'info') {
-        vulns.push({
-          id: r.id || 'unknown',
-          name: tool + ' finding',
-          severity: r.severity,
-          description: output.substring(0, 500),
-          url: '',
-          reference: '',
-          tool,
-        });
+        const key = `${r.id || 'unknown'}:${tool}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          vulns.push({
+            id: r.id || 'unknown',
+            title: tool + ' finding',
+            severity: r.severity,
+            description: output.substring(0, 500),
+            url: '',
+            tool,
+          });
+        }
       }
     }
   }
