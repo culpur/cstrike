@@ -2,20 +2,23 @@
 -- Runs on first deploy to populate required tables.
 -- Uses ON CONFLICT to be idempotent (safe to re-run).
 
+-- ── Schema migrations (idempotent) ─────────────────────────────
+ALTER TABLE services ADD COLUMN IF NOT EXISTS auto_start BOOLEAN DEFAULT false;
+
 -- ── Service records ──────────────────────────────────────────
-INSERT INTO services (id, name, status, port, optional, "createdAt", "updatedAt")
+INSERT INTO services (id, name, status, port, optional, auto_start, "createdAt", "updatedAt")
 VALUES
-  ('svc_api',        'api_server',  'STOPPED', 3001,  false, NOW(), NOW()),
-  ('svc_frontend',   'frontend',    'STOPPED', 3000,  false, NOW(), NOW()),
-  ('svc_metasploit', 'metasploit',  'STOPPED', 55552, true,  NOW(), NOW()),
-  ('svc_zap',        'zap',         'STOPPED', 8090,  true,  NOW(), NOW()),
-  ('svc_burp',       'burp',        'STOPPED', NULL,  true,  NOW(), NOW())
-ON CONFLICT (name) DO NOTHING;
+  ('svc_api',        'api_server',  'STOPPED', 3001,  false, false, NOW(), NOW()),
+  ('svc_frontend',   'frontend',    'STOPPED', 3000,  false, false, NOW(), NOW()),
+  ('svc_metasploit', 'metasploit',  'STOPPED', 55552, true,  true,  NOW(), NOW()),
+  ('svc_zap',        'zap',         'STOPPED', 8090,  true,  true,  NOW(), NOW()),
+  ('svc_burp',       'burp',        'STOPPED', NULL,  true,  true,  NOW(), NOW())
+ON CONFLICT (name) DO UPDATE SET auto_start = EXCLUDED.auto_start;
 
 -- ── Default configuration ────────────────────────────────────
 INSERT INTO config_entries (id, key, value, version, "createdAt", "updatedAt")
 VALUES
-  (gen_random_uuid(), 'ai_provider',       '"openai"',  1, NOW(), NOW()),
+  (gen_random_uuid(), 'ai_provider',       '"ollama"',  1, NOW(), NOW()),
   (gen_random_uuid(), 'ai_temperature',    '0.7',       1, NOW(), NOW()),
   (gen_random_uuid(), 'ai_max_tokens',     '4096',      1, NOW(), NOW()),
   (gen_random_uuid(), 'allow_exploitation', 'true',     1, NOW(), NOW()),
@@ -23,7 +26,9 @@ VALUES
   (gen_random_uuid(), 'allowed_tools',     '["nmap","masscan","rustscan","subfinder","amass","theHarvester","dnsenum","dnsrecon","whois","dig","host","traceroute","httpx","httprobe","curl","whatweb","nikto","wafw00f","shcheck","aquatone","sqlmap","xsstrike","commix","arjun","jwt_tool.py","wpscan","ffuf","gobuster","feroxbuster","waybackurls","gau","nuclei","vulnapi","enum4linux-ng","smbmap","rpcclient","ldapsearch","snmpwalk","onesixtyone","hydra","smtp-user-enum","testssl","sslscan","sslyze","hashcat","john","cewl","hashid","shodan","sherlock","impacket-secretsdump","impacket-psexec","impacket-wmiexec","impacket-smbexec","impacket-GetUserSPNs","chisel","responder","bloodhound-python","proxychains4","trivy","kube-hunter","gowitness","eyewitness","msfconsole","msfrpcd","zap.sh","burpsuite","dirb","wfuzz","katana","medusa","enum4linux","smbclient","nbtscan"]', 1, NOW(), NOW()),
   (gen_random_uuid(), 'max_threads',       '10',        1, NOW(), NOW()),
   (gen_random_uuid(), 'max_runtime',       '3600',      1, NOW(), NOW()),
-  (gen_random_uuid(), 'target_scope',      '[]',        1, NOW(), NOW())
+  (gen_random_uuid(), 'target_scope',      '[]',        1, NOW(), NOW()),
+  (gen_random_uuid(), 'ollama_model',      '"qwen3"',  1, NOW(), NOW()),
+  (gen_random_uuid(), 'ollama_host',       '"http://localhost:11434"', 1, NOW(), NOW())
 ON CONFLICT (key) DO NOTHING;
 
 -- ── VPN connection records ───────────────────────────────────

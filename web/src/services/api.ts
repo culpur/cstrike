@@ -428,44 +428,41 @@ class ApiService {
     const { data } = await this.client.get(`/results/${encodeURIComponent(target)}`);
     const grouped = data.data?.results || data.results || {};
 
-    // Map grouped backend results into CompleteScanResults shape
+    // Each result record has: { id, data: { tool, output, duration, exitCode }, severity, source, timestamp }
+    // We need to parse the raw tool output into structured findings.
+
+    const ports = parsePortResults(grouped.port_scan || [], target);
+    const subdomains = parseSubdomainResults(grouped.subdomain || [], target);
+    const httpEndpoints = parseHttpEndpoints(grouped.http_endpoint || []);
+    const technologies = parseTechnologies(grouped.technology || []);
+    const vulnerabilities = parseVulnerabilities(grouped.vulnerability || []);
+    const toolsUsed = collectToolsUsed(grouped);
+
     return {
       scanId: '',
       target,
       startTime: Date.now(),
       endTime: Date.now(),
       status: 'completed',
-      toolsUsed: [],
-      ports: (grouped.port_scan || []).map((r: Record<string, unknown>) => {
-        const d = r.data as Record<string, unknown> || {};
-        return { port: Number(d.port || 0), protocol: String(d.protocol || 'tcp'), state: String(d.state || 'open'), service: String(d.service || 'unknown'), version: String(d.version || ''), raw: d.output || '' };
-      }),
-      subdomains: (grouped.subdomain || []).map((r: Record<string, unknown>) => {
-        const d = r.data as Record<string, unknown> || {};
-        return { subdomain: String(d.subdomain || d.value || d.output || ''), source: String(r.source || ''), alive: true, ip: '' };
-      }),
-      httpEndpoints: (grouped.http_endpoint || []).map((r: Record<string, unknown>) => {
-        const d = r.data as Record<string, unknown> || {};
-        return { url: String(d.url || d.output || ''), statusCode: Number(d.statusCode || 0), title: String(d.title || ''), contentLength: 0, technologies: [] };
-      }),
-      technologies: (grouped.technology || []).map((r: Record<string, unknown>) => {
-        const d = r.data as Record<string, unknown> || {};
-        return { name: String(d.name || d.output || ''), version: String(d.version || ''), categories: [] };
-      }),
-      vulnerabilities: (grouped.vulnerability || []).map((r: Record<string, unknown>) => {
-        const d = r.data as Record<string, unknown> || {};
-        return { id: String(r.id || ''), name: String(d.name || d.template || ''), severity: String(r.severity || d.severity || 'info'), description: String(d.description || d.output || ''), url: String(d.url || ''), reference: '', tool: String(r.source || '') };
-      }),
+      toolsUsed,
+      ports,
+      subdomains,
+      httpEndpoints,
+      technologies,
+      vulnerabilities,
       stats: {
-        totalPorts: (grouped.port_scan || []).length,
-        openPorts: (grouped.port_scan || []).length,
-        totalSubdomains: (grouped.subdomain || []).length,
-        aliveSubdomains: (grouped.subdomain || []).length,
-        totalEndpoints: (grouped.http_endpoint || []).length,
-        totalVulnerabilities: (grouped.vulnerability || []).length,
-        criticalVulns: 0, highVulns: 0, mediumVulns: 0, lowVulns: 0,
+        totalPorts: ports.length,
+        openPorts: ports.filter(p => p.state === 'open').length,
+        totalSubdomains: subdomains.length,
+        aliveSubdomains: subdomains.length,
+        totalEndpoints: httpEndpoints.length,
+        totalVulnerabilities: vulnerabilities.length,
+        criticalVulns: vulnerabilities.filter(v => v.severity === 'critical').length,
+        highVulns: vulnerabilities.filter(v => v.severity === 'high').length,
+        mediumVulns: vulnerabilities.filter(v => v.severity === 'medium').length,
+        lowVulns: vulnerabilities.filter(v => v.severity === 'low').length,
       },
-    } as CompleteScanResults;
+    } as unknown as CompleteScanResults;
   }
 
   async downloadResults(target: string, format: 'json' | 'markdown'): Promise<Blob> {
@@ -511,6 +508,213 @@ class ApiService {
     const { data } = await this.client.post(`/vpn/${provider}/disconnect`);
     return data.data;
   }
+}
+
+// ============================================================================
+// Raw output parsers — extract structured data from tool CLI output
+// ============================================================================
+
+type RawResult = { id?: string; data?: { tool?: string; output?: string; duration?: number; exitCode?: number } & Record<string, unknown>; severity?: string; source?: string; timestamp?: number };
+
+function getRawOutput(r: RawResult): string {
+  return String(r.data?.output || '');
+}
+
+function collectToolsUsed(grouped: Record<string, RawResult[]>): string[] {
+  const tools = new Set<string>();
+  for (const items of Object.values(grouped)) {
+    for (const r of items) {
+      if (r.source) tools.add(r.source);
+      if (r.data?.tool) tools.add(r.data.tool);
+    }
+  }
+  return Array.from(tools);
+}
+
+/** Parse nmap output into individual port entries */
+function parsePortResults(results: RawResult[], target = ''): Array<{ port: number; protocol: string; state: string; service: string; version: string; target: string; raw: string }> {
+  const ports: Array<{ port: number; protocol: string; state: string; service: string; version: string; target: string; raw: string }> = [];
+  // nmap line format: "22/tcp  open  ssh  OpenSSH 9.2p1 ..."
+  const portLineRe = /^(\d+)\/(tcp|udp)\s+(open|closed|filtered)\s+(\S+)\s*(.*)/;
+
+  for (const r of results) {
+    const output = getRawOutput(r);
+    // If data has structured port/protocol, use directly
+    if (r.data?.port && typeof r.data.port === 'number') {
+      ports.push({
+        port: Number(r.data.port),
+        protocol: String(r.data.protocol || 'tcp'),
+        state: String(r.data.state || 'open'),
+        service: String(r.data.service || 'unknown'),
+        version: String(r.data.version || ''),
+        target,
+        raw: output,
+      });
+      continue;
+    }
+
+    // Parse nmap text output
+    for (const line of output.split('\n')) {
+      const match = line.trim().match(portLineRe);
+      if (match) {
+        ports.push({
+          port: parseInt(match[1], 10),
+          protocol: match[2],
+          state: match[3],
+          service: match[4],
+          version: match[5]?.trim() || '',
+          target,
+          raw: line.trim(),
+        });
+      }
+    }
+  }
+  return ports;
+}
+
+/** Parse subdomain results — split multi-hostname output into individual entries */
+function parseSubdomainResults(results: RawResult[], target = ''): Array<{ subdomain: string; target: string; source: string; discoveredAt: number }> {
+  const subs: Array<{ subdomain: string; target: string; source: string; discoveredAt: number }> = [];
+  const seen = new Set<string>();
+
+  for (const r of results) {
+    const output = getRawOutput(r);
+    const source = r.source || r.data?.tool || 'unknown';
+    const ts = r.timestamp || Date.now();
+
+    // Split by whitespace or newlines — each token could be a subdomain
+    const tokens = output.split(/[\s,]+/).filter(Boolean);
+    for (const token of tokens) {
+      const cleaned = token.trim().replace(/^\*\./, '');
+      // Must look like a hostname (contains a dot, or is 'localhost')
+      if ((cleaned.includes('.') || cleaned === 'localhost') && !seen.has(cleaned)) {
+        seen.add(cleaned);
+        subs.push({ subdomain: cleaned, target, source, discoveredAt: ts });
+      }
+    }
+  }
+  return subs;
+}
+
+/** Parse HTTP endpoint results from gobuster/httpx/ffuf output */
+function parseHttpEndpoints(results: RawResult[]): Array<{ url: string; statusCode: number; title: string; contentLength: number; technologies: string[] }> {
+  const endpoints: Array<{ url: string; statusCode: number; title: string; contentLength: number; technologies: string[] }> = [];
+  const seen = new Set<string>();
+
+  for (const r of results) {
+    const output = getRawOutput(r);
+
+    for (const line of output.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('Error') || trimmed.startsWith('Usage')) continue;
+
+      // gobuster format: "/path (Status: 200) [Size: 1234]"
+      const gobusterMatch = trimmed.match(/^(\/\S+)\s+\(Status:\s*(\d+)\)(?:\s+\[Size:\s*(\d+)\])?/);
+      if (gobusterMatch) {
+        const url = gobusterMatch[1];
+        if (!seen.has(url)) {
+          seen.add(url);
+          endpoints.push({ url, statusCode: parseInt(gobusterMatch[2], 10), title: '', contentLength: parseInt(gobusterMatch[3] || '0', 10), technologies: [] });
+        }
+        continue;
+      }
+
+      // httpx format: "http://target [200] [Title] [content-length]" or just URLs
+      const httpxMatch = trimmed.match(/^(https?:\/\/\S+)\s+\[(\d+)\](?:\s+\[([^\]]*)\])?/);
+      if (httpxMatch) {
+        const url = httpxMatch[1];
+        if (!seen.has(url)) {
+          seen.add(url);
+          endpoints.push({ url, statusCode: parseInt(httpxMatch[2], 10), title: httpxMatch[3] || '', contentLength: 0, technologies: [] });
+        }
+        continue;
+      }
+
+      // Plain URL lines
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        if (!seen.has(trimmed)) {
+          seen.add(trimmed);
+          endpoints.push({ url: trimmed, statusCode: 0, title: '', contentLength: 0, technologies: [] });
+        }
+      }
+    }
+  }
+  return endpoints;
+}
+
+/** Parse technology detection output from whatweb */
+function parseTechnologies(results: RawResult[]): Array<{ name: string; version: string; category: string; confidence: number }> {
+  const techs: Array<{ name: string; version: string; category: string; confidence: number }> = [];
+  const seen = new Set<string>();
+
+  for (const r of results) {
+    const output = getRawOutput(r);
+
+    // whatweb format: "http://target [200 OK] Apache[2.4.66], PHP[8.2.29], ..."
+    const bracketRe = /\b([A-Za-z][A-Za-z0-9_.+-]+)\[([^\]]*)\]/g;
+    let match;
+    while ((match = bracketRe.exec(output)) !== null) {
+      const name = match[1];
+      const version = match[2];
+      if (!seen.has(name)) {
+        seen.add(name);
+        techs.push({ name, version, category: 'web', confidence: 100 });
+      }
+    }
+
+    // Also parse lines like "Technology: Apache 2.4.66"
+    for (const line of output.split('\n')) {
+      const techMatch = line.match(/^(?:Technology|Server|Framework):\s*(.+)/i);
+      if (techMatch && !seen.has(techMatch[1])) {
+        seen.add(techMatch[1]);
+        techs.push({ name: techMatch[1], version: '', category: 'web', confidence: 80 });
+      }
+    }
+  }
+  return techs;
+}
+
+/** Parse vulnerability results from nuclei output */
+function parseVulnerabilities(results: RawResult[]): Array<{ id: string; name: string; severity: string; description: string; url: string; reference: string; tool: string }> {
+  const vulns: Array<{ id: string; name: string; severity: string; description: string; url: string; reference: string; tool: string }> = [];
+
+  for (const r of results) {
+    const output = getRawOutput(r);
+    const tool = r.source || r.data?.tool || 'unknown';
+
+    // nuclei output format: "[template-id] [protocol] [severity] url"
+    // e.g., "[phpinfo-files] [http] [medium] http://localhost:8080/info.php"
+    const nucleiRe = /\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(\S+)/g;
+    let match;
+    while ((match = nucleiRe.exec(output)) !== null) {
+      vulns.push({
+        id: match[1],
+        name: match[1].replace(/-/g, ' '),
+        severity: match[3].toLowerCase(),
+        description: `${match[1]} detected via ${match[2]}`,
+        url: match[4],
+        reference: '',
+        tool,
+      });
+    }
+
+    // If no nuclei matches, try to extract findings from other formats
+    if (vulns.length === 0 && output.length > 0) {
+      // Generic: if result has severity set at top level
+      if (r.severity && r.severity !== 'info') {
+        vulns.push({
+          id: r.id || 'unknown',
+          name: tool + ' finding',
+          severity: r.severity,
+          description: output.substring(0, 500),
+          url: '',
+          reference: '',
+          tool,
+        });
+      }
+    }
+  }
+  return vulns;
 }
 
 export const apiService = new ApiService();

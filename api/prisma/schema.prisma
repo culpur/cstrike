@@ -299,6 +299,7 @@ model Service {
   error     String?
   uptime    Int?          // seconds
   optional  Boolean       @default(true)
+  autoStart Boolean       @default(false) @map("auto_start")
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 

@@ -13,14 +13,14 @@ async function main() {
   // ── Default configuration entries ──────────────────────────
   const configDefaults: { key: string; value: unknown }[] = [
     // AI provider settings
-    { key: 'ai_provider', value: 'openai' },
+    { key: 'ai_provider', value: 'ollama' },
     { key: 'openai_api_key', value: '' },
     { key: 'openai_model', value: 'gpt-4o' },
     { key: 'anthropic_api_key', value: '' },
     { key: 'anthropic_model', value: 'claude-sonnet-4-20250514' },
     { key: 'grok_api_key', value: '' },
     { key: 'grok_model', value: 'grok-2' },
-    { key: 'ollama_model', value: 'llama3' },
+    { key: 'ollama_model', value: 'qwen3' },
     { key: 'ollama_host', value: 'http://localhost:11434' },
 
     // AI tuning
@@ -116,22 +116,23 @@ async function main() {
 
   // ── Default service records ────────────────────────────────
   const services = [
-    { name: 'api_server', port: 3001, optional: false },
-    { name: 'frontend', port: 3000, optional: false },
-    { name: 'metasploit', port: 55552, optional: true },
-    { name: 'zap', port: 8090, optional: true },
-    { name: 'burp', port: null, optional: true },
+    { name: 'api_server', port: 3001, optional: false, autoStart: false },
+    { name: 'frontend', port: 3000, optional: false, autoStart: false },
+    { name: 'metasploit', port: 55552, optional: true, autoStart: true },
+    { name: 'zap', port: 8090, optional: true, autoStart: true },
+    { name: 'burp', port: null as number | null, optional: true, autoStart: true },
   ];
 
   for (const svc of services) {
     await prisma.service.upsert({
       where: { name: svc.name },
-      update: {},
+      update: { autoStart: svc.autoStart },
       create: {
         name: svc.name,
         status: 'STOPPED',
         port: svc.port,
         optional: svc.optional,
+        autoStart: svc.autoStart,
       },
     });
   }

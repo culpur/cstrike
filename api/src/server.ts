@@ -33,6 +33,7 @@ import { exploitRouter } from './routes/exploit.js';
 
 // Services
 import { startMetricsCollector } from './services/metricsCollector.js';
+import { autoStartServices, startServiceMonitor, stopServiceMonitor } from './services/serviceMonitor.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -115,6 +116,14 @@ async function start() {
     // Start metrics collector (emits system_metrics every 2s)
     startMetricsCollector();
 
+    // Auto-start services marked with autoStart=true (metasploit, zap, burp)
+    autoStartServices().catch((err) => {
+      console.warn('[CStrike API] Service auto-start error:', err.message);
+    });
+
+    // Start service health monitor (restart crashed services every 30s)
+    startServiceMonitor();
+
     // Start HTTP server
     httpServer.listen(env.PORT, env.HOST, () => {
       console.log(`[CStrike API] v2.0.0 listening on ${env.HOST}:${env.PORT}`);
@@ -129,6 +138,7 @@ async function start() {
 // Graceful shutdown
 async function shutdown(signal: string) {
   console.log(`\n[CStrike API] ${signal} received, shutting down...`);
+  stopServiceMonitor();
   httpServer.close();
   await prisma.$disconnect();
   redis.disconnect();
