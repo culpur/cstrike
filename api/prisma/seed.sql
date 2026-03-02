@@ -3,7 +3,7 @@
 -- Uses ON CONFLICT to be idempotent (safe to re-run).
 
 -- ── Service records ──────────────────────────────────────────
-INSERT INTO "Service" (id, name, status, port, optional, "createdAt", "updatedAt")
+INSERT INTO services (id, name, status, port, optional, "createdAt", "updatedAt")
 VALUES
   ('svc_api',        'api_server',  'STOPPED', 3001,  false, NOW(), NOW()),
   ('svc_frontend',   'frontend',    'STOPPED', 3000,  false, NOW(), NOW()),
@@ -13,7 +13,7 @@ VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- ── Default configuration ────────────────────────────────────
-INSERT INTO "ConfigEntry" (id, key, value, version, "createdAt", "updatedAt")
+INSERT INTO config_entries (id, key, value, version, "createdAt", "updatedAt")
 VALUES
   (gen_random_uuid(), 'ai_provider',       '"openai"',  1, NOW(), NOW()),
   (gen_random_uuid(), 'ai_temperature',    '0.7',       1, NOW(), NOW()),
@@ -27,7 +27,7 @@ VALUES
 ON CONFLICT (key) DO NOTHING;
 
 -- ── VPN connection records ───────────────────────────────────
-INSERT INTO "VpnConnection" (id, provider, interface, status, "createdAt", "updatedAt")
+INSERT INTO vpn_connections (id, provider, interface, status, "createdAt", "updatedAt")
 VALUES
   (gen_random_uuid(), 'wireguard',  'wg0',        'DISCONNECTED', NOW(), NOW()),
   (gen_random_uuid(), 'openvpn',    'tun0',       'DISCONNECTED', NOW(), NOW()),
