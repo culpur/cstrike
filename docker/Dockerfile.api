@@ -56,11 +56,16 @@ FROM node:22-bookworm-slim
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
       python3 python3-pip python3-venv \
-      curl dnsutils net-tools procps postgresql-client \
-      nmap hydra sqlmap \
-      nikto dirb sslscan masscan \
+      curl git dnsutils net-tools procps postgresql-client \
+      nmap hydra sqlmap sslscan masscan \
       nbtscan snmp smbclient \
+      perl libnet-ssleay-perl libwhisker2-perl \
       && rm -rf /var/lib/apt/lists/*
+
+# Install nikto from source (not in Debian repos)
+RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto && \
+    ln -sf /opt/nikto/program/nikto.pl /usr/local/bin/nikto && \
+    chmod +x /opt/nikto/program/nikto.pl || true
 
 # Install Python-based security tools
 RUN pip3 install --break-system-packages --no-cache-dir \
