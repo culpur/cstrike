@@ -9,12 +9,17 @@ timezone: UTC
 
 locale: en_US.UTF-8
 
+ssh_pwauth: true
+
 users:
-  - name: soulofall
-    groups: sudo
-    shell: /bin/zsh
+  - name: cstrike
+    gecos: CStrike Operator
+    groups: sudo, docker
+    shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL
-    lock_passwd: true
+    lock_passwd: false
+    # Default password: cstrike (change in production)
+    passwd: $6$cstrike$TTcF7UgZbvzim.esHVCihBjbh3idOujxwSwh19pN1Sc2oFL8WzgMaNPRmyjZadMk2.YAffzGjOvjRdMQqRTNr/
     ssh_authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINxbkRVj+GuR6+l0TfQa97TosRkiwDn2/EtFCC1migB+ soulofall@guard
 
