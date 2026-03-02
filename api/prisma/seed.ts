@@ -30,7 +30,7 @@ async function main() {
     { key: 'mcp_enabled', value: true },
 
     // Exploitation gate
-    { key: 'allow_exploitation', value: false },
+    { key: 'allow_exploitation', value: true },
 
     // Scan configuration
     {
