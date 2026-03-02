@@ -5,6 +5,7 @@
 
 import { prisma } from '../config/database.js';
 import { toolExecutor } from './toolExecutor.js';
+import { lootService } from './lootService.js';
 import { getConfigValue } from '../middleware/guardrails.js';
 import { emitPhaseChange, emitReconOutput, emitScanComplete, emitLogEntry } from '../websocket/emitter.js';
 
@@ -42,10 +43,11 @@ class ScanOrchestrator {
   ) {
     try {
       // Mark as running
-      await prisma.scan.update({
+      const scanRecord = await prisma.scan.update({
         where: { id: scanId },
         data: { status: 'RUNNING', startedAt: new Date(), phase: 'RECON' },
       });
+      const targetId = scanRecord.targetId;
 
       // Get allowed tools from config
       const allowedTools = await getConfigValue<string[]>('allowed_tools', []);
@@ -99,6 +101,22 @@ class ScanOrchestrator {
             source: tool,
           },
         });
+
+        // Extract loot from tool output (credentials, ports, URLs, etc.)
+        if (result.output && !result.error) {
+          try {
+            const lootCount = await lootService.extractFromOutput(result.output, tool, targetId);
+            if (lootCount > 0) {
+              emitLogEntry({
+                level: 'INFO',
+                source: 'loot',
+                message: `Extracted ${lootCount} loot items from ${tool}`,
+              });
+            }
+          } catch (err: any) {
+            console.error(`[Loot] Extraction failed for ${tool}:`, err.message);
+          }
+        }
 
         // Log to DB
         await prisma.logEntry.create({

@@ -258,7 +258,7 @@ class LootService {
     }
 
     // URLs — from web-focused tools
-    if (['waybackurls', 'gau', 'gobuster', 'ffuf', 'feroxbuster', 'dirb', 'katana', 'httpx'].includes(source)) {
+    if (['waybackurls', 'gau', 'gobuster', 'ffuf', 'feroxbuster', 'dirb', 'katana', 'httpx', 'nuclei', 'nikto'].includes(source)) {
       for (const pattern of URL_PATTERNS) {
         let m: RegExpExecArray | null;
         const re = new RegExp(pattern.source, pattern.flags);

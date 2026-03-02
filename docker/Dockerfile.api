@@ -19,44 +19,66 @@ RUN npx tsc || true
 FROM debian:bookworm-slim AS tools
 
 ARG TARGETARCH
-RUN apt-get update -qq && apt-get install -y --no-install-recommends curl ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update -qq && apt-get install -y --no-install-recommends curl ca-certificates unzip && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /tmp/tools
 
-# Download Go-based security tools (static binaries)
+# ProjectDiscovery tools (all follow same release pattern)
 RUN NUCLEI_VERSION=3.3.7 && \
-    ARCH=$(echo ${TARGETARCH} | sed 's/amd64/amd64/;s/arm64/arm64/') && \
-    curl -fsSL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${ARCH}.zip" -o /tmp/nuclei.zip && \
-    apt-get update -qq && apt-get install -y --no-install-recommends unzip && \
-    unzip /tmp/nuclei.zip -d /tmp/tools && \
-    chmod +x /tmp/tools/nuclei || true
+    curl -fsSL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${TARGETARCH}.zip" -o /tmp/nuclei.zip && \
+    unzip -o /tmp/nuclei.zip -d /tmp/tools && chmod +x /tmp/tools/nuclei || true
 
+RUN SUBFINDER_VERSION=2.6.7 && \
+    curl -fsSL "https://github.com/projectdiscovery/subfinder/releases/download/v${SUBFINDER_VERSION}/subfinder_${SUBFINDER_VERSION}_linux_${TARGETARCH}.zip" -o /tmp/subfinder.zip && \
+    unzip -o /tmp/subfinder.zip -d /tmp/tools && chmod +x /tmp/tools/subfinder || true
+
+RUN HTTPX_VERSION=1.6.9 && \
+    curl -fsSL "https://github.com/projectdiscovery/httpx/releases/download/v${HTTPX_VERSION}/httpx_${HTTPX_VERSION}_linux_${TARGETARCH}.zip" -o /tmp/httpx.zip && \
+    unzip -o /tmp/httpx.zip -d /tmp/tools && chmod +x /tmp/tools/httpx || true
+
+RUN KATANA_VERSION=1.1.0 && \
+    curl -fsSL "https://github.com/projectdiscovery/katana/releases/download/v${KATANA_VERSION}/katana_${KATANA_VERSION}_linux_${TARGETARCH}.zip" -o /tmp/katana.zip && \
+    unzip -o /tmp/katana.zip -d /tmp/tools && chmod +x /tmp/tools/katana || true
+
+# ffuf and gobuster
 RUN FFUF_VERSION=2.1.0 && \
-    ARCH=$(echo ${TARGETARCH} | sed 's/amd64/amd64/;s/arm64/arm64/') && \
-    curl -fsSL "https://github.com/ffuf/ffuf/releases/download/v${FFUF_VERSION}/ffuf_${FFUF_VERSION}_linux_${ARCH}.tar.gz" | tar xz -C /tmp/tools && \
+    curl -fsSL "https://github.com/ffuf/ffuf/releases/download/v${FFUF_VERSION}/ffuf_${FFUF_VERSION}_linux_${TARGETARCH}.tar.gz" | tar xz -C /tmp/tools && \
     chmod +x /tmp/tools/ffuf || true
 
 RUN GOBUSTER_VERSION=3.6.0 && \
-    ARCH=$(echo ${TARGETARCH} | sed 's/amd64/amd64/;s/arm64/arm64/') && \
     curl -fsSL "https://github.com/OJ/gobuster/releases/download/v${GOBUSTER_VERSION}/gobuster_Linux_${TARGETARCH}.tar.gz" | tar xz -C /tmp/tools 2>/dev/null && \
     chmod +x /tmp/tools/gobuster 2>/dev/null || true
 
 # ── Stage 3: Runtime ─────────────────────────────────────────
 FROM node:22-bookworm-slim
 
-# Install Python, system tools, and security tools
+# Install Python, system tools, and security tools from apt
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
       python3 python3-pip python3-venv \
-      curl dnsutils net-tools procps \
+      curl dnsutils net-tools procps postgresql-client \
       nmap hydra sqlmap \
+      nikto dirb sslscan masscan \
+      nbtscan snmp smbclient \
       && rm -rf /var/lib/apt/lists/*
+
+# Install Python-based security tools
+RUN pip3 install --break-system-packages --no-cache-dir \
+    wafw00f wfuzz sslyze dnsrecon 2>/dev/null || true
+
+# Install testssl.sh (bash-based SSL scanner)
+RUN curl -fsSL https://raw.githubusercontent.com/drwetter/testssl.sh/3.2/testssl.sh -o /usr/local/bin/testssl.sh && \
+    chmod +x /usr/local/bin/testssl.sh || true
 
 # Copy Go-based security tools from fetcher stage
 COPY --from=tools /tmp/tools/nuclei /usr/local/bin/nuclei
+COPY --from=tools /tmp/tools/subfinder /usr/local/bin/subfinder
+COPY --from=tools /tmp/tools/httpx /usr/local/bin/httpx
+COPY --from=tools /tmp/tools/katana /usr/local/bin/katana
 COPY --from=tools /tmp/tools/ffuf /usr/local/bin/ffuf
 COPY --from=tools /tmp/tools/gobuster /usr/local/bin/gobuster
 
-# Create default wordlist directory
+# Create default wordlist directory with common wordlists
 RUN mkdir -p /opt/cstrike/data/wordlists && \
     if [ -d /usr/share/dirb/wordlists ]; then \
       cp /usr/share/dirb/wordlists/common.txt /opt/cstrike/data/wordlists/common.txt 2>/dev/null; \
