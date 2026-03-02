@@ -19,7 +19,7 @@ VALUES
   (gen_random_uuid(), 'ai_temperature',    '0.7',       1, NOW(), NOW()),
   (gen_random_uuid(), 'ai_max_tokens',     '4096',      1, NOW(), NOW()),
   (gen_random_uuid(), 'allow_exploitation', 'false',    1, NOW(), NOW()),
-  (gen_random_uuid(), 'scan_modes',        '["port_scan","service_enum","subdomain_enum","web_crawl","vuln_scan","ssl_audit"]', 1, NOW(), NOW()),
+  (gen_random_uuid(), 'scan_modes',        '["port","http","dns","subdomain","network","dirbusting","vulnscan","apiscan","web_exploit","ssl","smb","ldap","snmp","osint","credentials","password","cloud","lateral"]', 1, NOW(), NOW()),
   (gen_random_uuid(), 'allowed_tools',     '["nmap","masscan","rustscan","subfinder","amass","theHarvester","dnsenum","dnsrecon","whois","dig","host","traceroute","httpx","httprobe","curl","whatweb","nikto","wafw00f","shcheck","aquatone","sqlmap","xsstrike","commix","arjun","jwt_tool.py","wpscan","ffuf","gobuster","feroxbuster","waybackurls","gau","nuclei","vulnapi","enum4linux-ng","smbmap","rpcclient","ldapsearch","snmpwalk","onesixtyone","hydra","smtp-user-enum","testssl","sslscan","sslyze","hashcat","john","cewl","hashid","shodan","sherlock","impacket-secretsdump","impacket-psexec","impacket-wmiexec","impacket-smbexec","impacket-GetUserSPNs","chisel","responder","bloodhound-python","proxychains4","trivy","kube-hunter","gowitness","eyewitness","msfconsole","msfrpcd","zap.sh","burpsuite","dirb","wfuzz","katana","medusa","enum4linux","smbclient","nbtscan"]', 1, NOW(), NOW()),
   (gen_random_uuid(), 'max_threads',       '10',        1, NOW(), NOW()),
   (gen_random_uuid(), 'max_runtime',       '3600',      1, NOW(), NOW()),

@@ -36,8 +36,14 @@ async function main() {
     {
       key: 'scan_modes',
       value: [
-        'port_scan', 'service_enum', 'subdomain_enum',
-        'web_crawl', 'vuln_scan', 'ssl_audit',
+        // Core
+        'port', 'http', 'dns', 'subdomain', 'network',
+        // Web
+        'dirbusting', 'vulnscan', 'apiscan', 'web_exploit', 'ssl',
+        // Network
+        'smb', 'ldap', 'snmp',
+        // Advanced
+        'osint', 'credentials', 'password', 'cloud', 'lateral',
       ],
     },
     {
