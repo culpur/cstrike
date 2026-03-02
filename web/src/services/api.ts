@@ -8,6 +8,7 @@ import type {
   SystemMetrics,
   ServiceState,
   LootItem,
+  LootCategory,
   CredentialPair,
   LogEntry,
   HeatmapResponse,
