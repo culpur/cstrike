@@ -1,5 +1,5 @@
 # CStrike v2 API — Multi-stage Dockerfile
-# Node.js 22 + Python 3.12 (for MCP server + TUI)
+# Node.js 22 + Python 3.12 + Security Tools
 
 # ── Stage 1: Build ───────────────────────────────────────────
 FROM node:22-bookworm-slim AS builder
@@ -15,15 +15,52 @@ COPY api/ ./
 RUN npx prisma generate
 RUN npx tsc || true
 
-# ── Stage 2: Runtime ─────────────────────────────────────────
+# ── Stage 2: Go tool fetcher (architecture-aware) ───────────
+FROM debian:bookworm-slim AS tools
+
+ARG TARGETARCH
+RUN apt-get update -qq && apt-get install -y --no-install-recommends curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Download Go-based security tools (static binaries)
+RUN NUCLEI_VERSION=3.3.7 && \
+    ARCH=$(echo ${TARGETARCH} | sed 's/amd64/amd64/;s/arm64/arm64/') && \
+    curl -fsSL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${ARCH}.zip" -o /tmp/nuclei.zip && \
+    apt-get update -qq && apt-get install -y --no-install-recommends unzip && \
+    unzip /tmp/nuclei.zip -d /tmp/tools && \
+    chmod +x /tmp/tools/nuclei || true
+
+RUN FFUF_VERSION=2.1.0 && \
+    ARCH=$(echo ${TARGETARCH} | sed 's/amd64/amd64/;s/arm64/arm64/') && \
+    curl -fsSL "https://github.com/ffuf/ffuf/releases/download/v${FFUF_VERSION}/ffuf_${FFUF_VERSION}_linux_${ARCH}.tar.gz" | tar xz -C /tmp/tools && \
+    chmod +x /tmp/tools/ffuf || true
+
+RUN GOBUSTER_VERSION=3.6.0 && \
+    ARCH=$(echo ${TARGETARCH} | sed 's/amd64/amd64/;s/arm64/arm64/') && \
+    curl -fsSL "https://github.com/OJ/gobuster/releases/download/v${GOBUSTER_VERSION}/gobuster_Linux_${TARGETARCH}.tar.gz" | tar xz -C /tmp/tools 2>/dev/null && \
+    chmod +x /tmp/tools/gobuster 2>/dev/null || true
+
+# ── Stage 3: Runtime ─────────────────────────────────────────
 FROM node:22-bookworm-slim
 
-# Install Python 3.12 for MCP server and TUI
+# Install Python, system tools, and security tools
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
       python3 python3-pip python3-venv \
       curl dnsutils net-tools procps \
+      nmap hydra sqlmap \
       && rm -rf /var/lib/apt/lists/*
+
+# Copy Go-based security tools from fetcher stage
+COPY --from=tools /tmp/tools/nuclei /usr/local/bin/nuclei
+COPY --from=tools /tmp/tools/ffuf /usr/local/bin/ffuf
+COPY --from=tools /tmp/tools/gobuster /usr/local/bin/gobuster
+
+# Create default wordlist directory
+RUN mkdir -p /opt/cstrike/data/wordlists && \
+    if [ -d /usr/share/dirb/wordlists ]; then \
+      cp /usr/share/dirb/wordlists/common.txt /opt/cstrike/data/wordlists/common.txt 2>/dev/null; \
+    fi
 
 WORKDIR /app
 
@@ -32,6 +69,9 @@ COPY --from=builder /build/dist ./dist
 COPY --from=builder /build/node_modules ./node_modules
 COPY --from=builder /build/package.json ./
 COPY --from=builder /build/prisma ./prisma
+
+# Copy seed script
+COPY api/prisma/seed.sql ./prisma/seed.sql
 
 # Copy Python components (MCP server + TUI)
 COPY mcp_server/ ./mcp_server/
@@ -48,5 +88,5 @@ RUN npx prisma generate
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=30s \
     CMD curl -sf http://127.0.0.1:3001/health || exit 1
 
-# Run migrations and start
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+# Run migrations, seed, and start
+CMD ["sh", "-c", "npx prisma migrate deploy && psql \"$DATABASE_URL\" -f prisma/seed.sql 2>/dev/null || true && node dist/server.js"]

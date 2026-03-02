@@ -76,7 +76,8 @@ echo "[3/7] Installing Go/Rust-based reconnaissance tools..."
 # Install Go (needed for some tools)
 if ! command -v go &>/dev/null; then
     GO_VERSION="1.22.5"
-    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xz
+    GO_ARCH=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" | tar -C /usr/local -xz
     echo 'export PATH=$PATH:/usr/local/go/bin:/root/go/bin' >> /etc/profile.d/go.sh
     export PATH=$PATH:/usr/local/go/bin:/root/go/bin
 fi

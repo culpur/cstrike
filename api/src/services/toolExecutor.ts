@@ -9,6 +9,36 @@ import { accessSync } from 'node:fs';
 import { env } from '../config/env.js';
 import { emitReconOutput, emitLogEntry } from '../websocket/emitter.js';
 
+/** Extract hostname (without port) from a URL or hostname string. */
+function extractHost(target: string): string {
+  try {
+    const url = new URL(target);
+    return url.hostname;
+  } catch {
+    // Not a URL — strip any port suffix
+    return target.replace(/:\d+$/, '');
+  }
+}
+
+/** Extract port from a URL, defaulting to 80/443 by scheme. */
+function extractPort(target: string): number | undefined {
+  try {
+    const url = new URL(target);
+    if (url.port) return parseInt(url.port, 10);
+    return url.protocol === 'https:' ? 443 : 80;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Find the first wordlist that exists. */
+function findWordlist(candidates: string[]): string {
+  for (const w of candidates) {
+    try { accessSync(w); return w; } catch { continue; }
+  }
+  return candidates[0]; // fallback
+}
+
 interface ToolResult {
   tool: string;
   target: string;
@@ -34,54 +64,78 @@ interface ToolOptions {
   args?: string[];
 }
 
-// Tool command builders
+// Common wordlist paths (container may have different paths than host)
+const COMMON_WORDLIST = [
+  '/opt/cstrike/data/wordlists/common.txt',
+  '/usr/share/wordlists/dirb/common.txt',
+  '/usr/share/dirb/wordlists/common.txt',
+  '/usr/share/seclists/Discovery/Web-Content/common.txt',
+];
+
+// Tool command builders — tools that need hostnames get extractHost(),
+// web tools get the full URL.
 const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => string[]> = {
-  nmap: (target, opts) => [
-    'nmap', '-sV', '-sC', '--top-ports', '1000', '-oN', '-', target,
-  ],
-  subfinder: (target) => ['subfinder', '-d', target, '-silent'],
-  amass: (target) => ['amass', 'enum', '-d', target, '-passive'],
+  nmap: (target) => {
+    const host = extractHost(target);
+    const port = extractPort(target);
+    const args = ['nmap', '-sV', '-sC', '-oN', '-'];
+    if (port && port !== 80 && port !== 443) {
+      // Scan specific port + common ports
+      args.push('-p', `${port},21,22,23,25,53,80,443,3306,8080,8443`);
+    } else {
+      args.push('--top-ports', '1000');
+    }
+    args.push(host);
+    return args;
+  },
+  subfinder: (target) => ['subfinder', '-d', extractHost(target), '-silent'],
+  amass: (target) => ['amass', 'enum', '-d', extractHost(target), '-passive'],
   nikto: (target) => ['nikto', '-h', target, '-Format', 'txt'],
   httpx: (target) => ['httpx', '-u', target, '-silent', '-status-code', '-title', '-tech-detect'],
-  waybackurls: (target) => ['waybackurls', target],
-  gau: (target) => ['gau', target],
-  dnsenum: (target) => ['dnsenum', target],
-  nuclei: (target) => ['nuclei', '-u', target, '-severity', 'critical,high,medium'],
-  ffuf: (target, opts) => [
-    'ffuf', '-u', `${target}/FUZZ`, '-w',
-    '/usr/share/wordlists/dirb/common.txt', '-mc', '200,301,302,403',
-  ],
-  gobuster: (target) => [
-    'gobuster', 'dir', '-u', target, '-w',
-    '/usr/share/wordlists/dirb/common.txt', '-q',
-  ],
+  waybackurls: (target) => ['waybackurls', extractHost(target)],
+  gau: (target) => ['gau', extractHost(target)],
+  dnsenum: (target) => ['dnsenum', extractHost(target)],
+  nuclei: (target) => ['nuclei', '-u', target, '-severity', 'critical,high,medium,low'],
+  ffuf: (target) => {
+    const base = target.replace(/\/+$/, '');
+    const wl = findWordlist(COMMON_WORDLIST);
+    return ['ffuf', '-u', `${base}/FUZZ`, '-w', wl, '-mc', '200,301,302,403', '-t', '10'];
+  },
+  gobuster: (target) => {
+    const wl = findWordlist(COMMON_WORDLIST);
+    return ['gobuster', 'dir', '-u', target, '-w', wl, '-q', '-t', '10'];
+  },
   dirb: (target) => ['dirb', target, '-S'],
-  wfuzz: (target) => [
-    'wfuzz', '-c', '-z', 'file,/usr/share/wordlists/dirb/common.txt',
-    '--hc', '404', `${target}/FUZZ`,
-  ],
+  wfuzz: (target) => {
+    const wl = findWordlist(COMMON_WORDLIST);
+    return ['wfuzz', '-c', '-z', `file,${wl}`, '--hc', '404', `${target}/FUZZ`];
+  },
   sqlmap: (target) => [
-    'sqlmap', '-u', target, '--batch', '--level=1', '--risk=1',
+    'sqlmap', '-u', target, '--batch', '--level=1', '--risk=1', '--forms',
   ],
   xsstrike: (target) => ['xsstrike', '-u', target, '--blind'],
   whatweb: (target) => ['whatweb', target, '-a', '3'],
   wafw00f: (target) => ['wafw00f', target],
-  sslscan: (target) => ['sslscan', target],
-  sslyze: (target) => ['sslyze', target],
+  sslscan: (target) => ['sslscan', extractHost(target)],
+  sslyze: (target) => ['sslyze', extractHost(target)],
   testssl: (target) => ['testssl.sh', target],
   masscan: (target) => [
-    'masscan', target, '-p1-65535', '--rate=1000', '--open-only',
+    'masscan', extractHost(target), '-p1-65535', '--rate=1000', '--open-only',
   ],
-  rustscan: (target) => ['rustscan', '-a', target, '--ulimit', '5000'],
-  feroxbuster: (target) => [
-    'feroxbuster', '-u', target, '-w',
-    '/usr/share/wordlists/dirb/common.txt', '-q',
-  ],
+  rustscan: (target) => ['rustscan', '-a', extractHost(target), '--ulimit', '5000'],
+  feroxbuster: (target) => {
+    const wl = findWordlist(COMMON_WORDLIST);
+    return ['feroxbuster', '-u', target, '-w', wl, '-q'];
+  },
   katana: (target) => ['katana', '-u', target, '-d', '3', '-silent'],
   hydra: (target, opts) => {
+    const host = extractHost(target);
     const args = ['hydra'];
     if (opts.username) args.push('-l', opts.username);
-    else args.push('-L', '/usr/share/wordlists/metasploit/unix_users.txt');
+    else args.push('-L', findWordlist([
+      '/usr/share/wordlists/metasploit/unix_users.txt',
+      '/usr/share/wordlists/nmap.lst',
+    ]));
 
     const wordlistMap: Record<string, string> = {
       rockyou: '/usr/share/wordlists/rockyou.txt',
@@ -90,16 +144,16 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
     args.push('-P', wordlistMap[opts.wordlist ?? 'fasttrack'] ?? opts.wordlist ?? wordlistMap.fasttrack);
 
     if (opts.port) args.push('-s', String(opts.port));
-    args.push(target, opts.service ?? 'ssh');
+    args.push(host, opts.service ?? 'ssh');
     return args;
   },
   john: (target) => ['john', target],
-  hashcat: (target, opts) => ['hashcat', '-m', '0', target, '/usr/share/wordlists/rockyou.txt'],
-  enum4linux: (target) => ['enum4linux', '-a', target],
-  smbclient: (target) => ['smbclient', '-L', target, '-N'],
-  nbtscan: (target) => ['nbtscan', target],
-  snmpwalk: (target) => ['snmpwalk', '-v2c', '-c', 'public', target],
-  dnsrecon: (target) => ['dnsrecon', '-d', target],
+  hashcat: (target) => ['hashcat', '-m', '0', target, '/usr/share/wordlists/rockyou.txt'],
+  enum4linux: (target) => ['enum4linux', '-a', extractHost(target)],
+  smbclient: (target) => ['smbclient', '-L', extractHost(target), '-N'],
+  nbtscan: (target) => ['nbtscan', extractHost(target)],
+  snmpwalk: (target) => ['snmpwalk', '-v2c', '-c', 'public', extractHost(target)],
+  dnsrecon: (target) => ['dnsrecon', '-d', extractHost(target)],
   wpscan: (target) => ['wpscan', '--url', target, '--no-banner'],
   commix: (target) => ['commix', '--url', target, '--batch'],
   gowitness: (target) => ['gowitness', 'single', target],
@@ -111,12 +165,14 @@ class ToolExecutor {
    */
   private resolveBinary(name: string): string {
     const searchPaths = [
+      // Check container-local paths first (tools installed in container)
+      '/usr/local/bin',
+      '/usr/bin',
+      // Then check host-mounted paths
       env.HOST_LOCAL_BIN_PATH,
       env.HOST_BIN_PATH,
       env.HOST_SBIN_PATH,
       `${env.HOST_OPT_PATH}/metasploit-framework/bin`,
-      '/usr/local/bin',
-      '/usr/bin',
     ];
 
     for (const dir of searchPaths) {
@@ -168,7 +224,7 @@ class ToolExecutor {
         timeout,
         env: {
           ...process.env,
-          PATH: `${env.HOST_LOCAL_BIN_PATH}:${env.HOST_BIN_PATH}:${env.HOST_SBIN_PATH}:${process.env.PATH}`,
+          PATH: `/usr/local/bin:/usr/bin:${env.HOST_LOCAL_BIN_PATH}:${env.HOST_BIN_PATH}:${env.HOST_SBIN_PATH}:${process.env.PATH}`,
         },
       });
 

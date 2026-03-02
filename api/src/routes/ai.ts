@@ -11,6 +11,7 @@ import { prisma } from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { getConfigValue } from '../middleware/guardrails.js';
 import { emitAIThought } from '../websocket/emitter.js';
+import { aiService } from '../services/aiService.js';
 
 export const aiRouter = Router();
 
@@ -76,8 +77,7 @@ aiRouter.post('/analyze', async (req, res, next) => {
       metadata: { target, provider },
     });
 
-    // AI analysis is handled asynchronously by the aiService
-    // For now, return the thought ID for tracking
+    // Respond immediately, then run AI analysis in background
     res.json({
       success: true,
       data: {
@@ -87,6 +87,13 @@ aiRouter.post('/analyze', async (req, res, next) => {
         config: { temperature, maxTokens },
       },
       timestamp: Date.now(),
+    });
+
+    // Fire-and-forget: dispatch to aiService for actual inference
+    setImmediate(() => {
+      aiService.analyze({ prompt, target, mode }).catch((err) => {
+        console.error('[AI] Async analysis failed:', err.message);
+      });
     });
   } catch (err) {
     next(err);

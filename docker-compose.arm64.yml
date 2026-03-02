@@ -1,0 +1,39 @@
+# CStrike v2 — ARM64 override
+# Replaces Kasm (x86-only) with linuxserver/chromium for ARM64 hosts.
+# Uses KasmVNC under the hood — same tech, native ARM64 image.
+#
+# Remote browser access: https://<ip>:6902 (port 6901 on x86, 6902 on ARM64)
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.arm64.yml up -d
+#
+# Or set COMPOSE_FILE in .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.arm64.yml
+
+services:
+  kasm-browser:
+    image: linuxserver/chromium:latest
+    container_name: cstrike-browser
+    restart: unless-stopped
+    shm_size: '512m'
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "6902:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: UTC
+      CUSTOM_PORT: 3000
+      CHROME_CLI: http://host.docker.internal:3000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

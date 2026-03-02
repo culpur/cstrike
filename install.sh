@@ -221,10 +221,18 @@ fi
 step "Building and starting Docker stack"
 
 cd "${INSTALL_DIR}"
-docker compose build --quiet 2>&1 | tail -5
+
+# Detect ARM64 and use neko override (Kasm is x86-only)
+COMPOSE_CMD="docker compose"
+if [[ "$(uname -m)" == "aarch64" ]] && [[ -f docker-compose.arm64.yml ]]; then
+    COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.arm64.yml"
+    echo "  ARM64 detected — using linuxserver/chromium instead of Kasm (port 6902)"
+fi
+
+${COMPOSE_CMD} build --quiet 2>&1 | tail -5
 ok "Docker images built"
 
-docker compose up -d
+${COMPOSE_CMD} up -d
 ok "Docker stack started"
 
 # ── Step 8: Wait for healthy containers ────────────────────
@@ -233,7 +241,7 @@ step "Waiting for containers to become healthy"
 MAX_WAIT=120
 ELAPSED=0
 while [[ $ELAPSED -lt $MAX_WAIT ]]; do
-    UNHEALTHY=$(docker compose ps --format json 2>/dev/null | grep -c '"starting"' || true)
+    UNHEALTHY=$(${COMPOSE_CMD} ps --format json 2>/dev/null | grep -c '"starting"' || true)
     if [[ "$UNHEALTHY" -eq 0 ]]; then
         break
     fi

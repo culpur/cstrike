@@ -60,7 +60,7 @@ export function DashboardView() {
     const poll = async () => {
       try {
         const response = await apiService.getActiveScans();
-        setActiveScans(response.active_scans);
+        setActiveScans(response.active_scans || []);
       } catch { /* API unreachable */ }
     };
     poll();

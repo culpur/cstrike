@@ -76,15 +76,15 @@ class ApiService {
   // ============================================================================
 
   async getSystemMetrics(): Promise<SystemMetrics> {
-    // Backend returns {metrics, services, phase, timestamp}
+    // Backend returns { success, data: {metrics, services}, timestamp }
     const { data } = await this.client.get('/status');
-    return data.metrics;
+    return data.data?.metrics || data.metrics || {};
   }
 
   async getServiceStatus(): Promise<ServiceState> {
-    // Backend returns services object directly
+    // Backend returns { success, data: [...services], timestamp }
     const { data } = await this.client.get('/services');
-    return data;
+    return data.data || data;
   }
 
   async startService(service: 'metasploit' | 'zap' | 'burp'): Promise<void> {
@@ -125,15 +125,15 @@ class ApiService {
   // ============================================================================
 
   async addTarget(url: string): Promise<Target> {
-    // Backend expects POST /targets with {target: "url"}
-    const { data } = await this.client.post('/targets', { target: url });
+    // Backend expects POST /targets with {url: "url"}
+    const { data } = await this.client.post('/targets', { url });
     if (data.success) {
-      // Return a Target object with the URL
+      const t = data.data || {};
       return {
-        id: Date.now().toString(),
-        url: data.target,
+        id: t.id || Date.now().toString(),
+        url: t.url || url,
         status: 'pending',
-        addedAt: Date.now(),
+        addedAt: t.createdAt ? new Date(t.createdAt).getTime() : Date.now(),
       };
     }
     throw new Error(data.error || 'Failed to add target');
@@ -170,9 +170,10 @@ class ApiService {
     }>;
     count: number;
   }> {
-    // Backend: GET /recon/active
+    // Backend: GET /recon/active — returns { success, data: [...scans], timestamp }
     const { data } = await this.client.get('/recon/active');
-    return data;
+    const scans = data.data || data.active_scans || [];
+    return { active_scans: scans, count: scans.length };
   }
 
   async startBatchRecon(targets: string[], tools: string[]): Promise<{
@@ -215,9 +216,9 @@ class ApiService {
   }
 
   async getAIThoughts(): Promise<string[]> {
-    // Backend: GET /ai/thoughts
+    // Backend: GET /ai/thoughts — returns { success, data: [...thoughts], timestamp }
     const { data } = await this.client.get('/ai/thoughts');
-    return data.thoughts || [];
+    return data.data || data.thoughts || [];
   }
 
   async getScanStatus(scanId: string): Promise<{status: string; target?: string; results?: unknown; error?: string}> {
@@ -227,9 +228,10 @@ class ApiService {
   }
 
   async getTargets(): Promise<string[]> {
-    // Backend: GET /targets
+    // Backend: GET /targets — returns { success, data: [...targets], timestamp }
     const { data } = await this.client.get('/targets');
-    return data.targets || [];
+    const targets = data.data || data.targets || [];
+    return Array.isArray(targets) ? targets.map((t: any) => t.url || t.hostname || t) : [];
   }
 
   // ============================================================================
@@ -243,7 +245,7 @@ class ApiService {
     timestamp: string;
   }> {
     const { data } = await this.client.get('/status');
-    return data;
+    return data.data || data;
   }
 
   // ============================================================================
@@ -326,12 +328,12 @@ class ApiService {
   // ============================================================================
 
   async getLogs(limit = 1000): Promise<LogEntry[]> {
-    // Backend expects GET /logs?limit=N&level=LEVEL
+    // Backend expects GET /logs?limit=N&level=LEVEL — returns { success, data: { items, total }, timestamp }
     const { data } = await this.client.get('/logs', {
       params: { limit },
     });
     // Transform backend logs to frontend format
-    const logs = data.logs || [];
+    const logs = data.data?.items || data.logs || [];
     return logs.map((log: any) => ({
       id: log.id || `${Date.now()}-${Math.random()}`,
       timestamp: log.timestamp ? new Date(log.timestamp).getTime() : Date.now(),
@@ -346,9 +348,9 @@ class ApiService {
   // ============================================================================
 
   async getConfig(): Promise<Config> {
-    // Backend: GET /config
+    // Backend: GET /config — returns { success, data: {...config}, timestamp }
     const { data } = await this.client.get('/config');
-    return data;
+    return data.data || data;
   }
 
   async updateConfig(config: Config): Promise<void> {
@@ -389,10 +391,11 @@ class ApiService {
   // ============================================================================
 
   async getResults(): Promise<Target[]> {
-    // Backend: GET /results returns {targets: [{target, status, started_at, completed_at, loot_count}]}
+    // Backend: GET /results returns { success, data: { items: [...], total, hasMore }, timestamp }
     // Map to frontend Target interface
     const { data } = await this.client.get('/results');
-    return (data.targets || []).map((t: Record<string, unknown>, i: number) => ({
+    const items = data.data?.items || data.targets || [];
+    return items.map((t: Record<string, unknown>, i: number) => ({
       id: String(t.target || i),
       url: String(t.target || ''),
       addedAt: t.started_at ? new Date(t.started_at as string).getTime() : Date.now(),

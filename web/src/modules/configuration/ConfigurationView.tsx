@@ -337,7 +337,13 @@ export function ConfigurationView() {
     setIsLoading(true);
     try {
       const data = await apiService.getConfig();
-      setConfig(data);
+      setConfig((prev) => ({
+        ...prev,
+        ...data,
+        scan_modes: Array.isArray(data.scan_modes) ? data.scan_modes : prev.scan_modes,
+        allowed_tools: Array.isArray(data.allowed_tools) ? data.allowed_tools : prev.allowed_tools,
+        target_scope: Array.isArray(data.target_scope) ? data.target_scope : prev.target_scope || [],
+      }));
     } catch {
       addToast({ type: 'error', message: 'Failed to load configuration' });
     } finally {
@@ -463,8 +469,8 @@ export function ConfigurationView() {
 
   const selectedProvider = AI_PROVIDERS.find((p) => p.id === config.ai_provider) || AI_PROVIDERS[0];
   const totalTools = TOOL_CATEGORIES.reduce((sum, cat) => sum + cat.tools.length, 0);
-  const enabledTools = config.allowed_tools.length;
-  const enabledModes = config.scan_modes.length;
+  const enabledTools = (config.allowed_tools || []).length;
+  const enabledModes = (config.scan_modes || []).length;
 
   if (isLoading) {
     return (
