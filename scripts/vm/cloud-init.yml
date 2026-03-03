@@ -21,7 +21,7 @@ users:
     # Default password: cstrike (change in production)
     passwd: $6$cstrike$TTcF7UgZbvzim.esHVCihBjbh3idOujxwSwh19pN1Sc2oFL8WzgMaNPRmyjZadMk2.YAffzGjOvjRdMQqRTNr/
     ssh_authorized_keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINxbkRVj+GuR6+l0TfQa97TosRkiwDn2/EtFCC1migB+ soulofall@guard
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILfFLdxguUR37dwGWwZZq7FZ8tWO0XIrcFqODfY+Pxco soulofall@guard.armored.ninja
 
 package_update: true
 package_upgrade: true

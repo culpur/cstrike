@@ -147,9 +147,9 @@ echo "[5/5] Setting up SSH access..."
 SSH_DIR="/home/${USERNAME}/.ssh"
 mkdir -p "${SSH_DIR}"
 
-# Copy soulofall's authorized_keys to redteam
-if [[ -f /home/soulofall/.ssh/authorized_keys ]]; then
-    cp /home/soulofall/.ssh/authorized_keys "${SSH_DIR}/authorized_keys"
+# Copy cstrike's authorized_keys to redteam
+if [[ -f /home/cstrike/.ssh/authorized_keys ]]; then
+    cp /home/cstrike/.ssh/authorized_keys "${SSH_DIR}/authorized_keys"
 fi
 
 chmod 700 "${SSH_DIR}"

@@ -164,7 +164,7 @@ MaxAuthTries 3
 LoginGraceTime 30s
 
 # Access Control
-AllowUsers soulofall redteam
+AllowUsers cstrike redteam
 
 # Host keys
 HostKey /etc/ssh/ssh_host_ed25519_key
@@ -446,7 +446,7 @@ echo ""
 echo "[+] Enabling process isolation (hidepid=2)..."
 
 groupadd -f proc
-usermod -aG proc soulofall 2>/dev/null || true
+usermod -aG proc cstrike 2>/dev/null || true
 usermod -aG proc redteam 2>/dev/null || true
 
 cat > /etc/systemd/system/proc-hidepid.service << 'EOF'
