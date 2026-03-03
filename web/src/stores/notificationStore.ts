@@ -20,7 +20,11 @@ export type NotificationType =
   | 'shell_obtained'
   | 'scan_complete'
   | 'scan_started'
-  | 'error';
+  | 'error'
+  | 'task_completed'
+  | 'task_failed'
+  | 'gate_reached'
+  | 'phase_changed';
 
 export type NotificationSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 

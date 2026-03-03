@@ -281,6 +281,59 @@ export function useWebSocketHandlers() {
       }
     });
 
+    // ── Task lifecycle → notifications ─────────────────────────
+    const unsubTaskCompleted = wsService.on<any>('task_completed', (data) => {
+      addNotification({
+        type: 'task_completed',
+        title: 'Task Complete',
+        message: `${data.tool || 'task'} finished on ${data.target || 'target'}${data.findingsCount ? ` — ${data.findingsCount} findings` : ''}`,
+        severity: 'info',
+      });
+      addToast({
+        type: 'success',
+        message: `${data.tool || 'Task'} complete on ${data.target || 'target'}`,
+        duration: 4000,
+      });
+    });
+
+    const unsubTaskFailed = wsService.on<any>('task_failed', (data) => {
+      addNotification({
+        type: 'task_failed',
+        title: 'Task Failed',
+        message: `${data.tool || 'task'} failed${data.error ? `: ${data.error}` : ''} on ${data.target || 'target'}`,
+        severity: 'high',
+      });
+      addToast({
+        type: 'error',
+        message: `${data.tool || 'Task'} failed on ${data.target || 'target'}`,
+        duration: 6000,
+      });
+    });
+
+    // ── Case gate + phase → notifications ───────────────────────
+    const unsubGateReached = wsService.on<any>('case_gate_reached', (data) => {
+      addNotification({
+        type: 'gate_reached',
+        title: 'Gate Approval Required',
+        message: `${data.pendingTasks || '?'} exploitation tasks await approval`,
+        severity: 'high',
+      });
+      addToast({
+        type: 'warning',
+        message: `Gate reached — ${data.pendingTasks || '?'} tasks await approval`,
+        duration: 8000,
+      });
+    });
+
+    const unsubPhaseChanged = wsService.on<any>('case_phase_changed', (data) => {
+      addNotification({
+        type: 'phase_changed',
+        title: 'Phase Changed',
+        message: `Case moved to ${data.phase || 'next'} phase`,
+        severity: 'info',
+      });
+    });
+
     // ── Connection health check ────────────────────────────────
     const connectionCheck = setInterval(() => {
       setConnected(wsService.isConnected());
@@ -307,6 +360,10 @@ export function useWebSocketHandlers() {
       unsubExploitCompleted();
       unsubServiceAuto();
       unsubVulnapi();
+      unsubTaskCompleted();
+      unsubTaskFailed();
+      unsubGateReached();
+      unsubPhaseChanged();
       clearInterval(connectionCheck);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

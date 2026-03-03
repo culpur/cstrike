@@ -31,6 +31,8 @@ import {
   Trash2,
   CheckCheck,
   X,
+  Shield,
+  Zap,
 } from 'lucide-react';
 import {
   useNotificationStore,
@@ -81,6 +83,26 @@ const TYPE_META: Record<NotificationType, TypeMeta> = {
     icon: XCircle,
     color: 'text-grok-error',
     label: 'ERROR',
+  },
+  task_completed: {
+    icon: CheckCircle,
+    color: 'text-grok-success',
+    label: 'TASK',
+  },
+  task_failed: {
+    icon: XCircle,
+    color: 'text-grok-error',
+    label: 'TASK',
+  },
+  gate_reached: {
+    icon: Shield,
+    color: 'text-grok-warning',
+    label: 'GATE',
+  },
+  phase_changed: {
+    icon: Zap,
+    color: 'text-grok-recon-blue',
+    label: 'PHASE',
   },
 };
 

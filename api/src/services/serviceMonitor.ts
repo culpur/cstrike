@@ -8,7 +8,9 @@ import { prisma } from '../config/database.js';
 import { serviceManager } from './serviceManager.js';
 
 const MONITOR_INTERVAL_MS = 30_000; // Check every 30 seconds
+const MAX_CONSECUTIVE_FAILURES = 5;
 let monitorTimer: ReturnType<typeof setInterval> | null = null;
+const consecutiveFailures = new Map<string, number>();
 
 /**
  * Attempt to start all services that have autoStart=true.
@@ -100,10 +102,16 @@ async function monitorLoop(): Promise<void> {
         }
       }
 
-      // If service is in ERROR state and has autoStart, retry (but not too aggressively)
+      // If service is in ERROR state and has autoStart, retry with backoff
       if (svc.status === 'ERROR') {
+        const failures = consecutiveFailures.get(svc.name) ?? 0;
+        if (failures >= MAX_CONSECUTIVE_FAILURES) {
+          // Already logged the disable message — skip silently
+          continue;
+        }
+
         try {
-          console.log(`[Monitor] Retrying ${svc.name} (was in ERROR state)...`);
+          console.log(`[Monitor] Retrying ${svc.name} (was in ERROR state, attempt ${failures + 1}/${MAX_CONSECUTIVE_FAILURES})...`);
           const result = await serviceManager.execute(svc.name, 'start');
           await prisma.service.update({
             where: { name: svc.name },
@@ -113,8 +121,25 @@ async function monitorLoop(): Promise<void> {
               error: result.error ?? null,
             },
           });
+
+          if (result.error) {
+            const newCount = failures + 1;
+            consecutiveFailures.set(svc.name, newCount);
+            if (newCount >= MAX_CONSECUTIVE_FAILURES) {
+              console.warn(`[Monitor] ${svc.name} unavailable after ${MAX_CONSECUTIVE_FAILURES} retries — auto-retry disabled until manual restart`);
+            }
+          } else {
+            // Success — reset counter
+            consecutiveFailures.delete(svc.name);
+          }
         } catch (retryErr: any) {
-          console.warn(`[Monitor] Retry failed for ${svc.name}:`, retryErr.message);
+          const newCount = failures + 1;
+          consecutiveFailures.set(svc.name, newCount);
+          if (newCount >= MAX_CONSECUTIVE_FAILURES) {
+            console.warn(`[Monitor] ${svc.name} unavailable after ${MAX_CONSECUTIVE_FAILURES} retries — auto-retry disabled until manual restart`);
+          } else {
+            console.warn(`[Monitor] Retry failed for ${svc.name}:`, retryErr.message);
+          }
         }
       }
     }
@@ -140,4 +165,11 @@ export function stopServiceMonitor(): void {
     clearInterval(monitorTimer);
     monitorTimer = null;
   }
+}
+
+/**
+ * Reset the retry counter for a service (call when user manually starts/restarts).
+ */
+export function resetServiceRetry(name: string): void {
+  consecutiveFailures.delete(name);
 }

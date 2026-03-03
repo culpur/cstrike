@@ -19,6 +19,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { intelligenceEngine } from '../services/intelligenceEngine.js';
 import { toolExecutor } from '../services/toolExecutor.js';
 import { lootService } from '../services/lootService.js';
+import { aiService } from '../services/aiService.js';
 import {
   emitTaskCreated,
   emitTaskStarted,
@@ -109,6 +110,9 @@ async function executeTask(taskId: string, caseId: string) {
 
     // After task completes, re-analyze for new opportunities
     await reanalyzeAfterTask(caseId, caseRecord?.targetId ?? '');
+
+    // Feed findings to AI for strategic analysis
+    setImmediate(() => feedFindingsToAI(caseId, caseRecord?.targetId ?? ''));
   } catch (err: any) {
     if (ctrl.cancelled) return;
 
@@ -148,6 +152,96 @@ async function reanalyzeAfterTask(caseId: string, targetId: string) {
     }
   } catch (err: any) {
     console.error(`[Case:${caseId}] Re-analysis failed:`, err.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Feed findings to AI for strategic analysis
+// ---------------------------------------------------------------------------
+
+async function feedFindingsToAI(caseId: string, targetId: string) {
+  if (!targetId) return;
+  try {
+    const target = await prisma.target.findUnique({ where: { id: targetId } });
+    if (!target) return;
+
+    // Recent completed tasks
+    const recentTasks = await prisma.exploitTask.findMany({
+      where: { caseId, status: { in: ['COMPLETED', 'FAILED'] } },
+      orderBy: { endedAt: 'desc' },
+      take: 5,
+      select: { tool: true, target: true, exitCode: true, findings: true, output: true, duration: true },
+    });
+
+    // Loot items grouped by category
+    const lootItems = await prisma.lootItem.findMany({
+      where: { targetId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    // Validated credentials
+    const credentials = await prisma.credentialPair.findMany({
+      where: { targetId, validationStatus: 'VALID' },
+    });
+
+    // Build prompt sections
+    const sections: string[] = [`Target: ${target.url}`];
+
+    // Ports
+    const ports = lootItems.filter(l => l.category === 'PORT');
+    if (ports.length > 0) {
+      sections.push('\n== Open Ports ==');
+      for (const p of ports) {
+        const svc = (p.metadata as any)?.service || 'unknown';
+        sections.push(`Port ${p.value} (${svc}) — found by ${p.source}`);
+      }
+    }
+
+    // URLs
+    const urls = lootItems.filter(l => l.category === 'URL');
+    if (urls.length > 0) {
+      sections.push('\n== Discovered URLs ==');
+      for (const u of urls.slice(0, 15)) {
+        sections.push(`${u.value} — ${u.source}`);
+      }
+      if (urls.length > 15) sections.push(`... and ${urls.length - 15} more`);
+    }
+
+    // Credentials
+    if (credentials.length > 0) {
+      sections.push(`\n== Credentials ==`);
+      sections.push(`${credentials.length} valid credential(s) found`);
+      for (const c of credentials) {
+        sections.push(`- ${c.username}:*** on ${c.service || 'unknown'} port ${c.port || '?'}`);
+      }
+    }
+
+    // Recent task results
+    if (recentTasks.length > 0) {
+      sections.push('\n== Recent Task Results ==');
+      for (const t of recentTasks) {
+        const findings = Array.isArray(t.findings) ? t.findings : [];
+        const outputPreview = t.output ? t.output.slice(0, 200) : '';
+        sections.push(`[${t.tool}] target=${t.target} exit=${t.exitCode} findings=${findings.length} duration=${t.duration}ms`);
+        if (outputPreview) sections.push(`  output: ${outputPreview}...`);
+      }
+    }
+
+    sections.push('\nAnalyze these findings and recommend the highest-priority attack vectors.');
+    sections.push('What specific tools and commands should be run next? Explain your reasoning.');
+
+    const prompt = sections.join('\n');
+
+    console.log(`[Case:${caseId}] Feeding findings to AI (${prompt.length} chars)`);
+
+    await aiService.analyze({
+      prompt,
+      target: target.url,
+      mode: 'analyze',
+    });
+  } catch (err: any) {
+    console.error(`[Case:${caseId}] AI analysis failed:`, err.message);
   }
 }
 
@@ -262,6 +356,9 @@ casesRouter.post('/', async (req, res, next) => {
             phase: 'EXPLOITATION',
           });
         }
+
+        // Feed initial findings to AI for strategic analysis
+        setImmediate(() => feedFindingsToAI(exploitCase.id, targetId));
       } catch (err: any) {
         console.error(`[Case:${exploitCase.id}] Initial analysis failed:`, err.message);
       }

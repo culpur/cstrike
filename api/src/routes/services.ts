@@ -10,6 +10,7 @@ import { prisma } from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { emitServiceAutoStart } from '../websocket/emitter.js';
 import { serviceManager } from '../services/serviceManager.js';
+import { resetServiceRetry } from '../services/serviceMonitor.js';
 
 export const servicesRouter = Router();
 
@@ -46,6 +47,9 @@ servicesRouter.post('/:name', async (req, res, next) => {
 
     emitServiceAutoStart({ service: name, status: transitionalStatus.toLowerCase() });
 
+    // Reset retry counter on manual start so monitor will retry if it fails again
+    if (action === 'start') resetServiceRetry(name);
+
     // Execute the action
     const result = await serviceManager.execute(name, action);
 
@@ -76,6 +80,8 @@ servicesRouter.post('/:name/restart', async (req, res, next) => {
     const service = await prisma.service.findUnique({ where: { name } });
     if (!service) throw new AppError(404, `Service "${name}" not found`);
     if (!service.optional) throw new AppError(400, `Service "${name}" cannot be controlled`);
+
+    resetServiceRetry(name);
 
     await prisma.service.update({
       where: { name },
