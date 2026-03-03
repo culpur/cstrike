@@ -8,7 +8,6 @@ import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   Download,
   RefreshCw,
-  ChevronRight,
   ChevronDown,
   AlertCircle,
   Copy,
