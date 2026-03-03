@@ -8,7 +8,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     supervisor \
     openssh-server \
-    apache2 libapache2-mod-php php php-mysql php-curl php-xml \
+    apache2 libapache2-mod-php php php-mysql php-curl php-xml php-ldap \
     mariadb-server mariadb-client \
     vsftpd \
     snmpd snmp \
@@ -21,6 +21,9 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     redis-server \
     nfs-kernel-server \
     bash \
+    bind9 bind9utils dnsutils \
+    slapd ldap-utils \
+    postfix \
     && rm -rf /var/lib/apt/lists/*
 
 # Weak user accounts (use -f to ignore existing)
@@ -44,16 +47,26 @@ RUN mkdir -p /var/run/sshd && \
     ssh-keygen -A
 
 # Apache + PHP vulnerable webapp
-# Enable CGI module and headers for Shellshock and .git exposure
-RUN a2enmod rewrite cgi headers && \
+# Enable CGI, headers, SSL, rewrite for vulnerabilities
+RUN a2enmod rewrite cgi headers ssl && \
     echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
-    echo "Listen 80" > /etc/apache2/ports.conf
+    echo "Listen 80\nListen 443" > /etc/apache2/ports.conf
 COPY webapp/ /var/www/vulnbox/
 COPY config/apache-vulnbox.conf /etc/apache2/sites-available/vulnbox.conf
-RUN a2dissite 000-default && a2ensite vulnbox && \
+COPY config/apache-vulnbox-ssl.conf /etc/apache2/sites-available/vulnbox-ssl.conf
+RUN a2dissite 000-default && a2ensite vulnbox vulnbox-ssl && \
     chown -R www-data:www-data /var/www/vulnbox && \
     chmod -R 777 /var/www/vulnbox/uploads && \
     chmod -R 755 /var/www/vulnbox/secret
+
+# Generate weak self-signed SSL cert (vuln: weak key, self-signed, long expiry)
+RUN mkdir -p /etc/ssl/vulnbox && \
+    openssl req -x509 -nodes -days 3650 \
+        -newkey rsa:1024 \
+        -keyout /etc/ssl/vulnbox/vulnbox.key \
+        -out /etc/ssl/vulnbox/vulnbox.crt \
+        -subj "/C=US/ST=Illinois/L=Springfield/O=VulnBox Corp/OU=IT/CN=vulnbox.local" \
+        2>/dev/null
 
 # CGI directory for Shellshock
 RUN mkdir -p /usr/lib/cgi-bin && \
@@ -84,7 +97,7 @@ RUN mkdir -p /srv/samba/public /srv/samba/backups && \
     echo "Database backup - admin:password123" > /srv/samba/backups/db_backup_notes.txt && \
     (echo "password123"; echo "password123") | smbpasswd -a -s admin 2>/dev/null || true
 
-# Flask API — install PyJWT and requests for new vulnerabilities
+# Flask API — install PyJWT, requests, graphql for new vulnerabilities
 RUN pip3 install --break-system-packages --no-cache-dir flask flask-cors pymysql pyjwt requests 2>/dev/null || true
 COPY api/ /opt/vulnapi/
 
@@ -118,11 +131,31 @@ RUN echo "*/5 * * * * root curl -s http://localhost/ > /dev/null 2>&1" > /etc/cr
 RUN chmod u+s /usr/bin/find && \
     cp /bin/bash /usr/local/bin/old-bash && chmod u+s /usr/local/bin/old-bash
 
+# BIND9 DNS — vulnerable zone with many subdomains
+COPY config/named/ /etc/bind/vulnbox/
+RUN mkdir -p /var/log/named /var/cache/bind /run/named && \
+    chown -R bind:bind /var/log/named /var/cache/bind /run/named && \
+    cp /etc/bind/vulnbox/named.conf.options /etc/bind/named.conf.options && \
+    cp /etc/bind/vulnbox/named.conf.local /etc/bind/named.conf.local && \
+    cp /etc/bind/vulnbox/db.vulnbox.local /etc/bind/db.vulnbox.local && \
+    cp /etc/bind/vulnbox/db.10.10.10 /etc/bind/db.10.10.10 && \
+    chown -R bind:bind /etc/bind
+
+# OpenLDAP — vulnerable directory
+COPY config/ldap/base.ldif /opt/ldap/base.ldif
+
+# Postfix SMTP — open relay
+COPY config/postfix/main.cf /etc/postfix/main.cf
+RUN mkdir -p /var/spool/postfix && \
+    echo "root: admin@vulnbox.local" >> /etc/aliases && \
+    echo "postmaster: root" >> /etc/aliases && \
+    newaliases 2>/dev/null || true
+
 # Supervisord + init
 COPY supervisord.conf /etc/supervisor/conf.d/vulnbox.conf
 COPY scripts/init.sh /opt/init.sh
 RUN chmod +x /opt/init.sh
 
-EXPOSE 22 80 21 3306 161/udp 9090 445 21000-21010 6379
+EXPOSE 22 80 443 21 25 53 53/udp 389 3306 161/udp 9090 445 21000-21010 6379
 
 CMD ["/opt/init.sh"]

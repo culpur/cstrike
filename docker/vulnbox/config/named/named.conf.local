@@ -1,0 +1,14 @@
+// BIND9 Local Zone Configuration — vulnbox.local
+
+zone "vulnbox.local" {
+    type master;
+    file "/etc/bind/db.vulnbox.local";
+    allow-transfer { any; };  // AXFR open to all
+    allow-update { any; };    // Dynamic updates open
+};
+
+zone "10.10.10.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.10.10.10";
+    allow-transfer { any; };
+};

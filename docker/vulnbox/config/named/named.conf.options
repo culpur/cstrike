@@ -1,0 +1,40 @@
+// BIND9 — Deliberately Vulnerable DNS Configuration
+// WARNING: INTENTIONALLY INSECURE — for authorized penetration testing ONLY.
+
+options {
+    directory "/var/cache/bind";
+
+    // Allow queries from anywhere (vuln: open resolver)
+    allow-query { any; };
+
+    // Allow recursive queries (vuln: DNS amplification)
+    recursion yes;
+    allow-recursion { any; };
+
+    // Allow zone transfers to anyone (vuln: AXFR disclosure)
+    allow-transfer { any; };
+
+    // Version disclosure (vuln: info leak)
+    version "BIND 9.18.1-Ubuntu";
+
+    // Listen on all interfaces
+    listen-on { any; };
+    listen-on-v6 { any; };
+
+    // No DNSSEC validation (vuln: DNS spoofing possible)
+    dnssec-validation no;
+
+    // Allow dynamic updates from anywhere (vuln)
+    allow-update { any; };
+};
+
+// Logging — verbose for detection
+logging {
+    channel default_log {
+        file "/var/log/named/named.log" versions 3 size 5m;
+        severity info;
+        print-time yes;
+        print-severity yes;
+    };
+    category default { default_log; };
+};

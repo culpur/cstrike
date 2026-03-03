@@ -175,12 +175,7 @@ GIEOF
     git commit -m "Add .gitignore to prevent future credential leaks" \
         --date="2024-01-21T08:00:00"
 
-    # Restore the real config.php (with env vars — current state is fine)
-    # The secrets live in git history (commit 1 and 3)
-
     echo "[VulnBox] Git repo initialized with secret commit history"
-    echo "[VulnBox] Hint: git log --all --oneline shows 5 commits"
-    echo "[VulnBox] Hint: git show HEAD~3:config.php reveals credentials"
 fi
 
 # Ensure .git is accessible by Apache (no .htaccess blocking it)
@@ -188,7 +183,6 @@ chmod -R o+r "$WEBROOT/.git" 2>/dev/null || true
 
 # ── Vuln #1: Redis — plant sensitive data ─────────────────────────────────────
 echo "[VulnBox] Seeding Redis with sensitive data..."
-# Wait briefly for redis to come up from supervisord
 sleep 3
 
 redis-cli -h 127.0.0.1 -p 6379 SET "session:admin:abc123def456" \
@@ -210,7 +204,7 @@ redis-cli -h 127.0.0.1 -p 6379 SET "api:jwt_secret" \
     "secret" 2>/dev/null || true
 
 redis-cli -h 127.0.0.1 -p 6379 SET "config:smtp" \
-    '{"host":"mail.corp.internal","port":587,"user":"noreply@corp.internal","pass":"Smtp_P@ss_2024!"}' 2>/dev/null || true
+    '{"host":"mail.vulnbox.local","port":587,"user":"noreply@corp.internal","pass":"Smtp_P@ss_2024!"}' 2>/dev/null || true
 
 redis-cli -h 127.0.0.1 -p 6379 LPUSH "queue:jobs" \
     '{"type":"email","to":"admin@corp.internal","subject":"Password reset","token":"reset-tok-abc123"}' 2>/dev/null || true
@@ -224,13 +218,11 @@ redis-cli -h 127.0.0.1 -p 6379 SET "backup:encryption_key" \
 echo "[VulnBox] Redis seeding complete"
 
 # ── Vuln #8: NFS exports (best-effort in container) ───────────────────────────
-# Plant data in the export directories
 echo "[VulnBox] Setting up NFS export directories..."
 echo "server_ip=10.10.10.100"              >> /export/public/server-info.txt
 echo "internal_network=10.0.0.0/8"        >> /export/public/server-info.txt
 echo "admin_contact=admin@corp.internal"   >> /export/public/server-info.txt
 
-# Attempt to start rpc/nfs (may fail in container — that's acceptable)
 exportfs -ra 2>/dev/null || true
 
 # ── Vuln #9: Wildcard injection — populate /opt/scripts ───────────────────────
@@ -242,6 +234,61 @@ echo "echo 'backup placeholder'" >> /opt/scripts/backup.sh
 chmod +x /opt/scripts/backup.sh
 echo "data_file_1.txt" > /opt/scripts/data_file_1.txt
 echo "data_file_2.txt" > /opt/scripts/data_file_2.txt
+
+# ── OpenLDAP initialization ──────────────────────────────────────────────────
+echo "[VulnBox] Initializing OpenLDAP..."
+mkdir -p /var/run/slapd
+chown openldap:openldap /var/run/slapd 2>/dev/null || true
+
+# Configure slapd non-interactively
+debconf-set-selections <<EOF
+slapd slapd/internal/adminpw password admin
+slapd slapd/internal/generated_adminpw password admin
+slapd slapd/password1 password admin
+slapd slapd/password2 password admin
+slapd slapd/domain string vulnbox.local
+slapd shared/organization string VulnBox Corporation
+slapd slapd/backend select MDB
+slapd slapd/purge_database boolean false
+slapd slapd/allow_ldap_v2 boolean true
+EOF
+
+dpkg-reconfigure -f noninteractive slapd 2>/dev/null || true
+
+# Start slapd temporarily to load data
+slapd -h "ldap:/// ldapi:///" 2>/dev/null &
+sleep 2
+
+# Load seed data
+ldapadd -x -D "cn=admin,dc=vulnbox,dc=local" -w admin -f /opt/ldap/base.ldif 2>/dev/null || \
+    echo "[VulnBox] LDAP seed skipped (already loaded or error)"
+
+# Allow anonymous bind (vuln: unauthenticated LDAP queries)
+cat > /tmp/anon-bind.ldif <<'LDIFEOF'
+dn: olcDatabase={1}mdb,cn=config
+changetype: modify
+replace: olcAccess
+olcAccess: {0}to * by * read
+LDIFEOF
+ldapmodify -Y EXTERNAL -H ldapi:/// -f /tmp/anon-bind.ldif 2>/dev/null || true
+
+# Kill temporary slapd (supervisor will restart it)
+pkill slapd 2>/dev/null || true
+sleep 1
+
+echo "[VulnBox] OpenLDAP initialized"
+
+# ── Postfix SMTP initialization ──────────────────────────────────────────────
+echo "[VulnBox] Initializing Postfix..."
+# Create required Postfix directories
+mkdir -p /var/spool/postfix/pid
+# Fix permissions
+postfix set-permissions 2>/dev/null || true
+echo "[VulnBox] Postfix initialized"
+
+# ── DNS initialization ───────────────────────────────────────────────────────
+echo "[VulnBox] BIND9 DNS configured with vulnbox.local zone"
+echo "[VulnBox] Zone contains 80+ subdomains for enumeration"
 
 # ── Supervisor log dir ─────────────────────────────────────────────────────────
 mkdir -p /var/log/supervisor

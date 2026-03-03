@@ -2,5 +2,18 @@ User-agent: *
 Disallow: /secret/
 Disallow: /uploads/
 Disallow: /config.php
+Disallow: /config.php.bak
 Disallow: /api_docs.php
 Disallow: /server-status
+Disallow: /admin/
+Disallow: /backup.sql
+Disallow: /.env
+Disallow: /.git/
+Disallow: /.htpasswd
+Disallow: /phpinfo.php
+Disallow: /test.php
+Disallow: /wp-config.php
+Disallow: /wp-login.php
+Disallow: /status.php
+
+# Sitemap: http://vulnbox.local/sitemap.xml

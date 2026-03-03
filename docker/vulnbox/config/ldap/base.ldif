@@ -1,0 +1,152 @@
+# OpenLDAP Seed Data — Deliberately Vulnerable
+# WARNING: INTENTIONALLY INSECURE — for authorized penetration testing ONLY.
+
+# Base domain
+dn: dc=vulnbox,dc=local
+objectClass: top
+objectClass: dcObject
+objectClass: organization
+o: VulnBox Corporation
+dc: vulnbox
+
+# Organizational Units
+dn: ou=users,dc=vulnbox,dc=local
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=vulnbox,dc=local
+objectClass: organizationalUnit
+ou: groups
+
+dn: ou=services,dc=vulnbox,dc=local
+objectClass: organizationalUnit
+ou: services
+
+dn: ou=computers,dc=vulnbox,dc=local
+objectClass: organizationalUnit
+ou: computers
+
+# Groups
+dn: cn=admins,ou=groups,dc=vulnbox,dc=local
+objectClass: posixGroup
+cn: admins
+gidNumber: 5000
+memberUid: admin
+memberUid: root
+
+dn: cn=developers,ou=groups,dc=vulnbox,dc=local
+objectClass: posixGroup
+cn: developers
+gidNumber: 5001
+memberUid: john
+memberUid: deploy
+
+dn: cn=operations,ou=groups,dc=vulnbox,dc=local
+objectClass: posixGroup
+cn: operations
+gidNumber: 5002
+memberUid: backup
+memberUid: deploy
+
+# Users — weak passwords, excessive info exposure
+dn: uid=admin,ou=users,dc=vulnbox,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: admin
+cn: Administrator
+sn: Admin
+givenName: System
+mail: admin@vulnbox.local
+userPassword: password123
+loginShell: /bin/bash
+uidNumber: 1001
+gidNumber: 5000
+homeDirectory: /home/admin
+description: System Administrator - full access
+telephoneNumber: +1-555-0100
+street: 123 Corporate Way
+l: Springfield
+st: IL
+postalCode: 62701
+
+dn: uid=john,ou=users,dc=vulnbox,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: john
+cn: John Developer
+sn: Developer
+givenName: John
+mail: john@vulnbox.local
+userPassword: john2024
+loginShell: /bin/bash
+uidNumber: 1002
+gidNumber: 5001
+homeDirectory: /home/john
+description: Senior Developer - has production access
+telephoneNumber: +1-555-0101
+
+dn: uid=deploy,ou=users,dc=vulnbox,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: deploy
+cn: Deploy Service
+sn: Service
+givenName: Deploy
+mail: deploy@vulnbox.local
+userPassword: deploy
+loginShell: /bin/bash
+uidNumber: 1003
+gidNumber: 5001
+homeDirectory: /home/deploy
+description: Deployment service account - NOPASSWD sudo
+telephoneNumber: +1-555-0102
+
+dn: uid=backup,ou=users,dc=vulnbox,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: backup
+cn: Backup Service
+sn: Service
+givenName: Backup
+mail: backup@vulnbox.local
+userPassword: backup
+loginShell: /bin/bash
+uidNumber: 1004
+gidNumber: 5002
+homeDirectory: /home/backup
+description: Backup operator - has access to all data
+
+dn: uid=root,ou=users,dc=vulnbox,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: root
+cn: Root
+sn: Root
+givenName: Root
+mail: root@vulnbox.local
+userPassword: toor
+loginShell: /bin/bash
+uidNumber: 0
+gidNumber: 0
+homeDirectory: /root
+description: Root account - password is 'toor'
+
+# Service accounts
+dn: cn=ldap-service,ou=services,dc=vulnbox,dc=local
+objectClass: simpleSecurityObject
+objectClass: organizationalRole
+cn: ldap-service
+userPassword: ldap-svc-password
+description: LDAP bind service account
+
+dn: cn=web-app,ou=services,dc=vulnbox,dc=local
+objectClass: simpleSecurityObject
+objectClass: organizationalRole
+cn: web-app
+userPassword: webapp-ldap-pass
+description: Web application LDAP bind account

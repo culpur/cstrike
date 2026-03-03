@@ -1,0 +1,34 @@
+<?php
+// BACKUP — old config with hardcoded credentials
+// Created: 2024-01-10
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'vulnbox');
+define('DB_USER', 'root');
+define('DB_PASS', 'SuperSecret2024!');
+define('DB_PORT', 3306);
+
+// AWS credentials
+define('AWS_ACCESS_KEY', 'AKIAIOSFODNN7EXAMPLE');
+define('AWS_SECRET_KEY', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+define('AWS_REGION',     'us-east-1');
+define('S3_BUCKET',      'vulnbox-prod-backups');
+
+// Internal API
+define('INTERNAL_API_URL',  'http://10.0.0.50:8080');
+define('INTERNAL_API_KEY',  'int-api-secret-key-XyZ9!@#');
+define('ADMIN_EMAIL',       'admin@corp.internal');
+define('ADMIN_PASSWORD',    'Corp@dmin2024!');
+
+// JWT
+define('JWT_SECRET', 'secret');
+
+// LDAP
+define('LDAP_HOST', 'ldap://localhost');
+define('LDAP_BASE', 'dc=vulnbox,dc=local');
+define('LDAP_BIND_DN', 'cn=ldap-service,ou=services,dc=vulnbox,dc=local');
+define('LDAP_BIND_PASS', 'ldap-svc-password');
+
+$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT);
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}

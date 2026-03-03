@@ -1,0 +1,40 @@
+# Postfix — Deliberately Vulnerable SMTP Configuration
+# WARNING: INTENTIONALLY INSECURE — for authorized penetration testing ONLY.
+
+# Basic settings
+myhostname = mail.vulnbox.local
+mydomain = vulnbox.local
+myorigin = $mydomain
+mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain
+
+# Listen on all interfaces
+inet_interfaces = all
+inet_protocols = ipv4
+
+# Vuln: Open relay — accept mail from anyone to anyone
+mynetworks = 0.0.0.0/0
+relay_domains = *
+
+# Vuln: No authentication required
+smtpd_recipient_restrictions = permit
+
+# Vuln: No TLS enforcement
+smtpd_tls_security_level = none
+
+# Vuln: VRFY command enabled (user enumeration)
+disable_vrfy_command = no
+
+# Vuln: EXPN command enabled (mailing list disclosure)
+smtpd_etrn_restrictions = permit
+
+# Banner with version info (vuln: info disclosure)
+smtpd_banner = $myhostname ESMTP Postfix (Debian/GNU) - VulnBox Mail Server
+
+# Mailbox settings
+home_mailbox = Maildir/
+mailbox_size_limit = 51200000
+message_size_limit = 10240000
+
+# Alias maps
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases

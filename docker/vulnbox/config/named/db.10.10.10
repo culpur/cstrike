@@ -1,0 +1,17 @@
+; Reverse DNS Zone — 10.10.10.x
+$TTL    86400
+@       IN      SOA     ns1.vulnbox.local. admin.vulnbox.local. (
+                        2024011501 ; Serial
+                        3600       ; Refresh
+                        1800       ; Retry
+                        604800     ; Expire
+                        86400      ; Minimum TTL
+)
+
+@       IN      NS      ns1.vulnbox.local.
+
+100     IN      PTR     vulnbox.local.
+100     IN      PTR     www.vulnbox.local.
+100     IN      PTR     mail.vulnbox.local.
+100     IN      PTR     admin.vulnbox.local.
+100     IN      PTR     api.vulnbox.local.

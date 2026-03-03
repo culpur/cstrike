@@ -1,0 +1,153 @@
+; BIND9 Zone File — vulnbox.local
+; Deliberately vulnerable: many subdomains for enumeration tools to discover
+$TTL    86400
+@       IN      SOA     ns1.vulnbox.local. admin.vulnbox.local. (
+                        2024011501 ; Serial
+                        3600       ; Refresh
+                        1800       ; Retry
+                        604800     ; Expire
+                        86400      ; Minimum TTL
+)
+
+; Name servers
+@               IN      NS      ns1.vulnbox.local.
+@               IN      NS      ns2.vulnbox.local.
+
+; Mail server
+@               IN      MX  10  mail.vulnbox.local.
+@               IN      MX  20  smtp.vulnbox.local.
+
+; TXT records (info disclosure)
+@               IN      TXT     "v=spf1 ip4:10.10.10.0/24 ~all"
+@               IN      TXT     "google-site-verification=FAKEVERIFICATIONSTRING"
+_dmarc          IN      TXT     "v=DMARC1; p=none; rua=mailto:admin@vulnbox.local"
+
+; Primary host
+@               IN      A       10.10.10.100
+ns1             IN      A       10.10.10.100
+ns2             IN      A       10.10.10.100
+
+; ──────────────────────────────────────────────────────────────────────
+; Subdomains — discoverable by enumeration tools
+; ──────────────────────────────────────────────────────────────────────
+
+; Web infrastructure
+www             IN      A       10.10.10.100
+web             IN      A       10.10.10.100
+app             IN      A       10.10.10.100
+portal          IN      A       10.10.10.100
+cdn             IN      A       10.10.10.100
+static          IN      A       10.10.10.100
+assets          IN      A       10.10.10.100
+
+; API endpoints
+api             IN      A       10.10.10.100
+api-v1          IN      A       10.10.10.100
+api-v2          IN      A       10.10.10.100
+graphql         IN      A       10.10.10.100
+rest            IN      A       10.10.10.100
+webhook         IN      A       10.10.10.100
+
+; Admin / management
+admin           IN      A       10.10.10.100
+panel           IN      A       10.10.10.100
+dashboard       IN      A       10.10.10.100
+manage          IN      A       10.10.10.100
+console         IN      A       10.10.10.100
+cpanel          IN      A       10.10.10.100
+webmail         IN      A       10.10.10.100
+
+; Mail
+mail            IN      A       10.10.10.100
+smtp            IN      A       10.10.10.100
+pop3            IN      A       10.10.10.100
+imap            IN      A       10.10.10.100
+mx              IN      A       10.10.10.100
+
+; Development / staging (common targets)
+dev             IN      A       10.10.10.100
+staging         IN      A       10.10.10.100
+test            IN      A       10.10.10.100
+qa              IN      A       10.10.10.100
+uat             IN      A       10.10.10.100
+beta            IN      A       10.10.10.100
+demo            IN      A       10.10.10.100
+sandbox         IN      A       10.10.10.100
+preview         IN      A       10.10.10.100
+
+; DevOps / CI/CD
+jenkins         IN      A       10.10.10.100
+ci              IN      A       10.10.10.100
+cd              IN      A       10.10.10.100
+gitlab          IN      A       10.10.10.100
+git             IN      A       10.10.10.100
+repo            IN      A       10.10.10.100
+registry        IN      A       10.10.10.100
+docker          IN      A       10.10.10.100
+k8s             IN      A       10.10.10.100
+kubernetes      IN      A       10.10.10.100
+argocd          IN      A       10.10.10.100
+
+; Infrastructure
+db              IN      A       10.10.10.100
+database        IN      A       10.10.10.100
+mysql           IN      A       10.10.10.100
+postgres        IN      A       10.10.10.100
+redis           IN      A       10.10.10.100
+cache           IN      A       10.10.10.100
+elastic         IN      A       10.10.10.100
+elasticsearch   IN      A       10.10.10.100
+kibana          IN      A       10.10.10.100
+grafana         IN      A       10.10.10.100
+prometheus      IN      A       10.10.10.100
+splunk          IN      A       10.10.10.100
+
+; Network / VPN
+vpn             IN      A       10.10.10.100
+proxy           IN      A       10.10.10.100
+gateway         IN      A       10.10.10.100
+fw              IN      A       10.10.10.100
+firewall        IN      A       10.10.10.100
+bastion         IN      A       10.10.10.100
+jump            IN      A       10.10.10.100
+ns              IN      A       10.10.10.100
+dns             IN      A       10.10.10.100
+ldap            IN      A       10.10.10.100
+ntp             IN      A       10.10.10.100
+syslog          IN      A       10.10.10.100
+
+; Security / monitoring
+monitor         IN      A       10.10.10.100
+nagios          IN      A       10.10.10.100
+zabbix          IN      A       10.10.10.100
+siem            IN      A       10.10.10.100
+ids             IN      A       10.10.10.100
+waf             IN      A       10.10.10.100
+vault           IN      A       10.10.10.100
+secrets         IN      A       10.10.10.100
+
+; File sharing / storage
+ftp             IN      A       10.10.10.100
+files           IN      A       10.10.10.100
+share           IN      A       10.10.10.100
+backup          IN      A       10.10.10.100
+backups         IN      A       10.10.10.100
+nas             IN      A       10.10.10.100
+s3              IN      A       10.10.10.100
+storage         IN      A       10.10.10.100
+
+; Internal services
+internal        IN      A       10.10.10.100
+intranet        IN      A       10.10.10.100
+corp            IN      A       10.10.10.100
+erp             IN      A       10.10.10.100
+crm             IN      A       10.10.10.100
+hr              IN      A       10.10.10.100
+wiki            IN      A       10.10.10.100
+docs            IN      A       10.10.10.100
+confluence      IN      A       10.10.10.100
+jira            IN      A       10.10.10.100
+slack           IN      A       10.10.10.100
+
+; Wildcard for catch-all (vuln: all subdomains resolve)
+*               IN      A       10.10.10.100

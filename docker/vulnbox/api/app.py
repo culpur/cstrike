@@ -9,6 +9,10 @@ Vulnerabilities present (intentional):
   - Weak JWT secret + alg:none bypass             (#4)
   - Fake AWS IMDS at /latest/meta-data/           (#7)
   - SSTI via /api/v1/render                       (#10)
+  - Mass assignment via /api/v1/register           (#11)
+  - SSRF via /api/v1/webhook                       (#12)
+  - GraphQL introspection via /api/v1/graphql      (#13)
+  - Info disclosure via /api/v1/metrics            (#14)
 """
 import os, subprocess, sqlite3, json, base64, hmac, hashlib, time
 from functools import wraps
@@ -168,15 +172,19 @@ def index():
         "endpoints": [
             "GET  /api/v1/users",
             "POST /api/v1/login",
+            "POST /api/v1/register               [Mass Assignment]",
             "GET  /api/v1/notes",
             "POST /api/v1/exec",
             "GET  /api/v1/config",
             "GET  /api/v1/debug",
-            "GET  /api/v1/fetch?url=<url>          [SSRF]",
-            "POST /api/v1/jwt/issue                [JWT - weak secret]",
-            "POST /api/v1/jwt/verify               [JWT - alg:none bypass]",
-            "GET  /api/v1/render?template=<tpl>    [SSTI]",
-            "GET  /latest/meta-data/               [Fake IMDS]",
+            "GET  /api/v1/metrics                 [Info Disclosure]",
+            "GET  /api/v1/fetch?url=<url>         [SSRF]",
+            "POST /api/v1/webhook                 [SSRF]",
+            "POST /api/v1/jwt/issue               [JWT - weak secret]",
+            "POST /api/v1/jwt/verify              [JWT - alg:none bypass]",
+            "GET  /api/v1/render?template=<tpl>   [SSTI]",
+            "POST /api/v1/graphql                 [GraphQL Introspection]",
+            "GET  /latest/meta-data/              [Fake IMDS]",
         ],
         "auth": "X-API-Key header",
         "debug": True
@@ -487,6 +495,279 @@ def ssti_render():
     except Exception as e:
         return jsonify({"error": str(e), "template": template}), 500
 
+# ── Vuln #11: Mass Assignment — user registration with role injection ────────
+@app.route('/api/v1/register', methods=['POST'])
+def register():
+    """
+    Mass assignment vulnerability — accepts any field including 'role' and 'api_key'.
+    Normal users should only set username/password, but the endpoint blindly accepts all fields.
+
+    Exploit: POST {"username": "hacker", "password": "hacker", "role": "admin", "api_key": "my-key"}
+    """
+    data = request.get_json() or {}
+    username = data.get('username', '')
+    password = data.get('password', '')
+    if not username or not password:
+        return jsonify({"error": "username and password required"}), 400
+
+    # Vuln: All fields from request are used, including role and api_key
+    role = data.get('role', 'user')  # Should always be 'user', but attacker can override
+    api_key = data.get('api_key', f"vuln-api-key-{username}-{int(time.time())}")
+
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT INTO api_users (username, password, role, api_key) VALUES (?, ?, ?, ?)",
+            (username, password, role, api_key)
+        )
+        db.commit()
+        return jsonify({
+            "success": True,
+            "user": {"username": username, "role": role, "api_key": api_key},
+            "note": "Try setting role=admin in the request body"
+        }), 201
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Username already exists"}), 409
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ── Vuln #12: Webhook SSRF — server-side callback ───────────────────────────
+@app.route('/api/v1/webhook', methods=['POST'])
+def webhook():
+    """
+    SSRF via webhook callback — fetches arbitrary URL server-side.
+    POST {"url": "http://169.254.169.254/latest/meta-data/", "event": "test"}
+
+    Unlike /fetch, this simulates a "legitimate" webhook feature that an app might have.
+    """
+    data = request.get_json() or {}
+    callback_url = data.get('url', '')
+    event = data.get('event', 'ping')
+    payload = data.get('payload', {})
+
+    if not callback_url:
+        return jsonify({
+            "error": "url required",
+            "example": {"url": "http://internal-service:8080/callback", "event": "user.created", "payload": {"user_id": 1}}
+        }), 400
+
+    # Vuln: No URL validation, fetches arbitrary URLs including internal services
+    webhook_payload = json.dumps({"event": event, "data": payload, "timestamp": int(time.time())})
+
+    if REQUESTS_AVAILABLE:
+        try:
+            resp = http_requests.post(
+                callback_url,
+                data=webhook_payload,
+                headers={"Content-Type": "application/json", "User-Agent": "VulnBox-Webhook/1.0"},
+                timeout=10,
+                verify=False,
+                allow_redirects=True,
+            )
+            return jsonify({
+                "success": True,
+                "callback_url": callback_url,
+                "status_code": resp.status_code,
+                "response": resp.text[:4096],
+            })
+        except Exception as e:
+            return jsonify({"error": str(e), "callback_url": callback_url}), 500
+    else:
+        try:
+            result = subprocess.run(
+                ['curl', '-s', '-X', 'POST', '-H', 'Content-Type: application/json',
+                 '-d', webhook_payload, '--max-time', '10', callback_url],
+                capture_output=True, text=True, timeout=15
+            )
+            return jsonify({"success": True, "callback_url": callback_url, "response": result.stdout})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+# ── Vuln #13: GraphQL — introspection enabled ───────────────────────────────
+_GRAPHQL_SCHEMA = {
+    "queryType": {"name": "Query"},
+    "mutationType": {"name": "Mutation"},
+    "types": [
+        {
+            "kind": "OBJECT", "name": "Query",
+            "fields": [
+                {"name": "users", "description": "List all users (no auth required)", "type": {"name": "[User]"}},
+                {"name": "user", "description": "Get user by ID (IDOR)", "args": [{"name": "id", "type": "Int"}], "type": {"name": "User"}},
+                {"name": "notes", "description": "All notes including private", "type": {"name": "[Note]"}},
+                {"name": "config", "description": "Application configuration (secrets)", "type": {"name": "Config"}},
+                {"name": "systemInfo", "description": "Server system information", "type": {"name": "SystemInfo"}},
+                {"name": "internalServices", "description": "Internal service endpoints", "type": {"name": "[Service]"}},
+            ]
+        },
+        {
+            "kind": "OBJECT", "name": "Mutation",
+            "fields": [
+                {"name": "login", "description": "Authenticate (SQLi possible)", "args": [{"name": "username"}, {"name": "password"}]},
+                {"name": "createUser", "description": "Create user (mass assignment)", "args": [{"name": "input", "type": "UserInput"}]},
+                {"name": "executeCommand", "description": "Run shell command (RCE)", "args": [{"name": "cmd", "type": "String"}]},
+                {"name": "deleteUser", "description": "Delete any user (no auth)", "args": [{"name": "id", "type": "Int"}]},
+            ]
+        },
+        {
+            "kind": "OBJECT", "name": "User",
+            "fields": [
+                {"name": "id", "type": {"name": "Int"}},
+                {"name": "username", "type": {"name": "String"}},
+                {"name": "password", "type": {"name": "String"}},
+                {"name": "role", "type": {"name": "String"}},
+                {"name": "api_key", "type": {"name": "String"}},
+                {"name": "ssn", "type": {"name": "String"}},
+            ]
+        },
+        {
+            "kind": "OBJECT", "name": "Config",
+            "fields": [
+                {"name": "database_url", "type": {"name": "String"}},
+                {"name": "jwt_secret", "type": {"name": "String"}},
+                {"name": "api_secret", "type": {"name": "String"}},
+                {"name": "aws_credentials", "type": {"name": "AWSCreds"}},
+            ]
+        },
+        {
+            "kind": "OBJECT", "name": "Service",
+            "fields": [
+                {"name": "name", "type": {"name": "String"}},
+                {"name": "host", "type": {"name": "String"}},
+                {"name": "port", "type": {"name": "Int"}},
+                {"name": "credentials", "type": {"name": "String"}},
+            ]
+        },
+    ]
+}
+
+@app.route('/api/v1/graphql', methods=['GET', 'POST'])
+def graphql_endpoint():
+    """
+    Fake GraphQL endpoint with introspection enabled.
+    Vuln: Exposes full schema including sensitive types and fields.
+
+    POST {"query": "{ __schema { types { name fields { name } } } }"}
+    or GET ?query={__schema{types{name}}}
+    """
+    if request.method == 'GET':
+        query = request.args.get('query', '')
+    else:
+        data = request.get_json() or {}
+        query = data.get('query', '')
+
+    if not query:
+        return jsonify({
+            "error": "query required",
+            "example": '{"query": "{ __schema { types { name fields { name } } } }"}',
+            "hint": "Introspection is enabled — query __schema to discover all types and fields"
+        }), 400
+
+    # Handle introspection queries
+    if '__schema' in query or '__type' in query:
+        return jsonify({
+            "data": {
+                "__schema": _GRAPHQL_SCHEMA,
+            }
+        })
+
+    # Handle basic user queries
+    if 'users' in query.lower():
+        db = get_db()
+        users = db.execute("SELECT * FROM api_users").fetchall()
+        return jsonify({"data": {"users": [dict(u) for u in users]}})
+
+    if 'config' in query.lower():
+        return jsonify({
+            "data": {
+                "config": {
+                    "database_url": f"sqlite:///{DB_PATH}",
+                    "jwt_secret": JWT_SECRET,
+                    "api_secret": API_SECRET,
+                    "aws_credentials": {
+                        "access_key": "AKIAIOSFODNN7EXAMPLE",
+                        "secret_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                    }
+                }
+            }
+        })
+
+    if 'internalservices' in query.lower() or 'internal' in query.lower():
+        return jsonify({
+            "data": {
+                "internalServices": [
+                    {"name": "database", "host": "127.0.0.1", "port": 3306, "credentials": "root:root"},
+                    {"name": "redis", "host": "127.0.0.1", "port": 6379, "credentials": "no auth"},
+                    {"name": "ldap", "host": "127.0.0.1", "port": 389, "credentials": "cn=admin,dc=vulnbox,dc=local:admin"},
+                    {"name": "smtp", "host": "127.0.0.1", "port": 25, "credentials": "open relay"},
+                    {"name": "dns", "host": "127.0.0.1", "port": 53, "credentials": "open resolver"},
+                    {"name": "ftp", "host": "127.0.0.1", "port": 21, "credentials": "anonymous"},
+                ]
+            }
+        })
+
+    return jsonify({"data": None, "errors": [{"message": f"Cannot resolve query: {query}"}]})
+
+# ── Vuln #14: Metrics endpoint — info disclosure ────────────────────────────
+@app.route('/api/v1/metrics')
+def metrics():
+    """
+    Prometheus-style metrics endpoint — leaks system info, user counts, secrets.
+    No authentication required.
+    """
+    db = get_db()
+    user_count = db.execute("SELECT COUNT(*) FROM api_users").fetchone()[0]
+    admin_count = db.execute("SELECT COUNT(*) FROM api_users WHERE role='admin'").fetchone()[0]
+    note_count = db.execute("SELECT COUNT(*) FROM api_notes").fetchone()[0]
+
+    uptime = subprocess.getoutput("cat /proc/uptime 2>/dev/null || echo '0 0'").split()[0]
+    load_avg = subprocess.getoutput("cat /proc/loadavg 2>/dev/null || echo '0 0 0'")
+    mem_info = subprocess.getoutput("free -m 2>/dev/null | head -2 || echo 'N/A'")
+
+    metrics_text = f"""# HELP vulnbox_users_total Total number of registered users
+# TYPE vulnbox_users_total gauge
+vulnbox_users_total {user_count}
+
+# HELP vulnbox_admins_total Total number of admin users
+# TYPE vulnbox_admins_total gauge
+vulnbox_admins_total {admin_count}
+
+# HELP vulnbox_notes_total Total number of notes
+# TYPE vulnbox_notes_total gauge
+vulnbox_notes_total {note_count}
+
+# HELP vulnbox_uptime_seconds System uptime in seconds
+# TYPE vulnbox_uptime_seconds gauge
+vulnbox_uptime_seconds {uptime}
+
+# HELP vulnbox_load_average System load average
+# TYPE vulnbox_load_average gauge
+vulnbox_load_average {load_avg}
+
+# HELP vulnbox_info Application info
+# TYPE vulnbox_info gauge
+vulnbox_info{{version="2.0.0",jwt_secret="{JWT_SECRET}",api_secret="{API_SECRET}",db_path="{DB_PATH}"}} 1
+
+# HELP vulnbox_service_status Internal service status
+# TYPE vulnbox_service_status gauge
+vulnbox_service_status{{service="mysql",port="3306"}} 1
+vulnbox_service_status{{service="redis",port="6379"}} 1
+vulnbox_service_status{{service="ssh",port="22"}} 1
+vulnbox_service_status{{service="ftp",port="21"}} 1
+vulnbox_service_status{{service="smtp",port="25"}} 1
+vulnbox_service_status{{service="dns",port="53"}} 1
+vulnbox_service_status{{service="ldap",port="389"}} 1
+vulnbox_service_status{{service="smb",port="445"}} 1
+vulnbox_service_status{{service="snmp",port="161"}} 1
+vulnbox_service_status{{service="http",port="80"}} 1
+vulnbox_service_status{{service="https",port="443"}} 1
+vulnbox_service_status{{service="api",port="9090"}} 1
+
+# HELP vulnbox_memory_usage Memory info
+# TYPE vulnbox_memory_usage gauge
+# {mem_info}
+"""
+    return metrics_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
 # ── OpenAPI spec ──────────────────────────────────────────────────────────────
 @app.route('/swagger.json')
 @app.route('/openapi.json')
@@ -496,6 +777,7 @@ def openapi_spec():
         "info": {"title": "VulnBox API", "version": "2.0.0"},
         "paths": {
             "/api/v1/login":      {"post": {"summary": "Login (SQLi)"}},
+            "/api/v1/register":   {"post": {"summary": "Register (Mass Assignment)"}},
             "/api/v1/users":      {"get":  {"summary": "List users (no auth)"}},
             "/api/v1/users/{id}": {"get":  {"summary": "Get user (IDOR)"}},
             "/api/v1/notes":      {"get":  {"summary": "List notes (broken auth)"}},
@@ -503,10 +785,13 @@ def openapi_spec():
             "/api/v1/exec":       {"post": {"summary": "Execute command (RCE)"}},
             "/api/v1/config":     {"get":  {"summary": "Config (info disclosure)"}},
             "/api/v1/debug":      {"get":  {"summary": "Debug (env dump)"}},
+            "/api/v1/metrics":    {"get":  {"summary": "Metrics (info disclosure)"}},
             "/api/v1/fetch":      {"get":  {"summary": "Fetch URL (SSRF)"}},
+            "/api/v1/webhook":    {"post": {"summary": "Webhook callback (SSRF)"}},
             "/api/v1/jwt/issue":  {"post": {"summary": "Issue JWT (weak secret)"}},
             "/api/v1/jwt/verify": {"post": {"summary": "Verify JWT (alg:none bypass)"}},
             "/api/v1/render":     {"get":  {"summary": "Render template (SSTI)"}},
+            "/api/v1/graphql":    {"post": {"summary": "GraphQL (introspection)"}},
             "/latest/meta-data/": {"get":  {"summary": "Fake AWS IMDS"}},
         },
         "components": {
