@@ -225,12 +225,42 @@ export function useWebSocketHandlers() {
     });
 
     // ── AI thoughts ────────────────────────────────────────────
+    const { addDecision } = useAIStore.getState();
+
     const unsubAI = wsService.on<any>('ai_thought', (data) => {
+      // Preserve the real thoughtType from the backend (ai_prompt, ai_response,
+      // ai_decision, ai_execution, observation, reasoning, command, decision).
+      // Pass through content, command, and metadata so the AI Stream view can
+      // show the full prompt, response, and reasoning.
+      const typeMap: Record<string, string> = {
+        ai_prompt: 'ai_prompt',
+        ai_response: 'ai_response',
+        ai_decision: 'ai_decision',
+        ai_execution: 'ai_execution',
+        reasoning: 'reasoning',
+        command: 'command',
+        decision: 'decision',
+        observation: 'observation',
+      };
+      const thoughtType = typeMap[data.thoughtType] || 'observation';
+
       addThought({
-        thoughtType: data.thoughtType || 'observation',
-        content: data.content || '',
-        metadata: data.metadata,
+        thoughtType: thoughtType as any,
+        content: data.content || data.response || data.message || '',
+        command: data.command || undefined,
+        metadata: data.metadata || undefined,
       });
+
+      // AI decisions also go to the Recent Decisions panel
+      if (thoughtType === 'ai_decision') {
+        addDecision({
+          phase: 'recon' as any,
+          decision: data.content || '',
+          reasoning: data.metadata?.rationale ? String(data.metadata.rationale) : '',
+          confidence: 0.85,
+          executedCommand: data.command || undefined,
+        });
+      }
     });
 
     // ── AI command execution ───────────────────────────────────

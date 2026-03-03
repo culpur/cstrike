@@ -30,6 +30,13 @@ export const useAIStore = create<AIStore>((set) => ({
   // Actions
   addThought: (thought) =>
     set((state) => {
+      // Deduplicate — skip if we already have a thought with the same type + content
+      // (prevents double-add from historical API load + live WebSocket)
+      const isDupe = state.thoughts.some(
+        (t) => t.thoughtType === thought.thoughtType && t.content === thought.content,
+      );
+      if (isDupe) return state;
+
       const newThought: AIThought = {
         ...thought,
         id: `thought-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,

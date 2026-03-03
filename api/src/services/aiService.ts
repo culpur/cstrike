@@ -159,7 +159,9 @@ class AIService {
   async analyze(input: AIAnalyzeInput): Promise<AIAnalyzeResult> {
     const config = await this.getProviderConfig();
 
-    // Record the prompt
+    const systemPrompt = this.buildSystemPrompt(input.target);
+
+    // Record the prompt — include full prompt details for the AI Stream UI
     const promptThought = await this.recordThought({
       thoughtType: 'AI_PROMPT',
       content: input.prompt,
@@ -169,6 +171,9 @@ class AIService {
         provider: config.provider,
         model: config.model,
         mode: input.mode,
+        system_prompt: systemPrompt,
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
       },
     });
 
@@ -184,7 +189,7 @@ class AIService {
       // Extract any commands from the response (lines starting with $ or >)
       const commands = this.extractCommands(responseContent);
 
-      // Record the response
+      // Record the response — include full response for the AI Stream UI
       await this.recordThought({
         thoughtType: 'AI_RESPONSE',
         content: responseContent,
@@ -194,6 +199,8 @@ class AIService {
           model: config.model,
           promptId: promptThought.id,
           commandCount: commands.length,
+          response: responseContent,
+          commands: commands.length > 0 ? commands : undefined,
         },
       });
 
