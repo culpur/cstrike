@@ -959,10 +959,10 @@ export function ResultsView() {
                   {tab.label}
                   {tab.count ? (
                     <span className={cn(
-                      'ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full',
+                      'ml-2 px-2 py-0.5 text-[10px] rounded font-mono font-bold',
                       activeTab === tab.id
                         ? 'bg-white/20 text-white'
-                        : 'bg-[var(--grok-surface-3)] text-[var(--grok-text-muted)]'
+                        : 'bg-[var(--grok-void)] text-[var(--grok-text-muted)] border border-[var(--grok-border)]'
                     )}>
                       {tab.count}
                     </span>
