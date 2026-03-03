@@ -14,6 +14,14 @@ import {
   Swords,
   Trophy,
   Server,
+  Map,
+  FileBarChart,
+  CalendarClock,
+  ShieldAlert,
+  GitCompareArrows,
+  FileCheck,
+  Terminal,
+  Globe,
 } from 'lucide-react';
 import { useUIStore } from '@stores/uiStore';
 import { useSystemStore } from '@stores/systemStore';
@@ -62,6 +70,54 @@ const navigationItems = [
     label: 'Results',
     icon: FolderOpen,
     section: 'intel',
+  },
+  {
+    id: 'attack-map',
+    label: 'Attack Map',
+    icon: Map,
+    section: 'intel',
+  },
+  {
+    id: 'threat-intel',
+    label: 'Threat Intel',
+    icon: ShieldAlert,
+    section: 'intel',
+  },
+  {
+    id: 'scan-diff',
+    label: 'Scan Diff',
+    icon: GitCompareArrows,
+    section: 'intel',
+  },
+  {
+    id: 'geo-map',
+    label: 'Geo Map',
+    icon: Globe,
+    section: 'intel',
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: FileBarChart,
+    section: 'ops',
+  },
+  {
+    id: 'campaigns',
+    label: 'Campaigns',
+    icon: CalendarClock,
+    section: 'ops',
+  },
+  {
+    id: 'evidence',
+    label: 'Evidence',
+    icon: FileCheck,
+    section: 'ops',
+  },
+  {
+    id: 'terminal',
+    label: 'Terminal',
+    icon: Terminal,
+    section: 'ops',
   },
   {
     id: 'logs',

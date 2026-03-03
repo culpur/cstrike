@@ -31,6 +31,13 @@ function extractPort(target: string): number | undefined {
   }
 }
 
+/** Ensure a target has an HTTP(S) scheme for web tools. */
+function ensureHttpUrl(target: string): string {
+  if (/^https?:\/\//.test(target)) return target;
+  const port = extractPort(target);
+  return (port === 443 || port === 8443) ? `https://${target}` : `http://${target}`;
+}
+
 /** Find the first wordlist that exists. */
 function findWordlist(candidates: string[]): string {
   for (const w of candidates) {
@@ -90,32 +97,34 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
   },
   subfinder: (target) => ['subfinder', '-d', extractHost(target), '-silent'],
   amass: (target) => ['amass', 'enum', '-d', extractHost(target), '-passive'],
-  nikto: (target) => ['nikto', '-h', target, '-Format', 'txt'],
+  nikto: (target) => ['nikto', '-h', ensureHttpUrl(target), '-Format', 'txt'],
   httpx: (target) => ['httpx', '-u', target, '-silent', '-status-code', '-title', '-tech-detect'],
   waybackurls: (target) => ['waybackurls', extractHost(target)],
   gau: (target) => ['gau', extractHost(target)],
   dnsenum: (target) => ['dnsenum', extractHost(target)],
-  nuclei: (target) => ['nuclei', '-u', target, '-severity', 'critical,high,medium,low'],
+  nuclei: (target) => ['nuclei', '-u', ensureHttpUrl(target), '-severity', 'critical,high,medium,low'],
   ffuf: (target) => {
-    const base = target.replace(/\/+$/, '');
+    const base = ensureHttpUrl(target).replace(/\/+$/, '');
     const wl = findWordlist(COMMON_WORDLIST);
     return ['ffuf', '-u', `${base}/FUZZ`, '-w', wl, '-mc', '200,301,302,403', '-t', '10'];
   },
   gobuster: (target) => {
     const wl = findWordlist(COMMON_WORDLIST);
-    return ['gobuster', 'dir', '-u', target, '-w', wl, '-q', '-t', '10'];
+    return ['gobuster', 'dir', '-u', ensureHttpUrl(target), '-w', wl, '-q', '-t', '10'];
   },
-  dirb: (target) => ['dirb', target, '-S'],
+  dirb: (target) => ['dirb', ensureHttpUrl(target), '-S'],
   wfuzz: (target) => {
+    const url = ensureHttpUrl(target);
     const wl = findWordlist(COMMON_WORDLIST);
-    return ['wfuzz', '-c', '-z', `file,${wl}`, '--hc', '404', `${target}/FUZZ`];
+    return ['wfuzz', '-c', '-z', `file,${wl}`, '--hc', '404', `${url}/FUZZ`];
   },
-  sqlmap: (target) => [
-    'sqlmap', '-u', target, '--batch', '--level=1', '--risk=1', '--forms',
-  ],
-  xsstrike: (target) => ['xsstrike', '-u', target, '--blind'],
-  whatweb: (target) => ['whatweb', target, '-a', '3'],
-  wafw00f: (target) => ['wafw00f', target],
+  sqlmap: (target) => {
+    const url = ensureHttpUrl(target).replace(/\/+$/, '');
+    return ['sqlmap', '-u', `${url}/login.php`, '--batch', '--level=1', '--risk=1', '--forms', '--smart'];
+  },
+  xsstrike: (target) => ['xsstrike', '-u', ensureHttpUrl(target), '--blind'],
+  whatweb: (target) => ['whatweb', ensureHttpUrl(target), '-a', '3'],
+  wafw00f: (target) => ['wafw00f', ensureHttpUrl(target)],
   sslscan: (target) => ['sslscan', extractHost(target)],
   sslyze: (target) => ['sslyze', extractHost(target)],
   testssl: (target) => ['testssl.sh', target],
@@ -133,18 +142,24 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
     const args = ['hydra'];
     if (opts.username) args.push('-l', opts.username);
     else args.push('-L', findWordlist([
+      '/opt/cstrike/data/wordlists/usernames.txt',
+      '/opt/wordlists/usernames.txt',
       '/usr/share/wordlists/metasploit/unix_users.txt',
       '/usr/share/wordlists/nmap.lst',
     ]));
 
     const wordlistMap: Record<string, string> = {
-      rockyou: '/usr/share/wordlists/rockyou.txt',
-      fasttrack: '/usr/share/wordlists/fasttrack.txt',
+      'rockyou.txt': findWordlist(['/opt/cstrike/data/wordlists/passwords.txt', '/opt/wordlists/passwords.txt', '/usr/share/wordlists/rockyou.txt']),
+      rockyou: findWordlist(['/opt/cstrike/data/wordlists/passwords.txt', '/opt/wordlists/passwords.txt', '/usr/share/wordlists/rockyou.txt']),
+      fasttrack: findWordlist(['/opt/cstrike/data/wordlists/passwords.txt', '/opt/wordlists/passwords.txt', '/usr/share/wordlists/fasttrack.txt']),
     };
-    args.push('-P', wordlistMap[opts.wordlist ?? 'fasttrack'] ?? opts.wordlist ?? wordlistMap.fasttrack);
+    args.push('-P', wordlistMap[opts.wordlist ?? 'fasttrack'] ?? opts.wordlist ?? findWordlist(['/opt/cstrike/data/wordlists/passwords.txt']));
 
     if (opts.port) args.push('-s', String(opts.port));
-    args.push(host, opts.service ?? 'ssh');
+    args.push('-t', '8');
+    // Traditional positional format: hydra [opts] host service
+    args.push(host || 'localhost');
+    args.push((opts.service ?? 'ssh').toLowerCase());
     return args;
   },
   john: (target) => ['john', target],
@@ -209,6 +224,8 @@ class ToolExecutor {
     const binary = this.resolveBinary(args[0]);
     const spawnArgs = args.slice(1);
     const timeout = opts.timeout ?? 300_000; // 5 min default
+
+    console.log(`[ToolExec] ${tool}: ${binary} ${spawnArgs.join(' ')}`);
 
     const startTime = Date.now();
     let output = '';

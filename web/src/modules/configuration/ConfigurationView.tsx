@@ -27,6 +27,9 @@ import {
   Wifi,
   WifiOff,
   AlertTriangle,
+  Zap,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { useUIStore } from '@stores/uiStore';
 import { useSystemStore } from '@stores/systemStore';
@@ -328,6 +331,41 @@ export function ConfigurationView() {
   const [vpnActionLoading, setVpnActionLoading] = useState<Record<string, boolean>>({});
   const [splitRouting, setSplitRouting] = useState(false);
 
+  // ── AI Provider test state ──────────────────────────────────────────────────
+  const [aiTestResult, setAiTestResult] = useState<{
+    tested: boolean;
+    testing: boolean;
+    reachable: boolean;
+    error?: string;
+    provider?: string;
+    model?: string;
+  }>({ tested: false, testing: false, reachable: false });
+
+  const handleTestAI = useCallback(async () => {
+    setAiTestResult((prev) => ({ ...prev, testing: true }));
+    try {
+      const result = await apiService.testAIProvider();
+      setAiTestResult({
+        tested: true,
+        testing: false,
+        reachable: result.reachable,
+        error: result.error,
+        provider: result.provider,
+        model: result.model,
+      });
+      addToast({
+        type: result.reachable ? 'success' : 'error',
+        message: result.reachable
+          ? `${result.provider} / ${result.model} — connected`
+          : `${result.provider} — ${result.error || 'not reachable'}`,
+        duration: 4000,
+      });
+    } catch {
+      setAiTestResult((prev) => ({ ...prev, testing: false, tested: true, reachable: false, error: 'API unreachable' }));
+      addToast({ type: 'error', message: 'AI provider test failed — API unreachable', duration: 4000 });
+    }
+  }, [addToast]);
+
   useEffect(() => {
     loadConfig();
     loadVpnStatus();
@@ -538,8 +576,8 @@ export function ConfigurationView() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <ConfigInput
                 label="Ollama Host"
-                value={config.ollama_host || 'http://localhost:11434'}
-                onChange={(v) => setConfig({ ...config, ollama_host: v })}
+                value={config.ollama_url || 'http://localhost:11434'}
+                onChange={(v) => setConfig({ ...config, ollama_url: v })}
                 placeholder="http://localhost:11434"
               />
               <ConfigInput
@@ -601,6 +639,41 @@ export function ConfigurationView() {
               />
             </div>
           )}
+
+          {/* Test Connection */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleTestAI}
+              disabled={aiTestResult.testing}
+              className="cs-btn cs-btn-primary flex items-center gap-1.5"
+            >
+              {aiTestResult.testing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Zap className="w-3.5 h-3.5" />
+              )}
+              Test Connection
+            </button>
+            {aiTestResult.tested && !aiTestResult.testing && (
+              <div className="flex items-center gap-1.5">
+                {aiTestResult.reachable ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-[var(--grok-success)]" />
+                    <span className="text-xs font-mono text-[var(--grok-success)]">
+                      Connected — {aiTestResult.provider} / {aiTestResult.model}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4 text-[var(--grok-error)]" />
+                    <span className="text-xs font-mono text-[var(--grok-error)]">
+                      {aiTestResult.error || 'Not reachable'}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* AI tuning */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

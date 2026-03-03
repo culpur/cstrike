@@ -162,10 +162,42 @@ services:
       retries: 3
       start_period: 60s
 
+  # ── VulnBox Target ─────────────────────────────────────────
+  # Deliberately vulnerable target host with its own IP address.
+  # Services on standard ports: SSH:22, HTTP:80, FTP:21, MySQL:3306,
+  # SNMP:161, SMB:445, Flask:9090
+  vulnbox:
+    build:
+      context: docker/vulnbox
+      dockerfile: Dockerfile
+    image: cstrike-vulnbox:latest
+    container_name: cstrike-vulnbox
+    cap_add:
+      - NET_BIND_SERVICE
+    networks:
+      vulnnet:
+        ipv4_address: 10.10.10.100
+    restart: unless-stopped
+    volumes:
+      - vulnbox-data:/var/lib/mysql
+
+# ── Target Network ─────────────────────────────────────────
+# Isolated bridge network for attack targets.
+# API (network_mode: host) reaches this subnet via Docker bridge routing.
+networks:
+  vulnnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.10.0/24
+          gateway: 10.10.10.1
+
 volumes:
   pgdata:
     driver: local
   redisdata:
     driver: local
   apidata:
+    driver: local
+  vulnbox-data:
     driver: local

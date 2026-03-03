@@ -144,6 +144,100 @@ aiRouter.get('/provider', async (_req, res, next) => {
   }
 });
 
+// Test AI provider connectivity
+aiRouter.post('/provider/test', async (_req, res, next) => {
+  try {
+    const provider = await getConfigValue('ai_provider', 'openai');
+    let model = '';
+    let reachable = false;
+    let error = '';
+
+    switch (provider) {
+      case 'ollama': {
+        const ollamaUrl = String(await getConfigValue('ollama_url', 'http://localhost:11434')).replace(/\/$/, '');
+        model = String(await getConfigValue('ollama_model', 'llama3'));
+        try {
+          const resp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(5000) });
+          if (resp.ok) {
+            const data = await resp.json() as any;
+            const models = (data.models || []).map((m: any) => m.name || m.model);
+            reachable = true;
+            // Check if the configured model is actually available
+            if (models.length > 0 && !models.some((m: string) => m.startsWith(model))) {
+              error = `Model "${model}" not found. Available: ${models.slice(0, 5).join(', ')}`;
+            }
+          } else {
+            error = `Ollama returned ${resp.status}`;
+          }
+        } catch (e: any) {
+          error = e.message?.includes('timeout') ? 'Connection timed out' : (e.message || 'Connection refused');
+        }
+        break;
+      }
+      case 'openai': {
+        const key = String(await getConfigValue('openai_api_key', ''));
+        model = String(await getConfigValue('openai_model', 'gpt-4o'));
+        if (!key) { error = 'No API key configured'; break; }
+        try {
+          const resp = await fetch('https://api.openai.com/v1/models', {
+            headers: { Authorization: `Bearer ${key}` },
+            signal: AbortSignal.timeout(8000),
+          });
+          reachable = resp.ok;
+          if (!resp.ok) error = `API returned ${resp.status}`;
+        } catch (e: any) {
+          error = e.message || 'Connection failed';
+        }
+        break;
+      }
+      case 'anthropic': {
+        const key = String(await getConfigValue('anthropic_api_key', ''));
+        model = String(await getConfigValue('anthropic_model', 'claude-sonnet-4-20250514'));
+        if (!key) { error = 'No API key configured'; break; }
+        try {
+          const resp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
+            signal: AbortSignal.timeout(8000),
+          });
+          reachable = resp.ok;
+          if (!resp.ok) error = `API returned ${resp.status}`;
+        } catch (e: any) {
+          error = e.message || 'Connection failed';
+        }
+        break;
+      }
+      case 'grok': {
+        const key = String(await getConfigValue('grok_api_key', ''));
+        model = String(await getConfigValue('grok_model', 'grok-2'));
+        if (!key) { error = 'No API key configured'; break; }
+        try {
+          const resp = await fetch('https://api.x.ai/v1/models', {
+            headers: { Authorization: `Bearer ${key}` },
+            signal: AbortSignal.timeout(8000),
+          });
+          reachable = resp.ok;
+          if (!resp.ok) error = `API returned ${resp.status}`;
+        } catch (e: any) {
+          error = e.message || 'Connection failed';
+        }
+        break;
+      }
+      default:
+        error = `Unknown provider: ${provider}`;
+    }
+
+    res.json({
+      success: true,
+      data: { provider, model, reachable, error: error || undefined },
+      timestamp: Date.now(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Update AI provider
 aiRouter.put('/provider', async (req, res, next) => {
   try {

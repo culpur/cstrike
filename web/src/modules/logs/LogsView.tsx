@@ -3,8 +3,8 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Download, Trash2 } from 'lucide-react';
-import { Button, Panel } from '@components/ui';
+import { Download, Trash2, ScrollText } from 'lucide-react';
+import { Panel } from '@components/ui';
 import { useLogStore } from '@stores/logStore';
 import { useUIStore } from '@stores/uiStore';
 import { wsService } from '@services/websocket';
@@ -87,9 +87,12 @@ export function LogsView() {
   const levels: LogLevel[] = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL'];
 
   return (
-    <div className="h-full overflow-auto p-6 space-y-6">
+    <div className="h-full overflow-auto p-5 space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-grok-text-heading">Live Logs</h1>
+        <h1 className="text-lg font-bold text-[var(--grok-text-heading)] flex items-center gap-2">
+          <ScrollText className="w-5 h-5 text-[var(--grok-scan-cyan)]" />
+          Live Logs
+        </h1>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-grok-text-body cursor-pointer">
             <input
@@ -100,18 +103,18 @@ export function LogsView() {
             />
             Auto-scroll
           </label>
-          <Button variant="secondary" onClick={handleExportJson}>
-            <Download className="w-4 h-4 mr-1" />
+          <button className="cs-btn flex items-center gap-1.5" onClick={handleExportJson}>
+            <Download className="w-3.5 h-3.5" />
             Export JSON
-          </Button>
-          <Button variant="secondary" onClick={handleExportCsv}>
-            <Download className="w-4 h-4 mr-1" />
+          </button>
+          <button className="cs-btn flex items-center gap-1.5" onClick={handleExportCsv}>
+            <Download className="w-3.5 h-3.5" />
             Export CSV
-          </Button>
-          <Button variant="danger" onClick={handleClearLogs}>
-            <Trash2 className="w-4 h-4 mr-1" />
+          </button>
+          <button className="cs-btn cs-btn-danger flex items-center gap-1.5" onClick={handleClearLogs}>
+            <Trash2 className="w-3.5 h-3.5" />
             Clear
-          </Button>
+          </button>
         </div>
       </div>
 

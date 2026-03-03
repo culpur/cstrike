@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /secret/
+Disallow: /uploads/
+Disallow: /config.php
+Disallow: /api_docs.php
+Disallow: /server-status

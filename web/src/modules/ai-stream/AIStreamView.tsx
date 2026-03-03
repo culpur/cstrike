@@ -33,9 +33,23 @@ export function AIStreamView() {
       try {
         const existingThoughts = await apiService.getAIThoughts();
         existingThoughts.forEach((thought) => {
+          // Map backend thoughtType (snake_case) to frontend AIThought types
+          const typeMap: Record<string, AIThought['thoughtType']> = {
+            ai_prompt: 'ai_prompt',
+            ai_response: 'ai_response',
+            ai_decision: 'ai_decision',
+            ai_execution: 'ai_execution',
+            reasoning: 'reasoning',
+            command: 'command',
+            decision: 'decision',
+            observation: 'observation',
+          };
+
           addThought({
-            thoughtType: 'observation',
-            content: thought,
+            thoughtType: typeMap[thought.thoughtType] || 'observation',
+            content: typeof thought.content === 'string' ? thought.content : JSON.stringify(thought.content),
+            command: thought.command || undefined,
+            metadata: thought.metadata || undefined,
           });
         });
       } catch (error) {
@@ -70,20 +84,23 @@ export function AIStreamView() {
   }, [addThought, addDecision, setThinking]);
 
   return (
-    <div className="h-full overflow-auto p-6 space-y-6">
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold text-grok-text-heading">AI Thought Stream</h1>
-          {isThinking && (
-            <div className="flex items-center gap-2 text-grok-ai-purple">
-              <Brain className="w-5 h-5 animate-pulse" />
-              <span className="text-sm font-medium">AI Thinking...</span>
-            </div>
-          )}
+    <div className="h-full overflow-auto p-5 space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-[var(--grok-text-heading)] flex items-center gap-2">
+            <Brain className="w-5 h-5 text-[var(--grok-ai-purple)]" />
+            AI Thought Stream
+          </h1>
+          <p className="text-[10px] text-[var(--grok-text-muted)] mt-0.5 font-mono">
+            Real-time AI decision-making during autonomous scans
+          </p>
         </div>
-        <p className="text-sm text-grok-text-muted">
-          Real-time view of AI decision-making during autonomous scans. AI analysis runs automatically.
-        </p>
+        {isThinking && (
+          <div className="flex items-center gap-2 text-[var(--grok-ai-purple)]">
+            <Brain className="w-4 h-4 animate-pulse" />
+            <span className="text-xs font-medium">AI Thinking...</span>
+          </div>
+        )}
       </div>
 
       {/* Recent Decisions */}

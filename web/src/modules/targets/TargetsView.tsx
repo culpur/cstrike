@@ -12,8 +12,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Play, Square, XCircle } from 'lucide-react';
-import { Button, Panel, Input, StatusBadge } from '@components/ui';
+import { Plus, Trash2, Play, Square, XCircle, Crosshair } from 'lucide-react';
+import { Panel, Input, StatusBadge } from '@components/ui';
 import { useReconStore } from '@stores/reconStore';
 import { useUIStore } from '@stores/uiStore';
 import { apiService } from '@services/api';
@@ -196,11 +196,14 @@ export function TargetsView() {
   };
 
   return (
-    <div className="h-full overflow-auto p-6 space-y-6">
+    <div className="h-full overflow-auto p-5 space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-grok-text-heading">Targets</h1>
-        <p className="text-sm text-grok-text-muted mt-1">
-          Add targets and start AI-driven autonomous scans. The AI will automatically run all phases.
+        <h1 className="text-lg font-bold text-[var(--grok-text-heading)] flex items-center gap-2">
+          <Crosshair className="w-5 h-5 text-[var(--grok-exploit-red)]" />
+          Targets
+        </h1>
+        <p className="text-[10px] text-[var(--grok-text-muted)] mt-0.5 font-mono">
+          Add targets and start AI-driven autonomous scans
         </p>
       </div>
 
@@ -213,10 +216,14 @@ export function TargetsView() {
             onChange={(e) => setTargetUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddTarget()}
           />
-          <Button onClick={handleAddTarget} isLoading={isAdding} className="flex-shrink-0">
-            <Plus className="w-4 h-4 mr-1" />
-            Add
-          </Button>
+          <button
+            className="cs-btn cs-btn-primary flex items-center gap-1.5 flex-shrink-0"
+            onClick={handleAddTarget}
+            disabled={isAdding}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            {isAdding ? 'Adding...' : 'Add'}
+          </button>
         </div>
       </Panel>
 
@@ -257,14 +264,13 @@ export function TargetsView() {
                     </div>
                   )}
                 </div>
-                <Button
-                  size="sm"
-                  variant="danger"
+                <button
+                  className="cs-btn cs-btn-danger flex items-center gap-1.5 text-[10px] py-1 px-2"
                   onClick={() => handleStopScan(scan.scan_id)}
                 >
-                  <XCircle className="w-3 h-3 mr-1" />
+                  <XCircle className="w-3 h-3" />
                   Cancel
-                </Button>
+                </button>
               </div>
             ))}
           </div>
@@ -299,31 +305,28 @@ export function TargetsView() {
                   <div className="flex items-center gap-2 ml-4">
                     <StatusBadge status={target.status} />
                     {isScanning ? (
-                      <Button
-                        size="sm"
-                        variant="danger"
+                      <button
+                        className="cs-btn cs-btn-danger flex items-center gap-1.5 text-[10px] py-1 px-2"
                         onClick={() => handleStopScan(activeScan.scan_id)}
                       >
-                        <Square className="w-3 h-3 mr-1" />
+                        <Square className="w-3 h-3" />
                         Stop
-                      </Button>
+                      </button>
                     ) : (
-                      <Button
-                        size="sm"
-                        variant="primary"
+                      <button
+                        className="cs-btn cs-btn-primary flex items-center gap-1.5 text-[10px] py-1 px-2"
                         onClick={() => handleStartScan(target.url)}
                       >
-                        <Play className="w-3 h-3 mr-1" />
+                        <Play className="w-3 h-3" />
                         Start Scan
-                      </Button>
+                      </button>
                     )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
+                    <button
+                      className="cs-btn flex items-center gap-1.5 text-[10px] py-1 px-2"
                       onClick={() => handleRemoveTarget(target.url)}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               );

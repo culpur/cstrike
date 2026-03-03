@@ -20,6 +20,8 @@ import {
   Shield,
   Cpu,
   HardDrive,
+  Zap,
+  ExternalLink,
 } from 'lucide-react';
 import { useSystemStore } from '@stores/systemStore';
 import { useUIStore } from '@stores/uiStore';
@@ -40,7 +42,7 @@ interface ServiceCard {
 const STATUS_CONFIG: Record<ServiceStatus, { icon: typeof CheckCircle2; color: string; dotClass: string; label: string }> = {
   running: { icon: CheckCircle2, color: 'text-[var(--grok-success)]', dotClass: 'status-dot-running', label: 'Healthy' },
   stopped: { icon: XCircle, color: 'text-[var(--grok-text-muted)]', dotClass: 'status-dot-stopped', label: 'Stopped' },
-  error: { icon: AlertTriangle, color: 'text-[var(--grok-error)]', dotClass: 'status-dot-error', label: 'Failed' },
+  error: { icon: AlertTriangle, color: 'text-[var(--grok-warning)]', dotClass: 'status-dot-stopped', label: 'Not Installed' },
   starting: { icon: Loader2, color: 'text-[var(--grok-warning)]', dotClass: 'status-dot-starting', label: 'Starting' },
   stopping: { icon: Loader2, color: 'text-[var(--grok-warning)]', dotClass: 'status-dot-starting', label: 'Stopping' },
 };
@@ -50,6 +52,12 @@ export function ServicesView() {
   const { addToast } = useUIStore();
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [aiProvider, setAIProvider] = useState({ provider: '', model: '', status: '' });
+  const [aiConnectivity, setAIConnectivity] = useState<{
+    tested: boolean;
+    reachable: boolean;
+    testing: boolean;
+    error?: string;
+  }>({ tested: false, reachable: false, testing: false });
 
   const serviceCards: ServiceCard[] = [
     {
@@ -99,12 +107,27 @@ export function ServicesView() {
     },
   ];
 
-  // Fetch AI provider info
+  // Fetch AI provider info and test connectivity
+  const testAIConnectivity = useCallback(async () => {
+    setAIConnectivity((prev) => ({ ...prev, testing: true }));
+    try {
+      const result = await apiService.testAIProvider();
+      setAIProvider({ provider: result.provider, model: result.model, status: result.reachable ? 'connected' : 'configured' });
+      setAIConnectivity({ tested: true, reachable: result.reachable, testing: false, error: result.error });
+    } catch {
+      setAIConnectivity((prev) => ({ ...prev, testing: false, tested: true, reachable: false, error: 'API unreachable' }));
+    }
+  }, []);
+
   useEffect(() => {
     apiService.getAIProvider()
-      .then(setAIProvider)
+      .then((info) => {
+        setAIProvider(info);
+        // Auto-test connectivity after getting provider info
+        testAIConnectivity();
+      })
       .catch(() => {});
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh service status
   const refreshStatus = useCallback(async () => {
@@ -123,6 +146,20 @@ export function ServicesView() {
     const interval = setInterval(refreshStatus, 5000);
     return () => clearInterval(interval);
   }, [refreshStatus]);
+
+  // Auto-start failed optional services — they should always be on
+  const [autoStartAttempted, setAutoStartAttempted] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const failedServices = serviceCards.filter(
+      (svc) => svc.optional && svc.status === 'error' && !autoStartAttempted.has(svc.id)
+    );
+    if (failedServices.length > 0) {
+      failedServices.forEach((svc) => {
+        setAutoStartAttempted((prev) => new Set(prev).add(svc.id));
+        handleServiceAction(svc.id, 'start').catch(() => {});
+      });
+    }
+  }, [services, connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleServiceAction = async (
     service: string,
@@ -157,15 +194,15 @@ export function ServicesView() {
   const totalCount = serviceCards.length;
 
   return (
-    <div className="h-full overflow-auto p-6 space-y-6">
+    <div className="h-full overflow-auto p-5 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-[var(--grok-text-heading)] flex items-center gap-2">
+          <h1 className="text-lg font-bold text-[var(--grok-text-heading)] flex items-center gap-2">
             <Server className="w-5 h-5 text-[var(--grok-scan-cyan)]" />
             Service Management
           </h1>
-          <p className="text-xs text-[var(--grok-text-muted)] mt-1">
+          <p className="text-[10px] text-[var(--grok-text-muted)] mt-0.5 font-mono">
             {healthyCount}/{totalCount} services healthy
           </p>
         </div>
@@ -212,13 +249,40 @@ export function ServicesView() {
           </div>
         </div>
         <div className="cs-panel p-3 flex items-center gap-3">
-          <Shield className="w-4 h-4 text-[var(--grok-ai-purple)]" />
-          <div>
+          <Shield className={`w-4 h-4 ${aiConnectivity.reachable ? 'text-[var(--grok-success)]' : 'text-[var(--grok-ai-purple)]'}`} />
+          <div className="flex-1 min-w-0">
             <div className="metric-label">AI Provider</div>
-            <div className="text-sm font-mono font-semibold text-[var(--grok-text-heading)]">
-              {aiProvider.provider || '—'}
-            </div>
+            {aiProvider.provider ? (
+              <div
+                className={`text-sm font-mono font-semibold truncate ${aiConnectivity.reachable ? 'text-[var(--grok-success)]' : 'text-[var(--grok-text-heading)]'}`}
+                title={`${aiProvider.provider} / ${aiProvider.model}${aiConnectivity.reachable ? ' (connected)' : ' (not reachable)'}`}
+              >
+                {aiProvider.provider} / {aiProvider.model}
+              </div>
+            ) : (
+              <button
+                onClick={() => { const { setActiveView } = useUIStore.getState(); setActiveView('configuration'); }}
+                className="text-sm font-mono font-semibold text-[var(--grok-warning)] hover:text-[var(--grok-ai-purple)] transition-colors flex items-center gap-1"
+                title="Go to AI Provider configuration"
+              >
+                Configure
+                <ExternalLink className="w-3 h-3" />
+              </button>
+            )}
           </div>
+          <button
+            onClick={testAIConnectivity}
+            disabled={aiConnectivity.testing}
+            className="cs-btn flex items-center gap-1 text-[10px] py-1 px-2 flex-shrink-0"
+            title={aiConnectivity.error || 'Test AI provider connectivity'}
+          >
+            {aiConnectivity.testing ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Zap className="w-3 h-3" />
+            )}
+            Test
+          </button>
         </div>
       </div>
 
@@ -325,7 +389,7 @@ export function ServicesView() {
         <div className="cs-panel-header">Feature Availability</div>
         <div className="p-4">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-            {getFeatureMatrix(services, connected, aiProvider).map((feat) => (
+            {getFeatureMatrix(services, connected, aiProvider, aiConnectivity).map((feat) => (
               <div
                 key={feat.name}
                 className="flex items-center gap-2 p-2 rounded bg-[var(--grok-surface-2)]"
@@ -355,15 +419,21 @@ export function ServicesView() {
 function getFeatureMatrix(
   services: ServiceState,
   connected: boolean,
-  aiProvider: { provider: string; model: string; status: string }
+  aiProvider: { provider: string; model: string; status: string },
+  aiConnectivity: { tested: boolean; reachable: boolean; testing: boolean; error?: string }
 ) {
+  const aiAvailable = aiConnectivity.reachable;
+  const aiDetail = aiProvider.provider
+    ? `${aiProvider.provider} / ${aiProvider.model}`
+    : 'not configured';
+
   return [
     { name: 'REST API', available: connected, detail: ':8000' },
     { name: 'WebSocket', available: connected, detail: 'Socket.IO' },
     { name: 'Metasploit RPC', available: services.metasploitRpc === 'running', detail: ':55552' },
     { name: 'OWASP ZAP', available: services.zap === 'running', detail: ':8090' },
     { name: 'Burp Suite', available: services.burp === 'running' },
-    { name: 'AI Provider', available: !!aiProvider.provider, detail: aiProvider.provider || 'none' },
+    { name: 'AI Provider', available: aiAvailable, detail: aiDetail },
     { name: 'MCP Tools', available: connected, detail: 'agentic mode' },
     { name: 'VulnAPI', available: connected, detail: 'API scanning' },
     { name: 'Recon Pipeline', available: connected, detail: 'nmap + suite' },

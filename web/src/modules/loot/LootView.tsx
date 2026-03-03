@@ -3,8 +3,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Download, Check, X, Clock, Target, TrendingUp } from 'lucide-react';
-import { Button, Panel, Input } from '@components/ui';
+import { Download, Check, X, Clock, Target, TrendingUp, Trophy } from 'lucide-react';
+import { Panel, Input } from '@components/ui';
 import { useLootStore } from '@stores/lootStore';
 import { useReconStore } from '@stores/reconStore';
 import { useUIStore } from '@stores/uiStore';
@@ -333,18 +333,21 @@ export function LootView() {
   const unvalidatedCount = credentials.filter((c) => !c.validated).length;
 
   return (
-    <div className="h-full overflow-auto p-6 space-y-6">
+    <div className="h-full overflow-auto p-5 space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-grok-text-heading">Loot Tracker</h1>
-        <div className="flex gap-2">
-          <div className="flex gap-1 bg-grok-surface-2 rounded p-1">
+        <h1 className="text-lg font-bold text-[var(--grok-text-heading)] flex items-center gap-2">
+          <Trophy className="w-5 h-5 text-[var(--grok-loot-green)]" />
+          Loot Tracker
+        </h1>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 bg-[var(--grok-surface-2)] rounded p-0.5 border border-[var(--grok-border)]">
             <button
               onClick={() => setViewMode('list')}
               className={cn(
-                'px-3 py-1.5 rounded text-sm font-medium transition-colors',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors',
                 viewMode === 'list'
-                  ? 'bg-grok-primary text-white'
-                  : 'text-grok-text-muted hover:text-grok-text-body'
+                  ? 'bg-[var(--grok-recon-blue)] text-white'
+                  : 'text-[var(--grok-text-muted)] hover:text-[var(--grok-text-body)]'
               )}
             >
               List View
@@ -353,25 +356,25 @@ export function LootView() {
               onClick={handleLoadHeatmap}
               disabled={loadingHeatmap}
               className={cn(
-                'px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-1',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors',
                 viewMode === 'heatmap'
-                  ? 'bg-grok-primary text-white'
-                  : 'text-grok-text-muted hover:text-grok-text-body',
+                  ? 'bg-[var(--grok-recon-blue)] text-white'
+                  : 'text-[var(--grok-text-muted)] hover:text-[var(--grok-text-body)]',
                 loadingHeatmap && 'opacity-50 cursor-not-allowed'
               )}
             >
-              <TrendingUp className="w-4 h-4" />
+              <TrendingUp className="w-3.5 h-3.5" />
               Heatmap
             </button>
           </div>
-          <Button variant="secondary" onClick={handleExportCsv}>
-            <Download className="w-4 h-4 mr-1" />
+          <button className="cs-btn flex items-center gap-1.5" onClick={handleExportCsv}>
+            <Download className="w-3.5 h-3.5" />
             CSV
-          </Button>
-          <Button variant="secondary" onClick={handleExportJson}>
-            <Download className="w-4 h-4 mr-1" />
+          </button>
+          <button className="cs-btn flex items-center gap-1.5" onClick={handleExportJson}>
+            <Download className="w-3.5 h-3.5" />
             JSON
-          </Button>
+          </button>
         </div>
       </div>
 
@@ -530,25 +533,23 @@ export function LootView() {
           title={`Credentials (${credentials.length})`}
           action={
             unvalidatedCount > 0 && (
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
+              <div className="flex items-center gap-2">
+                <button
+                  className="cs-btn flex items-center gap-1.5"
                   onClick={handleValidateTop10}
                   disabled={validating.size > 0}
                 >
-                  <TrendingUp className="w-4 h-4 mr-1" />
+                  <TrendingUp className="w-3.5 h-3.5" />
                   Test Top 10
-                </Button>
-                <Button
-                  size="sm"
-                  variant="primary"
+                </button>
+                <button
+                  className="cs-btn cs-btn-primary flex items-center gap-1.5"
                   onClick={handleValidateAll}
                   disabled={validating.size > 0}
                 >
-                  <Target className="w-4 h-4 mr-1" />
+                  <Target className="w-3.5 h-3.5" />
                   Test All ({unvalidatedCount})
-                </Button>
+                </button>
               </div>
             )
           }
@@ -599,13 +600,12 @@ export function LootView() {
                       </td>
                       <td className="py-2">
                         {!cred.validated && !isValidating && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
+                          <button
+                            className="cs-btn flex items-center gap-1.5 text-[10px] py-1 px-2"
                             onClick={() => handleValidateCredential(cred)}
                           >
                             Test
-                          </Button>
+                          </button>
                         )}
                       </td>
                     </tr>

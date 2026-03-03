@@ -30,6 +30,9 @@ import { vulnapiRouter } from './routes/vulnapi.js';
 import { mcpRouter } from './routes/mcp.js';
 import { vpnRouter } from './routes/vpn.js';
 import { exploitRouter } from './routes/exploit.js';
+import { casesRouter } from './routes/cases.js';
+import { campaignsRouter } from './routes/campaigns.js';
+import { wordlistsRouter } from './routes/wordlists.js';
 
 // Services
 import { startMetricsCollector } from './services/metricsCollector.js';
@@ -56,15 +59,17 @@ api.use('/config', configRouter);
 api.use('/logs', logsRouter);
 api.use('/recon', scansRouter);       // /api/v1/recon/* (legacy compat)
 api.use('/results', resultsRouter);
+// Credentials must be mounted before /loot (which has /:target catch-all)
+api.use('/loot/credentials', credentialsRouter);
 api.use('/loot', lootRouter);
 api.use('/exploit', exploitRouter);
+api.use('/cases', casesRouter);
+api.use('/campaigns', campaignsRouter);
+api.use('/wordlists', wordlistsRouter);
 api.use('/ai', aiRouter);
 api.use('/vulnapi', vulnapiRouter);
 api.use('/mcp', mcpRouter);
 api.use('/vpn', vpnRouter);
-
-// Mount routes under /api/v1 + credentials under /api/v1/loot
-api.use('/loot/credentials', credentialsRouter);
 
 app.use('/api/v1', api);
 

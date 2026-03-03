@@ -130,3 +130,70 @@ export function emitVulnapiOutput(data: {
 }) {
   io?.emit('vulnapi_output', data);
 }
+
+// ── Exploit Case / Task events ───────────────────────────────
+
+export function emitTaskCreated(data: {
+  caseId: string;
+  taskId: string;
+  tool: string;
+  target: string;
+  config: Record<string, unknown>;
+}) {
+  io?.emit('task_created', data);
+}
+
+export function emitTaskStarted(data: {
+  caseId: string;
+  taskId: string;
+  tool: string;
+  target: string;
+  startedAt: number;
+}) {
+  io?.emit('task_started', data);
+}
+
+export function emitTaskOutput(data: {
+  caseId: string;
+  taskId: string;
+  chunk: string;
+}) {
+  io?.emit('task_output', data);
+}
+
+export function emitTaskCompleted(data: {
+  caseId: string;
+  taskId: string;
+  tool: string;
+  target: string;
+  exitCode: number;
+  duration?: number;
+  findingsCount: number;
+  credentialsCount: number;
+}) {
+  io?.emit('task_completed', data);
+}
+
+export function emitTaskFailed(data: {
+  caseId: string;
+  taskId: string;
+  tool: string;
+  error: string;
+}) {
+  io?.emit('task_failed', data);
+}
+
+export function emitCaseGateReached(data: {
+  caseId: string;
+  pendingTasks: number;
+  phase: string;
+}) {
+  io?.emit('case_gate_reached', data);
+}
+
+export function emitCasePhaseChanged(data: {
+  caseId: string;
+  phase: string;
+}) {
+  io?.emit('case_phase_changed', data);
+}

@@ -148,6 +148,35 @@ class WebSocketService {
     this.socket.on('service_auto_start', (data) => {
       this.handleServerMessage('service_auto_start', data);
     });
+
+    // Exploit case / task events
+    this.socket.on('task_created', (data) => {
+      this.handleServerMessage('task_created', data);
+    });
+
+    this.socket.on('task_started', (data) => {
+      this.handleServerMessage('task_started', data);
+    });
+
+    this.socket.on('task_output', (data) => {
+      this.handleServerMessage('task_output', data);
+    });
+
+    this.socket.on('task_completed', (data) => {
+      this.handleServerMessage('task_completed', data);
+    });
+
+    this.socket.on('task_failed', (data) => {
+      this.handleServerMessage('task_failed', data);
+    });
+
+    this.socket.on('case_gate_reached', (data) => {
+      this.handleServerMessage('case_gate_reached', data);
+    });
+
+    this.socket.on('case_phase_changed', (data) => {
+      this.handleServerMessage('case_phase_changed', data);
+    });
   }
 
   /**

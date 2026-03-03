@@ -104,7 +104,12 @@ class ApiService {
 
   async getAIProvider(): Promise<{ provider: string; model: string; status: string }> {
     const { data } = await this.client.get('/ai/provider');
-    return data;
+    return data.data || data;
+  }
+
+  async testAIProvider(): Promise<{ provider: string; model: string; reachable: boolean; error?: string }> {
+    const { data } = await this.client.post('/ai/provider/test');
+    return data.data || data;
   }
 
   async switchAIProvider(provider: string, model?: string): Promise<void> {
@@ -216,7 +221,7 @@ class ApiService {
     return data;
   }
 
-  async getAIThoughts(): Promise<string[]> {
+  async getAIThoughts(): Promise<Array<{id: string; timestamp: number; thoughtType: string; content: string; command?: string; metadata?: Record<string, unknown>}>> {
     // Backend: GET /ai/thoughts — returns { success, data: [...thoughts], timestamp }
     const { data } = await this.client.get('/ai/thoughts');
     return data.data || data.thoughts || [];
@@ -329,6 +334,14 @@ class ApiService {
     const { data } = await this.client.get('/loot/heatmap', {
       params: { limit, min_score: minScore },
     });
+    // Ensure response has expected shape (endpoint may not exist yet)
+    if (!data || !Array.isArray(data.credentials)) {
+      const inner = data?.data;
+      if (inner && Array.isArray(inner.credentials)) {
+        return inner;
+      }
+      return { credentials: [], count: 0, timestamp: new Date().toISOString() };
+    }
     return data;
   }
 
@@ -507,6 +520,100 @@ class ApiService {
     // Backend: POST /vpn/:provider/disconnect
     const { data } = await this.client.post(`/vpn/${provider}/disconnect`);
     return data.data;
+  }
+
+  // ============================================================================
+  // Exploit Cases
+  // ============================================================================
+
+  async getCases(): Promise<any[]> {
+    const { data } = await this.client.get('/cases');
+    return data.data || [];
+  }
+
+  async createCase(name: string, targetId: string, campaignId?: string): Promise<any> {
+    const { data } = await this.client.post('/cases', { name, targetId, campaignId });
+    return data.data;
+  }
+
+  async getCase(caseId: string): Promise<any> {
+    const { data } = await this.client.get(`/cases/${caseId}`);
+    return data.data;
+  }
+
+  async updateCase(caseId: string, updates: Record<string, unknown>): Promise<any> {
+    const { data } = await this.client.put(`/cases/${caseId}`, updates);
+    return data.data;
+  }
+
+  async deleteCase(caseId: string): Promise<void> {
+    await this.client.delete(`/cases/${caseId}`);
+  }
+
+  async approveGate(caseId: string): Promise<any> {
+    const { data } = await this.client.post(`/cases/${caseId}/approve`);
+    return data.data;
+  }
+
+  async createCaseTask(caseId: string, tool: string, config?: Record<string, unknown>): Promise<any> {
+    const { data } = await this.client.post(`/cases/${caseId}/tasks`, { tool, config });
+    return data.data;
+  }
+
+  async cancelCaseTask(caseId: string, taskId: string): Promise<void> {
+    await this.client.delete(`/cases/${caseId}/tasks/${taskId}`);
+  }
+
+  async reanalyzeCase(caseId: string): Promise<any> {
+    const { data } = await this.client.post(`/cases/${caseId}/analyze`);
+    return data.data;
+  }
+
+  // ============================================================================
+  // Campaigns
+  // ============================================================================
+
+  async getCampaigns(): Promise<any[]> {
+    const { data } = await this.client.get('/campaigns');
+    return data.data || [];
+  }
+
+  async createCampaign(name: string, description?: string, color?: string): Promise<any> {
+    const { data } = await this.client.post('/campaigns', { name, description, color });
+    return data.data;
+  }
+
+  // ============================================================================
+  // Wordlists
+  // ============================================================================
+
+  async getWordlists(): Promise<any[]> {
+    const { data } = await this.client.get('/wordlists');
+    return data.data || [];
+  }
+
+  async scanWordlists(): Promise<any> {
+    const { data } = await this.client.post('/wordlists/scan');
+    return data.data;
+  }
+
+  // ============================================================================
+  // Targets (extended)
+  // ============================================================================
+
+  async getTargetsWithDetails(): Promise<any[]> {
+    const { data } = await this.client.get('/targets');
+    return data.data || [];
+  }
+
+  // ============================================================================
+  // Command Execution (Terminal)
+  // ============================================================================
+
+  async executeCommand(command: string): Promise<any> {
+    // Backend: POST /tools/execute  body: {command}
+    const { data } = await this.client.post('/tools/execute', { command }, { timeout: 120000 });
+    return data.data || data;
   }
 }
 

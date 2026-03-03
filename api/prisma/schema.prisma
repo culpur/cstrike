@@ -46,6 +46,7 @@ model Target {
   scans       Scan[]
   lootItems   LootItem[]
   credentials CredentialPair[]
+  cases       ExploitCase[]
 
   @@unique([url])
   @@index([status])
@@ -339,4 +340,149 @@ enum VpnStatus {
   CONNECTING
   DISCONNECTED
   ERROR
+}
+
+// ============================================================================
+// Campaigns — Top-level engagement grouping
+// ============================================================================
+
+model Campaign {
+  id          String         @id @default(cuid())
+  name        String
+  description String         @default("")
+  status      CampaignStatus @default(PLANNED)
+  color       String         @default("#2266ff")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Relations
+  cases ExploitCase[]
+
+  @@index([status])
+  @@map("campaigns")
+}
+
+enum CampaignStatus {
+  PLANNED
+  ACTIVE
+  RUNNING
+  COMPLETED
+  ARCHIVED
+}
+
+// ============================================================================
+// Exploit Cases — Intelligence-driven engagement against a target
+// ============================================================================
+
+model ExploitCase {
+  id           String       @id @default(cuid())
+  name         String
+  description  String       @default("")
+  status       CaseStatus   @default(ACTIVE)
+  currentPhase CasePhase    @default(ENUMERATION)
+  gateStatus   GateStatus   @default(NONE)
+  targetId     String
+  campaignId   String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Relations
+  target   Target        @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  campaign Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  tasks    ExploitTask[]
+
+  @@index([targetId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("exploit_cases")
+}
+
+enum CaseStatus {
+  ACTIVE
+  GATED
+  COMPLETED
+  ARCHIVED
+}
+
+enum CasePhase {
+  ENUMERATION
+  EXPLOITATION
+  PERSISTENCE
+  COMPLETE
+}
+
+enum GateStatus {
+  NONE
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+// ============================================================================
+// Exploit Tasks — Individual tool execution within a case
+// ============================================================================
+
+model ExploitTask {
+  id        String            @id @default(cuid())
+  caseId    String
+  tool      String
+  target    String
+  phase     CasePhase         @default(ENUMERATION)
+  status    ExploitTaskStatus @default(QUEUED)
+  trigger   String            @default("operator:manual") // Why created: auto:port_22_ssh, ai:recommendation, etc.
+  config    Json              @default("{}")
+  output    String            @default("")
+  findings  Json              @default("[]")
+  exitCode  Int?
+  error     String?
+  startedAt DateTime?
+  endedAt   DateTime?
+  duration  Int?              // milliseconds
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  // Relations
+  case ExploitCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([status])
+  @@index([tool])
+  @@index([createdAt])
+  @@map("exploit_tasks")
+}
+
+enum ExploitTaskStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ============================================================================
+// Wordlists — Available wordlist registry
+// ============================================================================
+
+model Wordlist {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  path        String
+  category    WordlistCategory
+  lineCount   Int              @default(0)
+  sizeBytes   Int              @default(0)
+  description String           @default("")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([category])
+  @@map("wordlists")
+}
+
+enum WordlistCategory {
+  PASSWORDS
+  USERNAMES
+  WEB_CONTENT
+  SUBDOMAINS
+  CUSTOM
 }

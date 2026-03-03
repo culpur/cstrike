@@ -14,6 +14,7 @@ import { useAIStore } from '@stores/aiStore';
 import { useLogStore } from '@stores/logStore';
 import { useLootStore } from '@stores/lootStore';
 import { useUIStore } from '@stores/uiStore';
+import { useNotificationStore } from '@stores/notificationStore';
 import type { SystemMetrics, ServiceStatus } from '@/types';
 
 export function useWebSocketHandlers() {
@@ -29,6 +30,7 @@ export function useWebSocketHandlers() {
   const { addLog } = useLogStore();
   const { addLootItem } = useLootStore();
   const { addToast } = useUIStore();
+  const { addNotification } = useNotificationStore();
 
   useEffect(() => {
     wsService.connect();
@@ -100,6 +102,62 @@ export function useWebSocketHandlers() {
         type: 'success',
         message: `Scan complete: ${data.target || 'unknown'}`,
         duration: 5000,
+      });
+      addNotification({
+        type: 'scan_complete',
+        title: 'Scan Complete',
+        message: `Scan finished for ${data.target || 'unknown target'}`,
+      });
+    });
+
+    // ── Vulnerability discovered ────────────────────────────────
+    const unsubVulnDiscovered = wsService.on<any>(
+      'vulnerability_discovered',
+      (data) => {
+        addNotification({
+          type: 'vuln_found',
+          title: data.name || data.title || 'Vulnerability Discovered',
+          message: data.description
+            ? data.description
+            : `${data.severity || 'Unknown severity'} vulnerability found on ${data.target || data.host || 'target'}`,
+          severity: data.severity ?? undefined,
+        });
+      }
+    );
+
+    // ── Credential extracted ───────────────────────────────────
+    const unsubCredExtracted = wsService.on<any>(
+      'credential_extracted',
+      (data) => {
+        const user = data.username || data.user || 'unknown';
+        const target = data.target || data.host || 'target';
+        addNotification({
+          type: 'cred_found',
+          title: 'Credential Extracted',
+          message: `Found credentials for '${user}' on ${target}`,
+          severity: 'high',
+        });
+      }
+    );
+
+    // ── Shell obtained ─────────────────────────────────────────
+    const unsubShellObtained = wsService.on<any>('shell_obtained', (data) => {
+      const host = data.host || data.target || 'target';
+      const shellType = data.type || data.shell_type || 'shell';
+      addNotification({
+        type: 'shell_obtained',
+        title: 'Shell Obtained',
+        message: `${shellType.toUpperCase()} shell established on ${host}${data.port ? `:${data.port}` : ''}`,
+        severity: 'critical',
+      });
+    });
+
+    // ── Scan started ───────────────────────────────────────────
+    const unsubScanStarted = wsService.on<any>('scan_started', (data) => {
+      addNotification({
+        type: 'scan_started',
+        title: 'Scan Started',
+        message: `Scan initiated against ${data.target || 'target'}${data.tool ? ` using ${data.tool}` : ''}`,
       });
     });
 
@@ -187,6 +245,17 @@ export function useWebSocketHandlers() {
           message: `VulnAPI: ${data.findings.length} findings for ${data.target || ''}`,
           duration: 5000,
         });
+        // Surface the highest-severity finding as a notification
+        const critCount: number = data.severity_counts?.critical ?? 0;
+        const highCount: number = data.severity_counts?.high ?? 0;
+        const topSeverity =
+          critCount > 0 ? 'critical' : highCount > 0 ? 'high' : 'medium';
+        addNotification({
+          type: 'vuln_found',
+          title: 'VulnAPI Findings',
+          message: `${data.findings.length} API vulnerabilities found for ${data.target || 'target'} (${critCount} critical, ${highCount} high)`,
+          severity: topSeverity,
+        });
       }
     });
 
@@ -201,6 +270,10 @@ export function useWebSocketHandlers() {
       unsubPhase();
       unsubRecon();
       unsubScanComplete();
+      unsubVulnDiscovered();
+      unsubCredExtracted();
+      unsubShellObtained();
+      unsubScanStarted();
       unsubAI();
       unsubAICmd();
       unsubLog();

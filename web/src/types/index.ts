@@ -384,7 +384,15 @@ export type WSMessageType =
   | 'log_entry'
   | 'tool_update'
   | 'vulnapi_output'
-  | 'service_auto_start';
+  | 'service_auto_start'
+  | 'scan_started'
+  | 'task_created'
+  | 'task_started'
+  | 'task_output'
+  | 'task_completed'
+  | 'task_failed'
+  | 'case_gate_reached'
+  | 'case_phase_changed';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;
@@ -441,7 +449,7 @@ export interface Config {
   grok_api_key?: string;
   ai_provider: string;
   ollama_model?: string;
-  ollama_host?: string;
+  ollama_url?: string;
   openai_model?: string;
   anthropic_model?: string;
   grok_model?: string;
