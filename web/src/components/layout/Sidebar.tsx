@@ -300,15 +300,11 @@ export function Sidebar() {
             onClick={cycleMode}
             className="w-full flex items-center justify-center p-2 rounded transition-all hover:bg-[var(--grok-surface-2)]"
             title={MODE_CONFIG[operationMode].description}
+            style={{ color: MODE_CONFIG[operationMode].color }}
           >
             {(() => {
               const Icon = MODE_CONFIG[operationMode].icon;
-              return (
-                <Icon
-                  className="w-4 h-4"
-                  style={{ color: MODE_CONFIG[operationMode].color }}
-                />
-              );
+              return <Icon className="w-4 h-4" />;
             })()}
           </button>
         ) : (
