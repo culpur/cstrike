@@ -26,6 +26,18 @@ import { apiService } from '@services/api';
 import { formatTime, cn } from '@utils/index';
 import type { AIThought } from '@/types';
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/** Safely read a metadata value as a string (avoids unknown→ReactNode errors) */
+function meta(thought: AIThought, key: string): string | undefined {
+  const v = thought.metadata?.[key];
+  return v != null ? String(v) : undefined;
+}
+
+function hasMeta(thought: AIThought, key: string): boolean {
+  return thought.metadata?.[key] != null;
+}
+
 // ── Type labels and styling ────────────────────────────────────────────────
 
 const THOUGHT_META: Record<
@@ -257,8 +269,8 @@ export function AIStreamView() {
 // ============================================================================
 
 function ThoughtCard({ thought }: { thought: AIThought }) {
-  const meta = THOUGHT_META[thought.thoughtType] || THOUGHT_META.observation;
-  const Icon = meta.icon;
+  const cfg = THOUGHT_META[thought.thoughtType] || THOUGHT_META.observation;
+  const Icon = cfg.icon;
 
   // AI prompts and responses default to expanded so the user can see them
   const isAIInteraction = ['ai_prompt', 'ai_response'].includes(thought.thoughtType);
@@ -272,8 +284,8 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
     <div
       className={cn(
         'rounded-lg border-l-3 overflow-hidden transition-colors',
-        meta.borderColor,
-        meta.bgColor,
+        cfg.borderColor,
+        cfg.bgColor,
       )}
       style={{ borderLeftWidth: '3px' }}
     >
@@ -285,28 +297,28 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
         )}
         onClick={() => setExpanded(!expanded)}
       >
-        <Icon className={cn('w-3.5 h-3.5 flex-shrink-0', meta.color)} />
+        <Icon className={cn('w-3.5 h-3.5 flex-shrink-0', cfg.color)} />
 
         <span
           className={cn(
             'text-[10px] font-mono font-bold uppercase tracking-wider flex-shrink-0',
-            meta.color,
+            cfg.color,
           )}
         >
-          {meta.label}
+          {cfg.label}
         </span>
 
         {/* Provider/model badge for AI interactions */}
-        {thought.metadata?.provider && (
+        {hasMeta(thought, 'provider') && (
           <span className="text-[10px] font-mono px-1.5 py-px rounded bg-[var(--grok-surface-3)] text-[var(--grok-text-muted)]">
-            {String(thought.metadata.provider)}/{String(thought.metadata.model || '?')}
+            {meta(thought, 'provider')}/{meta(thought, 'model') || '?'}
           </span>
         )}
 
         {/* Rationale preview for decisions */}
-        {thought.thoughtType === 'ai_decision' && thought.metadata?.rationale && (
+        {thought.thoughtType === 'ai_decision' && hasMeta(thought, 'rationale') && (
           <span className="text-[10px] text-[var(--grok-text-muted)] truncate">
-            — {String(thought.metadata.rationale)}
+            — {meta(thought, 'rationale')}
           </span>
         )}
 
@@ -335,13 +347,13 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
           {thought.thoughtType === 'ai_prompt' && (
             <>
               {/* System prompt */}
-              {thought.metadata?.system_prompt && (
+              {hasMeta(thought, 'system_prompt') && (
                 <div>
                   <div className="text-[10px] font-mono font-bold text-[var(--grok-text-muted)] uppercase tracking-wider mb-1">
                     System Prompt
                   </div>
                   <div className="p-2.5 rounded text-xs text-[var(--grok-text-body)] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto" style={{ background: 'var(--grok-surface-1)' }}>
-                    {String(thought.metadata.system_prompt)}
+                    {meta(thought, 'system_prompt')}
                   </div>
                 </div>
               )}
@@ -358,9 +370,9 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
 
               {/* Config */}
               <div className="flex items-center gap-3 text-[10px] font-mono text-[var(--grok-text-muted)]">
-                {thought.metadata?.model && <span>Model: {String(thought.metadata.model)}</span>}
-                {thought.metadata?.temperature != null && <span>Temp: {String(thought.metadata.temperature)}</span>}
-                {thought.metadata?.max_tokens != null && <span>Max tokens: {String(thought.metadata.max_tokens)}</span>}
+                {hasMeta(thought, 'model') && <span>Model: {meta(thought, 'model')}</span>}
+                {hasMeta(thought, 'temperature') && <span>Temp: {meta(thought, 'temperature')}</span>}
+                {hasMeta(thought, 'max_tokens') && <span>Max tokens: {meta(thought, 'max_tokens')}</span>}
               </div>
             </>
           )}
@@ -378,25 +390,29 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
               </div>
 
               {/* Extracted commands */}
-              {thought.metadata?.commands && Array.isArray(thought.metadata.commands) && (thought.metadata.commands as string[]).length > 0 && (
-                <div>
-                  <div className="text-[10px] font-mono font-bold text-[var(--grok-warning)] uppercase tracking-wider mb-1">
-                    Extracted Commands ({(thought.metadata.commands as string[]).length})
+              {(() => {
+                const cmds = thought.metadata?.commands;
+                if (!Array.isArray(cmds) || cmds.length === 0) return null;
+                return (
+                  <div>
+                    <div className="text-[10px] font-mono font-bold text-[var(--grok-warning)] uppercase tracking-wider mb-1">
+                      Extracted Commands ({cmds.length})
+                    </div>
+                    <div className="space-y-1">
+                      {cmds.map((cmd, idx) => (
+                        <div key={idx} className="p-2 rounded text-xs text-[var(--grok-recon-blue)] font-mono" style={{ background: 'var(--grok-surface-1)' }}>
+                          $ {String(cmd)}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    {(thought.metadata.commands as string[]).map((cmd, idx) => (
-                      <div key={idx} className="p-2 rounded text-xs text-[var(--grok-recon-blue)] font-mono" style={{ background: 'var(--grok-surface-1)' }}>
-                        $ {cmd}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Model info */}
               <div className="flex items-center gap-3 text-[10px] font-mono text-[var(--grok-text-muted)]">
-                {thought.metadata?.provider && <span>{String(thought.metadata.provider)}/{String(thought.metadata.model || '?')}</span>}
-                {thought.metadata?.commandCount != null && <span>{String(thought.metadata.commandCount)} commands extracted</span>}
+                {hasMeta(thought, 'provider') && <span>{meta(thought, 'provider')}/{meta(thought, 'model') || '?'}</span>}
+                {hasMeta(thought, 'commandCount') && <span>{meta(thought, 'commandCount')} commands extracted</span>}
               </div>
             </>
           )}
@@ -413,13 +429,13 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
                 </div>
               </div>
 
-              {thought.metadata?.rationale && (
+              {hasMeta(thought, 'rationale') && (
                 <div>
                   <div className="text-[10px] font-mono font-bold text-[var(--grok-text-muted)] uppercase tracking-wider mb-1">
                     Rationale
                   </div>
                   <div className="p-2 rounded text-xs text-[var(--grok-text-body)] font-mono whitespace-pre-wrap" style={{ background: 'var(--grok-surface-1)' }}>
-                    {String(thought.metadata.rationale)}
+                    {meta(thought, 'rationale')}
                   </div>
                 </div>
               )}
@@ -461,9 +477,9 @@ function ThoughtCard({ thought }: { thought: AIThought }) {
                   $ {thought.command}
                 </div>
               )}
-              {thought.metadata?.status && (
+              {hasMeta(thought, 'status') && (
                 <div className="text-[10px] font-mono text-[var(--grok-text-muted)]">
-                  Status: {String(thought.metadata.status)}
+                  Status: {meta(thought, 'status')}
                 </div>
               )}
             </>
