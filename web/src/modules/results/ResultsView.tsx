@@ -834,8 +834,14 @@ export function ResultsView() {
                     : 'border-[var(--grok-border)] bg-[var(--grok-surface-2)] text-[var(--grok-text-body)] hover:border-[var(--grok-border-glow)] hover:bg-[var(--grok-surface-3)]'
                 )}
               >
-                <span className="flex items-center gap-1.5">
-                  <StatusBadge status={target.status} />
+                <span className="flex items-center gap-2">
+                  <span className={cn(
+                    'w-2 h-2 rounded-full flex-shrink-0',
+                    target.status === 'complete' ? 'bg-green-400 shadow-[0_0_4px_rgba(74,222,128,0.5)]'
+                      : target.status === 'scanning' ? 'bg-blue-400 animate-pulse'
+                      : target.status === 'failed' ? 'bg-red-400'
+                      : 'bg-gray-500'
+                  )} />
                   {target.url}
                 </span>
               </button>
@@ -930,7 +936,7 @@ export function ResultsView() {
 
           {/* Tab navigation */}
           <div className="cs-panel">
-            <div className="flex gap-1 border-b border-[var(--grok-border)] px-2">
+            <div className="grid grid-cols-4 gap-0 p-3 border-b border-[var(--grok-border)]">
               {(
                 [
                   { id: 'vulns' as const, label: 'Vulnerabilities', count: results.vulnerabilities?.length },
@@ -943,15 +949,21 @@ export function ResultsView() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 -mb-px transition-colors whitespace-nowrap',
+                    'py-2 text-xs font-semibold uppercase tracking-wider border transition-all whitespace-nowrap text-center',
                     activeTab === tab.id
-                      ? 'border-[var(--grok-recon-blue)] text-[var(--grok-recon-blue)]'
-                      : 'border-transparent text-[var(--grok-text-muted)] hover:text-[var(--grok-text-body)]'
+                      ? 'bg-[var(--grok-recon-blue)] border-[var(--grok-recon-blue)] text-white shadow-[0_0_10px_rgba(34,102,255,0.3)]'
+                      : 'bg-[var(--grok-surface-2)] border-[var(--grok-border)] text-[var(--grok-text-muted)] hover:bg-[var(--grok-surface-3)] hover:border-[var(--grok-border-glow)] hover:text-[var(--grok-text-body)]',
+                    'first:rounded-l last:rounded-r -ml-px first:ml-0'
                   )}
                 >
                   {tab.label}
                   {tab.count ? (
-                    <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-[var(--grok-surface-2)] text-[var(--grok-text-muted)]">
+                    <span className={cn(
+                      'ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full',
+                      activeTab === tab.id
+                        ? 'bg-white/20 text-white'
+                        : 'bg-[var(--grok-surface-3)] text-[var(--grok-text-muted)]'
+                    )}>
                       {tab.count}
                     </span>
                   ) : null}
@@ -1305,26 +1317,6 @@ export function ResultsView() {
 // Small reusable sub-components (kept file-local)
 // ============================================================================
 
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    pending: 'bg-gray-500/20 text-gray-400',
-    scanning: 'bg-blue-500/20 text-blue-400',
-    complete: 'bg-green-500/20 text-green-400',
-    failed: 'bg-red-500/20 text-red-400',
-  };
-
-  return (
-    <span
-      className={cn(
-        'px-2 py-0.5 rounded text-xs font-medium',
-        colors[status] ?? colors.pending
-      )}
-    >
-      {status.toUpperCase()}
-    </span>
-  );
-}
-
 function MetricCard({
   label,
   value,
@@ -1335,9 +1327,9 @@ function MetricCard({
   color?: string;
 }) {
   return (
-    <div className="bg-grok-surface-2 border border-grok-border rounded p-3">
-      <p className="text-xs text-grok-text-muted uppercase tracking-wide mb-1">{label}</p>
-      <p className={cn('text-2xl font-bold', color)}>{value}</p>
+    <div className="bg-[var(--grok-surface-2)] border border-[var(--grok-border)] rounded-lg p-4 hover:border-[var(--grok-border-glow)] transition-colors">
+      <p className="text-[10px] text-[var(--grok-text-muted)] uppercase tracking-widest font-semibold mb-2">{label}</p>
+      <p className={cn('text-3xl font-bold font-mono', color)}>{value}</p>
     </div>
   );
 }
