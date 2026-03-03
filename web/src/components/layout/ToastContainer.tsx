@@ -4,7 +4,6 @@
 
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { useUIStore } from '@stores/uiStore';
-import { cn } from '@utils/index';
 import type { ToastNotification } from '@/types';
 
 const TOAST_CONFIG = {
