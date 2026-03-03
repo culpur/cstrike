@@ -50,7 +50,8 @@ RUN mkdir -p /var/run/sshd && \
 # Enable CGI, headers, SSL, rewrite for vulnerabilities
 RUN a2enmod rewrite cgi headers ssl && \
     echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
-    echo "Listen 80\nListen 443" > /etc/apache2/ports.conf
+    printf "Listen 80\nListen 443\n" > /etc/apache2/ports.conf && \
+    mkdir -p /var/run/apache2 /var/lock/apache2
 COPY webapp/ /var/www/vulnbox/
 COPY config/apache-vulnbox.conf /etc/apache2/sites-available/vulnbox.conf
 COPY config/apache-vulnbox-ssl.conf /etc/apache2/sites-available/vulnbox-ssl.conf
@@ -59,10 +60,11 @@ RUN a2dissite 000-default && a2ensite vulnbox vulnbox-ssl && \
     chmod -R 777 /var/www/vulnbox/uploads && \
     chmod -R 755 /var/www/vulnbox/secret
 
-# Generate weak self-signed SSL cert (vuln: weak key, self-signed, long expiry)
+# Generate self-signed SSL cert (vuln: self-signed, long expiry, no SAN)
+# Uses RSA-2048 (minimum for modern OpenSSL) but weak cipher config makes it vuln
 RUN mkdir -p /etc/ssl/vulnbox && \
     openssl req -x509 -nodes -days 3650 \
-        -newkey rsa:1024 \
+        -newkey rsa:2048 \
         -keyout /etc/ssl/vulnbox/vulnbox.key \
         -out /etc/ssl/vulnbox/vulnbox.crt \
         -subj "/C=US/ST=Illinois/L=Springfield/O=VulnBox Corp/OU=IT/CN=vulnbox.local" \

@@ -254,29 +254,7 @@ slapd slapd/allow_ldap_v2 boolean true
 EOF
 
 dpkg-reconfigure -f noninteractive slapd 2>/dev/null || true
-
-# Start slapd temporarily to load data
-slapd -h "ldap:/// ldapi:///" 2>/dev/null &
-sleep 2
-
-# Load seed data
-ldapadd -x -D "cn=admin,dc=vulnbox,dc=local" -w admin -f /opt/ldap/base.ldif 2>/dev/null || \
-    echo "[VulnBox] LDAP seed skipped (already loaded or error)"
-
-# Allow anonymous bind (vuln: unauthenticated LDAP queries)
-cat > /tmp/anon-bind.ldif <<'LDIFEOF'
-dn: olcDatabase={1}mdb,cn=config
-changetype: modify
-replace: olcAccess
-olcAccess: {0}to * by * read
-LDIFEOF
-ldapmodify -Y EXTERNAL -H ldapi:/// -f /tmp/anon-bind.ldif 2>/dev/null || true
-
-# Kill temporary slapd (supervisor will restart it)
-pkill slapd 2>/dev/null || true
-sleep 1
-
-echo "[VulnBox] OpenLDAP initialized"
+echo "[VulnBox] OpenLDAP configured"
 
 # ── Postfix SMTP initialization ──────────────────────────────────────────────
 echo "[VulnBox] Initializing Postfix..."
@@ -292,6 +270,28 @@ echo "[VulnBox] Zone contains 80+ subdomains for enumeration"
 
 # ── Supervisor log dir ─────────────────────────────────────────────────────────
 mkdir -p /var/log/supervisor
+
+# ── Background post-startup seeder ───────────────────────────────────────────
+# Runs after supervisord starts slapd, seeds LDAP data and applies ACL
+(
+    sleep 10  # Wait for slapd to be ready
+
+    # Seed LDAP directory
+    echo "[VulnBox] Seeding LDAP directory..."
+    ldapadd -c -x -D "cn=admin,dc=vulnbox,dc=local" -w admin \
+        -f /opt/ldap/base.ldif 2>/dev/null
+    echo "[VulnBox] LDAP seeding complete"
+
+    # Allow anonymous bind (vuln: unauthenticated LDAP queries)
+    cat > /tmp/anon-bind.ldif <<'LDIFEOF'
+dn: olcDatabase={1}mdb,cn=config
+changetype: modify
+replace: olcAccess
+olcAccess: {0}to * by * read
+LDIFEOF
+    ldapmodify -Y EXTERNAL -H ldapi:/// -f /tmp/anon-bind.ldif 2>/dev/null || true
+    echo "[VulnBox] LDAP anonymous bind enabled"
+) &
 
 echo "[VulnBox] Initialization complete, starting supervisord..."
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/vulnbox.conf
