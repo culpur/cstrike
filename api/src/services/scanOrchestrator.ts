@@ -1,16 +1,65 @@
 /**
  * Scan Orchestrator — manages the multi-phase scan pipeline.
- * Coordinates tool execution, result storage, and phase transitions.
+ * Coordinates tool execution, AI analysis, result storage, and phase transitions.
+ *
+ * Three operation modes:
+ *  - manual:    fixed tool list, no AI involvement
+ *  - semi-auto: AI-driven tool selection with exploitation gate
+ *  - full-auto: AI-driven, no gates
  */
 
 import { prisma } from '../config/database.js';
 import { toolExecutor } from './toolExecutor.js';
+import { aiService } from './aiService.js';
 import { lootService } from './lootService.js';
 import { getConfigValue } from '../middleware/guardrails.js';
-import { emitPhaseChange, emitReconOutput, emitScanComplete, emitLogEntry, emitPortDiscovered, emitSubdomainDiscovered } from '../websocket/emitter.js';
+import {
+  emitPhaseChange,
+  emitReconOutput,
+  emitScanComplete,
+  emitScanStarted,
+  emitLogEntry,
+  emitPortDiscovered,
+  emitSubdomainDiscovered,
+  emitCaseGateReached,
+} from '../websocket/emitter.js';
 
 // Active scan tracking for cancellation
 const activeScans = new Map<string, { cancelled: boolean }>();
+
+// ── Tool safety categories ──────────────────────────────────────────────────
+
+const RECON_TOOLS = new Set([
+  'nmap', 'masscan', 'rustscan',
+  'subfinder', 'amass', 'dnsenum', 'dnsrecon',
+  'httpx', 'whatweb', 'wafw00f',
+  'sslscan', 'sslyze', 'testssl',
+  'gobuster', 'dirb', 'ffuf', 'wfuzz', 'feroxbuster',
+  'nikto', 'nuclei', 'wpscan',
+  'waybackurls', 'gau', 'katana', 'gowitness',
+  'enum4linux', 'smbclient', 'nbtscan', 'snmpwalk',
+]);
+
+const EXPLOIT_TOOLS = new Set([
+  'sqlmap', 'xsstrike', 'commix',
+  'hydra', 'john', 'hashcat',
+]);
+
+const ALL_AVAILABLE_TOOLS = [...RECON_TOOLS, ...EXPLOIT_TOOLS];
+
+const MAX_AI_ITERATIONS = 20;
+
+// ── Types ───────────────────────────────────────────────────────────────────
+
+type OperationMode = 'manual' | 'semi-auto' | 'full-auto';
+
+interface ToolRunSummary {
+  tool: string;
+  exitCode: number;
+  duration: number;
+  outputSnippet: string;
+  error?: string;
+}
 
 class ScanOrchestrator {
   /**
@@ -32,7 +81,7 @@ class ScanOrchestrator {
   }
 
   /**
-   * Main scan pipeline — phases run sequentially.
+   * Main scan pipeline — dispatches to manual or AI-driven mode.
    */
   private async runPipeline(
     scanId: string,
@@ -49,101 +98,19 @@ class ScanOrchestrator {
       });
       const targetId = scanRecord.targetId;
 
-      // Get allowed tools from config
-      const allowedTools = await getConfigValue<string[]>('allowed_tools', []);
-      const scanTools = requestedTools?.length
-        ? requestedTools.filter((t) => allowedTools.length === 0 || allowedTools.includes(t))
-        : this.getDefaultTools(mode ?? 'full');
+      // Check operation mode
+      const operationMode = await getConfigValue<string>('operation_mode', 'semi-auto') as OperationMode;
 
-      const totalTools = scanTools.length;
-      let completedTools = 0;
+      emitLogEntry({
+        level: 'INFO',
+        source: 'orchestrator',
+        message: `Scan starting in ${operationMode.toUpperCase()} mode against ${target}`,
+      });
 
-      emitPhaseChange({ phase: 'recon', target, status: 'running' });
-
-      // Run each tool
-      for (const tool of scanTools) {
-        if (state?.cancelled) {
-          emitLogEntry({ level: 'WARN', source: 'orchestrator', message: `Scan ${scanId} cancelled` });
-          break;
-        }
-
-        completedTools++;
-        const progress = `${completedTools}/${totalTools}`;
-
-        await prisma.scan.update({
-          where: { id: scanId },
-          data: { progress },
-        });
-
-        emitReconOutput({
-          tool,
-          target,
-          output: `Starting ${tool}...`,
-          complete: false,
-          event: 'tool_start',
-          progress,
-          scan_id: scanId,
-        });
-
-        const result = await toolExecutor.run(tool, target);
-
-        // Store result
-        await prisma.scanResult.create({
-          data: {
-            scanId,
-            resultType: this.toolToResultType(tool),
-            data: {
-              tool: result.tool,
-              output: result.output,
-              exitCode: result.exitCode,
-              duration: result.duration,
-            } as any,
-            source: tool,
-          },
-        });
-
-        // Emit structured discoveries from tool output
-        if (result.output && !result.error) {
-          this.emitDiscoveries(tool, target, result.output, scanId);
-        }
-
-        // Extract loot from tool output (credentials, ports, URLs, etc.)
-        if (result.output && !result.error) {
-          try {
-            const lootCount = await lootService.extractFromOutput(result.output, tool, targetId);
-            if (lootCount > 0) {
-              emitLogEntry({
-                level: 'INFO',
-                source: 'loot',
-                message: `Extracted ${lootCount} loot items from ${tool}`,
-              });
-            }
-          } catch (err: any) {
-            console.error(`[Loot] Extraction failed for ${tool}:`, err.message);
-          }
-        }
-
-        // Log to DB
-        await prisma.logEntry.create({
-          data: {
-            scanId,
-            level: result.error ? 'ERROR' : 'INFO',
-            source: tool,
-            message: result.error
-              ? `${tool} failed: ${result.error}`
-              : `${tool} complete (${Math.round(result.duration / 1000)}s)`,
-          },
-        });
-
-        emitReconOutput({
-          tool,
-          target,
-          output: result.error ? `[${tool}] Error: ${result.error}` : `[${tool}] Complete`,
-          complete: true,
-          event: result.error ? 'tool_error' : 'tool_complete',
-          progress,
-          scan_id: scanId,
-        });
+      if (operationMode === 'manual') {
+        await this.runManualPipeline(scanId, target, targetId, requestedTools, mode, state);
+      } else {
+        await this.runAIPipeline(scanId, target, targetId, operationMode, requestedTools, state);
       }
 
       // Mark complete
@@ -189,9 +156,449 @@ class ScanOrchestrator {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // Manual Pipeline — fixed tool list, no AI
+  // ══════════════════════════════════════════════════════════════════════════
+
+  private async runManualPipeline(
+    scanId: string,
+    target: string,
+    targetId: string,
+    requestedTools?: string[],
+    mode?: string,
+    state?: { cancelled: boolean },
+  ) {
+    // Get allowed tools from config
+    const allowedTools = await getConfigValue<string[]>('allowed_tools', []);
+    const scanTools = requestedTools?.length
+      ? requestedTools.filter((t) => allowedTools.length === 0 || allowedTools.includes(t))
+      : this.getDefaultTools(mode ?? 'full');
+
+    const totalTools = scanTools.length;
+    let completedTools = 0;
+
+    emitPhaseChange({ phase: 'recon', target, status: 'running' });
+    emitScanStarted({ target, scan_id: scanId, tools: scanTools });
+
+    // Run each tool
+    for (const tool of scanTools) {
+      if (state?.cancelled) {
+        emitLogEntry({ level: 'WARN', source: 'orchestrator', message: `Scan ${scanId} cancelled` });
+        break;
+      }
+
+      completedTools++;
+      const progress = `${completedTools}/${totalTools}`;
+
+      await this.executeTool(scanId, targetId, target, tool, progress);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // AI-Driven Pipeline — AI analyzes results and selects next tool
+  // ══════════════════════════════════════════════════════════════════════════
+
+  private async runAIPipeline(
+    scanId: string,
+    target: string,
+    targetId: string,
+    operationMode: OperationMode,
+    requestedTools?: string[],
+    state?: { cancelled: boolean },
+  ) {
+    const toolHistory: ToolRunSummary[] = [];
+    let iteration = 0;
+    let gateHit = false;
+
+    emitPhaseChange({ phase: 'recon', target, status: 'running' });
+
+    // ── Phase 1: Initial reconnaissance ─────────────────────────────────
+    // Always start with nmap to understand the target
+    const initialTools = requestedTools?.length
+      ? requestedTools
+      : ['nmap'];
+
+    emitScanStarted({ target, scan_id: scanId, tools: initialTools });
+
+    // Record AI's initial decision
+    await aiService.recordDecision({
+      decision: `Starting AI-driven scan in ${operationMode} mode`,
+      rationale: `Initial reconnaissance with ${initialTools.join(', ')} to understand the target attack surface`,
+      selectedTool: initialTools[0],
+      scanId,
+    });
+
+    for (const tool of initialTools) {
+      if (state?.cancelled) break;
+      iteration++;
+
+      const result = await this.executeTool(scanId, targetId, target, tool, `${iteration}/?`);
+      toolHistory.push(this.summarizeResult(result));
+    }
+
+    // ── Phase 2: AI-driven loop ─────────────────────────────────────────
+    while (iteration < MAX_AI_ITERATIONS && !state?.cancelled && !gateHit) {
+      // Build context for AI analysis
+      const analysisPrompt = this.buildAIPrompt(target, toolHistory, operationMode);
+
+      emitLogEntry({
+        level: 'INFO',
+        source: 'ai',
+        message: `AI analyzing results after ${iteration} tools — requesting next action`,
+      });
+
+      // Call AI for analysis and next tool recommendation
+      const aiResult = await aiService.analyze({
+        prompt: analysisPrompt,
+        target,
+        scanId,
+        mode: 'tools',
+      });
+
+      if (aiResult.status === 'error') {
+        emitLogEntry({
+          level: 'ERROR',
+          source: 'ai',
+          message: `AI analysis failed: ${aiResult.error} — falling back to manual pipeline`,
+        });
+        // Fall back to remaining default tools
+        const remainingTools = this.getDefaultTools('full')
+          .filter((t) => !toolHistory.some((h) => h.tool === t));
+        for (const tool of remainingTools) {
+          if (state?.cancelled) break;
+          iteration++;
+          const result = await this.executeTool(scanId, targetId, target, tool, `${iteration}/?`);
+          toolHistory.push(this.summarizeResult(result));
+        }
+        break;
+      }
+
+      // Parse AI recommendation
+      const recommendation = this.parseAIRecommendation(aiResult.content);
+
+      if (recommendation.done) {
+        // AI says we're done
+        await aiService.recordDecision({
+          decision: 'Scan complete — all valuable reconnaissance paths explored',
+          rationale: recommendation.reasoning,
+          scanId,
+        });
+
+        emitLogEntry({
+          level: 'INFO',
+          source: 'ai',
+          message: `AI recommends stopping: ${recommendation.reasoning}`,
+        });
+        break;
+      }
+
+      if (!recommendation.tool) {
+        emitLogEntry({
+          level: 'WARN',
+          source: 'ai',
+          message: 'AI did not recommend a specific tool — ending scan',
+        });
+        break;
+      }
+
+      // Check if the recommended tool is an exploitation tool
+      if (EXPLOIT_TOOLS.has(recommendation.tool) && operationMode === 'semi-auto') {
+        // Gate: pause for operator approval
+        await aiService.recordDecision({
+          decision: `GATE — exploitation tool ${recommendation.tool} requires operator approval`,
+          rationale: recommendation.reasoning,
+          selectedTool: recommendation.tool,
+          scanId,
+        });
+
+        emitCaseGateReached({
+          caseId: scanId,
+          pendingTasks: 1,
+          phase: 'exploitation',
+        });
+
+        emitLogEntry({
+          level: 'WARN',
+          source: 'orchestrator',
+          message: `GATE: AI wants to run ${recommendation.tool} but semi-auto mode requires approval — skipping exploitation tools`,
+        });
+
+        // In semi-auto, skip exploitation tools and continue with recon
+        // Record observation about what we would have done
+        await aiService.recordObservation({
+          observation: `Skipped ${recommendation.tool}: semi-auto gate. AI reasoning: ${recommendation.reasoning}`,
+          source: 'gate',
+          scanId,
+        });
+
+        // Ask AI for next recon tool instead
+        continue;
+      }
+
+      // Validate the tool exists
+      if (!ALL_AVAILABLE_TOOLS.includes(recommendation.tool)) {
+        emitLogEntry({
+          level: 'WARN',
+          source: 'ai',
+          message: `AI recommended unknown tool "${recommendation.tool}" — skipping`,
+        });
+        await aiService.recordObservation({
+          observation: `Skipped unknown tool: ${recommendation.tool}`,
+          source: 'ai',
+          scanId,
+        });
+        continue;
+      }
+
+      // Skip tools we've already run
+      if (toolHistory.some((h) => h.tool === recommendation.tool)) {
+        emitLogEntry({
+          level: 'INFO',
+          source: 'ai',
+          message: `AI recommended ${recommendation.tool} but already ran — asking for alternative`,
+        });
+        await aiService.recordObservation({
+          observation: `Skipped ${recommendation.tool}: already executed`,
+          source: 'ai',
+          scanId,
+        });
+        continue;
+      }
+
+      // Record the AI's decision
+      await aiService.recordDecision({
+        decision: `Run ${recommendation.tool}`,
+        rationale: recommendation.reasoning,
+        selectedTool: recommendation.tool,
+        scanId,
+      });
+
+      // Execute the tool
+      iteration++;
+      const result = await this.executeTool(
+        scanId,
+        targetId,
+        target,
+        recommendation.tool,
+        `${iteration}/?`,
+      );
+      toolHistory.push(this.summarizeResult(result));
+
+      // Record AI's observations about the result
+      if (recommendation.observations) {
+        await aiService.recordObservation({
+          observation: recommendation.observations,
+          source: recommendation.tool,
+          scanId,
+        });
+      }
+    }
+
+    if (iteration >= MAX_AI_ITERATIONS) {
+      emitLogEntry({
+        level: 'WARN',
+        source: 'orchestrator',
+        message: `AI pipeline hit max iterations (${MAX_AI_ITERATIONS}) — stopping`,
+      });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Shared helpers
+  // ══════════════════════════════════════════════════════════════════════════
+
   /**
-   * Get default tools for a scan mode.
+   * Execute a single tool, store results, emit events, extract loot.
+   * Returns the raw tool result.
    */
+  private async executeTool(
+    scanId: string,
+    targetId: string,
+    target: string,
+    tool: string,
+    progress: string,
+  ) {
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: { progress },
+    });
+
+    emitReconOutput({
+      tool,
+      target,
+      output: `Starting ${tool}...`,
+      complete: false,
+      event: 'tool_start',
+      progress,
+      scan_id: scanId,
+    });
+
+    const result = await toolExecutor.run(tool, target);
+
+    // Store result
+    await prisma.scanResult.create({
+      data: {
+        scanId,
+        resultType: this.toolToResultType(tool),
+        data: {
+          tool: result.tool,
+          output: result.output,
+          exitCode: result.exitCode,
+          duration: result.duration,
+        } as any,
+        source: tool,
+      },
+    });
+
+    // Emit structured discoveries from tool output
+    if (result.output && !result.error) {
+      this.emitDiscoveries(tool, target, result.output, scanId);
+    }
+
+    // Extract loot from tool output
+    if (result.output && !result.error) {
+      try {
+        const lootCount = await lootService.extractFromOutput(result.output, tool, targetId);
+        if (lootCount > 0) {
+          emitLogEntry({
+            level: 'INFO',
+            source: 'loot',
+            message: `Extracted ${lootCount} loot items from ${tool}`,
+          });
+        }
+      } catch (err: any) {
+        console.error(`[Loot] Extraction failed for ${tool}:`, err.message);
+      }
+    }
+
+    // Log to DB
+    await prisma.logEntry.create({
+      data: {
+        scanId,
+        level: result.error ? 'ERROR' : 'INFO',
+        source: tool,
+        message: result.error
+          ? `${tool} failed: ${result.error}`
+          : `${tool} complete (${Math.round(result.duration / 1000)}s)`,
+      },
+    });
+
+    emitReconOutput({
+      tool,
+      target,
+      output: result.error ? `[${tool}] Error: ${result.error}` : `[${tool}] Complete`,
+      complete: true,
+      event: result.error ? 'tool_error' : 'tool_complete',
+      progress,
+      scan_id: scanId,
+    });
+
+    return result;
+  }
+
+  /**
+   * Summarize a tool result for inclusion in AI prompts.
+   */
+  private summarizeResult(result: { tool: string; output: string; exitCode: number; duration: number; error?: string }): ToolRunSummary {
+    // Truncate output to ~2000 chars for the AI prompt
+    const maxLen = 2000;
+    const snippet = result.output.length > maxLen
+      ? result.output.slice(0, maxLen) + '\n... [output truncated]'
+      : result.output;
+
+    return {
+      tool: result.tool,
+      exitCode: result.exitCode,
+      duration: result.duration,
+      outputSnippet: snippet,
+      error: result.error,
+    };
+  }
+
+  // ── AI prompt construction ────────────────────────────────────────────────
+
+  private buildAIPrompt(
+    target: string,
+    toolHistory: ToolRunSummary[],
+    operationMode: OperationMode,
+  ): string {
+    const toolList = ALL_AVAILABLE_TOOLS.join(', ');
+    const alreadyRan = toolHistory.map((h) => h.tool).join(', ');
+
+    const resultsSummary = toolHistory
+      .map((h) => {
+        const status = h.error ? `FAILED (${h.error})` : `OK (${Math.round(h.duration / 1000)}s)`;
+        return `### ${h.tool.toUpperCase()} — ${status}\n${h.outputSnippet}`;
+      })
+      .join('\n\n');
+
+    const gateNote = operationMode === 'semi-auto'
+      ? '\nIMPORTANT: Exploitation tools (sqlmap, xsstrike, commix, hydra, john, hashcat) require operator approval in semi-auto mode. Only recommend them if you believe exploitation is warranted based on findings.'
+      : operationMode === 'full-auto'
+        ? '\nFull-auto mode: you may recommend exploitation tools without restriction.'
+        : '';
+
+    return `You are the AI orchestrator for CStrike, an offensive security automation platform.
+You are conducting a security assessment of target: ${target}
+
+OPERATION MODE: ${operationMode.toUpperCase()}${gateNote}
+
+AVAILABLE TOOLS: ${toolList}
+ALREADY EXECUTED: ${alreadyRan || 'none'}
+
+## RESULTS SO FAR
+
+${resultsSummary || 'No tools have been executed yet.'}
+
+## YOUR TASK
+
+Analyze the scan results above and decide what to do next.
+Consider:
+1. What attack surface has been revealed?
+2. What services, technologies, and potential vulnerabilities have been identified?
+3. What tool would provide the most value next?
+4. Are we done with reconnaissance?
+
+## RESPONSE FORMAT
+
+Respond with EXACTLY this format:
+
+NEXT_TOOL: <tool_name or DONE>
+REASONING: <1-3 sentences explaining why>
+OBSERVATIONS: <key findings from the latest results — ports, services, technologies, potential attack vectors>
+
+If all valuable reconnaissance is complete, respond with:
+NEXT_TOOL: DONE
+REASONING: <why we have sufficient information>
+OBSERVATIONS: <summary of all findings>`;
+  }
+
+  /**
+   * Parse the AI's response for tool recommendation.
+   */
+  private parseAIRecommendation(content: string): {
+    tool: string | null;
+    done: boolean;
+    reasoning: string;
+    observations: string;
+  } {
+    const toolMatch = content.match(/NEXT_TOOL:\s*(\S+)/i);
+    const reasonMatch = content.match(/REASONING:\s*(.+?)(?=\nOBSERVATIONS:|$)/is);
+    const obsMatch = content.match(/OBSERVATIONS:\s*(.+)/is);
+
+    const tool = toolMatch?.[1]?.trim().toLowerCase() ?? null;
+    const done = tool === 'done' || tool === null;
+
+    return {
+      tool: done ? null : tool,
+      done,
+      reasoning: reasonMatch?.[1]?.trim() ?? 'No reasoning provided',
+      observations: obsMatch?.[1]?.trim() ?? '',
+    };
+  }
+
+  // ── Default tool lists (manual mode) ──────────────────────────────────────
+
   private getDefaultTools(mode: string): string[] {
     switch (mode) {
       case 'quick':

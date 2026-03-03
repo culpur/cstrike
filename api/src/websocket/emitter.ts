@@ -131,6 +131,14 @@ export function emitVulnapiOutput(data: {
   io?.emit('vulnapi_output', data);
 }
 
+export function emitScanStarted(data: {
+  target: string;
+  scan_id?: string;
+  tools?: string[];
+}) {
+  io?.emit('scan_started', data);
+}
+
 export function emitPortDiscovered(data: {
   port: number;
   protocol: string;

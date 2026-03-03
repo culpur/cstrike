@@ -94,6 +94,39 @@ export function useWebSocketHandlers() {
         progress: data.progress,
         scan_id: data.scan_id,
       });
+
+      // Generate notifications for tool completions
+      if (data.complete && data.event === 'tool_complete') {
+        addNotification({
+          type: 'task_completed',
+          title: `${(data.tool || 'Tool').toUpperCase()} Complete`,
+          message: `${data.tool || 'Tool'} finished on ${data.target || 'target'}${data.progress ? ` (${data.progress})` : ''}`,
+          severity: 'info',
+        });
+        addToast({
+          type: 'success',
+          message: `${data.tool || 'Tool'} complete${data.progress ? ` [${data.progress}]` : ''}`,
+          duration: 3000,
+        });
+      } else if (data.complete && data.event === 'tool_error') {
+        addNotification({
+          type: 'task_failed',
+          title: `${(data.tool || 'Tool').toUpperCase()} Failed`,
+          message: `${data.tool || 'Tool'} failed on ${data.target || 'target'}`,
+          severity: 'high',
+        });
+        addToast({
+          type: 'error',
+          message: `${data.tool || 'Tool'} failed on ${data.target || 'target'}`,
+          duration: 5000,
+        });
+      } else if (data.event === 'tool_start') {
+        addToast({
+          type: 'info',
+          message: `Running ${data.tool || 'tool'}${data.progress ? ` [${data.progress}]` : ''}...`,
+          duration: 3000,
+        });
+      }
     });
 
     // ── Port discovered ───────────────────────────────────────
@@ -105,6 +138,14 @@ export function useWebSocketHandlers() {
         service: data.service || 'unknown',
         version: data.version || '',
         target: data.target || '',
+      });
+
+      // Notify on port discovery
+      addNotification({
+        type: 'scan_complete',
+        title: 'Port Discovered',
+        message: `${data.port}/${data.protocol || 'tcp'} ${data.state || 'open'} — ${data.service || 'unknown'}${data.version ? ` ${data.version}` : ''} on ${data.target || 'target'}`,
+        severity: 'info',
       });
     });
 
