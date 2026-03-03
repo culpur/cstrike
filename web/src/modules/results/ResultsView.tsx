@@ -27,10 +27,10 @@ import {
   Workflow,
   Globe,
 } from 'lucide-react';
-import { Button, Panel, SectionPanel } from '@components/ui';
+import { SectionPanel } from '@components/ui';
 import { useUIStore } from '@stores/uiStore';
 import { apiService } from '@services/api';
-import { formatTime, cn } from '@utils/index';
+import { cn } from '@utils/index';
 import type {
   Target,
   CompleteScanResults,
