@@ -69,6 +69,7 @@ export const KNOWN_CONFIG_KEYS = [
   'wordlist_path',
   'report_output_dir',
   'max_concurrent_scans',
+  'operation_mode',
 ] as const;
 
 export type KnownConfigKey = (typeof KNOWN_CONFIG_KEYS)[number];

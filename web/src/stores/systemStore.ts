@@ -12,6 +12,8 @@ import type {
   VpnConnection,
 } from '@/types';
 
+export type OperationMode = 'manual' | 'semi-auto' | 'full-auto';
+
 interface SystemStore {
   // State
   metrics: SystemMetrics;
@@ -19,6 +21,7 @@ interface SystemStore {
   phaseProgress: PhaseProgress;
   connected: boolean;
   vpnConnections: VpnConnection[];
+  operationMode: OperationMode;
 
   // Actions
   updateMetrics: (metrics: Partial<SystemMetrics>) => void;
@@ -27,6 +30,7 @@ interface SystemStore {
   setPhaseComplete: (phase: string, complete: boolean) => void;
   setConnected: (connected: boolean) => void;
   setVpnConnections: (connections: VpnConnection[]) => void;
+  setOperationMode: (mode: OperationMode) => void;
   reset: () => void;
 }
 
@@ -59,6 +63,7 @@ export const useSystemStore = create<SystemStore>((set) => ({
   phaseProgress: initialPhaseProgress,
   connected: false,
   vpnConnections: [],
+  operationMode: 'semi-auto',
 
   updateMetrics: (metrics) =>
     set((state) => ({
@@ -97,6 +102,8 @@ export const useSystemStore = create<SystemStore>((set) => ({
 
   setVpnConnections: (connections) => set({ vpnConnections: connections }),
 
+  setOperationMode: (mode) => set({ operationMode: mode }),
+
   reset: () =>
     set({
       metrics: initialMetrics,
@@ -104,5 +111,6 @@ export const useSystemStore = create<SystemStore>((set) => ({
       phaseProgress: initialPhaseProgress,
       connected: false,
       vpnConnections: [],
+      operationMode: 'semi-auto',
     }),
 }));

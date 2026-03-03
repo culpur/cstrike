@@ -22,9 +22,13 @@ import {
   FileCheck,
   Terminal,
   Globe,
+  User,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import { useUIStore } from '@stores/uiStore';
-import { useSystemStore } from '@stores/systemStore';
+import { useSystemStore, type OperationMode } from '@stores/systemStore';
+import { apiService } from '@services/api';
 import { cn } from '@utils/index';
 import cstrikeIcon from '@assets/cstrike-icon-64.png';
 
@@ -140,10 +144,52 @@ const sections = [
   { id: 'system', label: 'System' },
 ];
 
+const MODE_CONFIG: Record<OperationMode, {
+  label: string;
+  short: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  description: string;
+}> = {
+  manual: {
+    label: 'OP',
+    short: 'OP',
+    icon: User,
+    color: 'var(--grok-recon-blue)',
+    description: 'Operator Controlled',
+  },
+  'semi-auto': {
+    label: 'SEMI',
+    short: 'SEMI',
+    icon: ShieldCheck,
+    color: 'var(--grok-warning)',
+    description: 'Semi-Automated',
+  },
+  'full-auto': {
+    label: 'AUTO',
+    short: 'AUTO',
+    icon: Zap,
+    color: 'var(--grok-exploit-red)',
+    description: 'Fully Automatic',
+  },
+};
+
+const MODE_ORDER: OperationMode[] = ['manual', 'semi-auto', 'full-auto'];
+
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, activeView, setActiveView } =
     useUIStore();
-  const { connected } = useSystemStore();
+  const { connected, operationMode, setOperationMode } = useSystemStore();
+
+  const handleSetMode = (mode: OperationMode) => {
+    setOperationMode(mode);
+    apiService.setOperationMode(mode).catch(() => {});
+  };
+
+  const cycleMode = () => {
+    const idx = MODE_ORDER.indexOf(operationMode);
+    handleSetMode(MODE_ORDER[(idx + 1) % MODE_ORDER.length]);
+  };
 
   return (
     <div
@@ -246,17 +292,79 @@ export function Sidebar() {
         )}
       </nav>
 
-      {/* Connection indicator */}
+      {/* Operation Mode Toggle */}
       <div className="px-3 py-3 border-t border-[var(--grok-border)]">
-        <div className="flex items-center gap-2">
+        {sidebarCollapsed ? (
+          /* Collapsed — single icon, click to cycle */
+          <button
+            onClick={cycleMode}
+            className="w-full flex items-center justify-center p-2 rounded transition-all hover:bg-[var(--grok-surface-2)]"
+            title={MODE_CONFIG[operationMode].description}
+          >
+            {(() => {
+              const Icon = MODE_CONFIG[operationMode].icon;
+              return (
+                <Icon
+                  className="w-4 h-4"
+                  style={{ color: MODE_CONFIG[operationMode].color }}
+                />
+              );
+            })()}
+          </button>
+        ) : (
+          /* Expanded — 3-segment toggle */
+          <div>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--grok-text-muted)] px-0.5">
+              Operation Mode
+            </span>
+            <div className="flex mt-1.5 rounded-md overflow-hidden border border-[var(--grok-border)]">
+              {MODE_ORDER.map((mode) => {
+                const config = MODE_CONFIG[mode];
+                const isActive = operationMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    onClick={() => handleSetMode(mode)}
+                    className={cn(
+                      'flex-1 py-1.5 text-[10px] font-mono font-bold transition-all',
+                      isActive
+                        ? 'text-white'
+                        : 'text-[var(--grok-text-muted)] hover:text-[var(--grok-text-body)] hover:bg-[var(--grok-surface-2)]'
+                    )}
+                    style={isActive ? { backgroundColor: config.color } : undefined}
+                    title={config.description}
+                  >
+                    {config.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p
+              className="text-[10px] font-mono mt-1.5 px-0.5"
+              style={{ color: MODE_CONFIG[operationMode].color }}
+            >
+              {MODE_CONFIG[operationMode].description}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Connection indicator */}
+      <div className="px-3 py-4 border-t border-[var(--grok-border)]">
+        <div className="flex items-center gap-2.5">
           <div
             className={cn(
-              'status-dot',
-              connected ? 'status-dot-running' : 'status-dot-error'
+              'w-2.5 h-2.5 rounded-full flex-shrink-0',
+              connected
+                ? 'bg-[var(--grok-success)] shadow-[0_0_8px_var(--grok-success)]'
+                : 'bg-[var(--grok-error)] shadow-[0_0_8px_var(--grok-error)] animate-pulse'
             )}
           />
           {!sidebarCollapsed && (
-            <span className="text-[10px] text-[var(--grok-text-muted)] font-mono">
+            <span className={cn(
+              'text-xs font-mono font-semibold tracking-wide',
+              connected ? 'text-[var(--grok-success)]' : 'text-[var(--grok-error)]'
+            )}>
               {connected ? 'CONNECTED' : 'OFFLINE'}
             </span>
           )}

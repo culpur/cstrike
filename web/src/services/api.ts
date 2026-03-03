@@ -380,6 +380,15 @@ class ApiService {
     await this.client.put('/config', config);
   }
 
+  async setOperationMode(mode: string): Promise<void> {
+    await this.client.put('/config', { operation_mode: mode });
+  }
+
+  async getOperationMode(): Promise<string> {
+    const config = await this.getConfig();
+    return (config as any).operation_mode ?? 'semi-auto';
+  }
+
   // ============================================================================
   // VulnAPI
   // ============================================================================
