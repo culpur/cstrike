@@ -51,7 +51,7 @@ export type TerminalStore = TerminalStoreState & TerminalStoreActions;
 
 const MAX_OUTPUT_LINES = 2000;
 
-export const useTerminalStore = create<TerminalStore>((set, get) => ({
+export const useTerminalStore = create<TerminalStore>((set) => ({
   // ── State ─────────────────────────────────────────────────────────────────
 
   sessions: [],
