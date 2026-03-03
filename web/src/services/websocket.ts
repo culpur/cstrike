@@ -177,6 +177,20 @@ class WebSocketService {
     this.socket.on('case_phase_changed', (data) => {
       this.handleServerMessage('case_phase_changed', data);
     });
+
+    // Port and subdomain discovery events
+    this.socket.on('port_discovered', (data) => {
+      this.handleServerMessage('port_discovered', data);
+    });
+
+    this.socket.on('subdomain_discovered', (data) => {
+      this.handleServerMessage('subdomain_discovered', data);
+    });
+
+    // Scan started event
+    this.socket.on('scan_started', (data) => {
+      this.handleServerMessage('scan_started', data);
+    });
   }
 
   /**
