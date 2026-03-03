@@ -22,11 +22,14 @@ import {
   emitPortDiscovered,
   emitSubdomainDiscovered,
   emitCaseGateReached,
+  emitScanPaused,
+  emitScanResumed,
 } from '../websocket/emitter.js';
 import { exploitTrackManager } from './exploitTrackManager.js';
+import { scanContextService, type ExecutionState } from './scanContextService.js';
 
-// Active scan tracking for cancellation
-const activeScans = new Map<string, { cancelled: boolean }>();
+// Active scan tracking for cancellation and pause
+const activeScans = new Map<string, { cancelled: boolean; paused: boolean }>();
 
 // ── Tool safety categories ──────────────────────────────────────────────────
 
@@ -67,7 +70,7 @@ class ScanOrchestrator {
    * Start a scan — runs the full pipeline asynchronously.
    */
   startScan(scanId: string, target: string, tools?: string[], mode?: string) {
-    const state = { cancelled: false };
+    const state = { cancelled: false, paused: false };
     activeScans.set(scanId, state);
 
     setImmediate(() => this.runPipeline(scanId, target, tools, mode, state));
@@ -82,6 +85,102 @@ class ScanOrchestrator {
   }
 
   /**
+   * Pause a running scan — the current tool finishes, then state is saved.
+   */
+  pauseScan(scanId: string) {
+    const state = activeScans.get(scanId);
+    if (state) state.paused = true;
+  }
+
+  /**
+   * Resume a previously paused scan.
+   */
+  async resumeScan(scanId: string): Promise<void> {
+    // Validate scan is paused
+    const scan = await prisma.scan.findUnique({
+      where: { id: scanId },
+      include: { target: true },
+    });
+    if (!scan) throw new Error('Scan not found');
+    if (scan.status !== 'PAUSED') throw new Error(`Scan status is ${scan.status}, expected PAUSED`);
+
+    const targetId = scan.targetId;
+    const target = scan.target.url;
+
+    // Load saved execution state
+    const savedState = await scanContextService.loadExecutionState(targetId);
+
+    // Rebuild tool history from ScanResult (authoritative)
+    const toolHistory = await this.rebuildToolHistory(scanId);
+
+    // Rebuild exploit fingerprints from ExploitTask
+    const exploitTasks = await prisma.exploitTask.findMany({
+      where: { case: { targetId } },
+      select: { tool: true, target: true },
+    });
+    exploitTrackManager.rebuildFingerprints(targetId, exploitTasks);
+
+    // Get operation mode
+    const operationMode = await getConfigValue<string>('operation_mode', 'semi-auto') as OperationMode;
+
+    // Mark as running
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: { status: 'RUNNING' },
+    });
+
+    // Register in active scans + exploit track manager
+    const state = { cancelled: false, paused: false };
+    activeScans.set(scanId, state);
+    exploitTrackManager.registerScan(scanId, targetId, operationMode);
+
+    emitScanResumed({ scan_id: scanId, target });
+    emitLogEntry({
+      level: 'INFO',
+      source: 'orchestrator',
+      message: `Scan resuming in ${operationMode.toUpperCase()} mode against ${target} (iteration ${savedState?.iteration ?? toolHistory.length})`,
+    });
+
+    // Resume the pipeline
+    const resumeState = savedState ? {
+      toolHistory,
+      iteration: savedState.iteration,
+      consecutiveSkips: savedState.consecutiveSkips,
+      gateHit: savedState.gateHit,
+    } : {
+      toolHistory,
+      iteration: toolHistory.length,
+      consecutiveSkips: 0,
+      gateHit: false,
+    };
+
+    setImmediate(() => this.runPipeline(scanId, target, undefined, undefined, state, resumeState));
+  }
+
+  /**
+   * Rebuild tool history from persisted ScanResult records.
+   */
+  private async rebuildToolHistory(scanId: string): Promise<ToolRunSummary[]> {
+    const results = await prisma.scanResult.findMany({
+      where: { scanId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return results.map((r) => {
+      const data = r.data as Record<string, any>;
+      const output = String(data?.output || '');
+      const maxLen = 2000;
+      return {
+        tool: data?.tool || r.source || 'unknown',
+        exitCode: data?.exitCode ?? 0,
+        duration: data?.duration ?? 0,
+        outputSnippet: output.length > maxLen ? output.slice(0, maxLen) + '\n... [output truncated]' : output,
+        error: undefined,
+      };
+    });
+  }
+
+  /**
    * Main scan pipeline — dispatches to manual or AI-driven mode.
    */
   private async runPipeline(
@@ -89,32 +188,49 @@ class ScanOrchestrator {
     target: string,
     requestedTools?: string[],
     mode?: string,
-    state?: { cancelled: boolean },
+    state?: { cancelled: boolean; paused: boolean },
+    resumeState?: { toolHistory: ToolRunSummary[]; iteration: number; consecutiveSkips: number; gateHit: boolean },
   ) {
+    let wasPaused = false;
     try {
-      // Mark as running
-      const scanRecord = await prisma.scan.update({
-        where: { id: scanId },
-        data: { status: 'RUNNING', startedAt: new Date(), phase: 'RECON' },
-      });
+      const scanRecord = await prisma.scan.findUniqueOrThrow({ where: { id: scanId } });
       const targetId = scanRecord.targetId;
+
+      // Only mark RUNNING + set startedAt for fresh scans (not resumes)
+      if (!resumeState) {
+        await prisma.scan.update({
+          where: { id: scanId },
+          data: { status: 'RUNNING', startedAt: new Date(), phase: 'RECON' },
+        });
+      }
 
       // Check operation mode
       const operationMode = await getConfigValue<string>('operation_mode', 'semi-auto') as OperationMode;
 
-      emitLogEntry({
-        level: 'INFO',
-        source: 'orchestrator',
-        message: `Scan starting in ${operationMode.toUpperCase()} mode against ${target}`,
-      });
+      if (!resumeState) {
+        emitLogEntry({
+          level: 'INFO',
+          source: 'orchestrator',
+          message: `Scan starting in ${operationMode.toUpperCase()} mode against ${target}`,
+        });
+        // Register scan with exploit track manager for concurrent exploitation
+        exploitTrackManager.registerScan(scanId, targetId, operationMode);
+      }
 
-      // Register scan with exploit track manager for concurrent exploitation
-      exploitTrackManager.registerScan(scanId, targetId, operationMode);
+      // Ensure ScanContext record exists
+      await scanContextService.getOrCreate(targetId);
 
       if (operationMode === 'manual') {
         await this.runManualPipeline(scanId, target, targetId, requestedTools, mode, state);
       } else {
-        await this.runAIPipeline(scanId, target, targetId, operationMode, requestedTools, state);
+        await this.runAIPipeline(scanId, target, targetId, operationMode, requestedTools, state, resumeState);
+      }
+
+      // Check if we paused instead of finishing
+      const currentScan = await prisma.scan.findUnique({ where: { id: scanId } });
+      if (currentScan?.status === 'PAUSED') {
+        wasPaused = true;
+        return; // Don't mark complete — scan is paused
       }
 
       // Mark complete
@@ -138,6 +254,12 @@ class ScanOrchestrator {
           where: { id: scan.targetId },
           data: { status: finalStatus === 'COMPLETED' ? 'COMPLETE' : 'FAILED' },
         });
+
+        // Refresh context documents on completion
+        await scanContextService.refreshFindingsSummary(scan.targetId).catch(() => {});
+        await scanContextService.refreshAIReasoningSummary(scan.targetId, scanId).catch(() => {});
+        await scanContextService.refreshExploitSnapshot(scan.targetId).catch(() => {});
+        await scanContextService.clearActiveScan(scan.targetId).catch(() => {});
       }
 
       emitPhaseChange({ phase: 'recon', target, status: 'complete' });
@@ -157,7 +279,10 @@ class ScanOrchestrator {
 
     } finally {
       activeScans.delete(scanId);
-      exploitTrackManager.cleanupScan(scanId);
+      // Only clean up exploit tracking if the scan actually finished
+      if (!wasPaused) {
+        exploitTrackManager.cleanupScan(scanId);
+      }
     }
   }
 
@@ -171,7 +296,7 @@ class ScanOrchestrator {
     targetId: string,
     requestedTools?: string[],
     mode?: string,
-    state?: { cancelled: boolean },
+    state?: { cancelled: boolean; paused: boolean },
   ) {
     // Get allowed tools from config
     const allowedTools = await getConfigValue<string[]>('allowed_tools', []);
@@ -192,6 +317,12 @@ class ScanOrchestrator {
         break;
       }
 
+      // Check for pause
+      if (state?.paused) {
+        await this.handlePause(scanId, targetId, target, [], completedTools);
+        return;
+      }
+
       completedTools++;
       const progress = `${completedTools}/${totalTools}`;
 
@@ -209,42 +340,76 @@ class ScanOrchestrator {
     targetId: string,
     operationMode: OperationMode,
     requestedTools?: string[],
-    state?: { cancelled: boolean },
+    state?: { cancelled: boolean; paused: boolean },
+    resumeState?: { toolHistory: ToolRunSummary[]; iteration: number; consecutiveSkips: number; gateHit: boolean },
   ) {
-    const toolHistory: ToolRunSummary[] = [];
-    let iteration = 0;
-    let consecutiveSkips = 0;
+    let toolHistory: ToolRunSummary[];
+    let iteration: number;
+    let consecutiveSkips: number;
     const MAX_CONSECUTIVE_SKIPS = 3;
-    let gateHit = false;
+    let gateHit: boolean;
 
-    emitPhaseChange({ phase: 'recon', target, status: 'running' });
+    if (resumeState) {
+      // ── Resume: skip Phase 1, restore state ───────────────────────────
+      toolHistory = resumeState.toolHistory;
+      iteration = resumeState.iteration;
+      consecutiveSkips = resumeState.consecutiveSkips;
+      gateHit = resumeState.gateHit;
 
-    // ── Phase 1: Initial reconnaissance ─────────────────────────────────
-    // Always start with nmap to understand the target
-    const initialTools = requestedTools?.length
-      ? requestedTools
-      : ['nmap'];
+      emitLogEntry({
+        level: 'INFO',
+        source: 'orchestrator',
+        message: `Resuming AI pipeline at iteration ${iteration} with ${toolHistory.length} tools already completed`,
+      });
 
-    emitScanStarted({ target, scan_id: scanId, tools: initialTools });
+      await aiService.recordDecision({
+        decision: `Resuming AI-driven scan in ${operationMode} mode`,
+        rationale: `Continuing from iteration ${iteration} — ${toolHistory.length} tools already completed: ${toolHistory.map((h) => h.tool).join(', ')}`,
+        scanId,
+      });
+    } else {
+      // ── Fresh start ──────────────────────────────────────────────────
+      toolHistory = [];
+      iteration = 0;
+      consecutiveSkips = 0;
+      gateHit = false;
 
-    // Record AI's initial decision
-    await aiService.recordDecision({
-      decision: `Starting AI-driven scan in ${operationMode} mode`,
-      rationale: `Initial reconnaissance with ${initialTools.join(', ')} to understand the target attack surface`,
-      selectedTool: initialTools[0],
-      scanId,
-    });
+      emitPhaseChange({ phase: 'recon', target, status: 'running' });
 
-    for (const tool of initialTools) {
-      if (state?.cancelled) break;
-      iteration++;
+      // ── Phase 1: Initial reconnaissance ─────────────────────────────
+      const initialTools = requestedTools?.length
+        ? requestedTools
+        : ['nmap'];
 
-      const result = await this.executeTool(scanId, targetId, target, tool, `${iteration}/?`);
-      toolHistory.push(this.summarizeResult(result));
+      emitScanStarted({ target, scan_id: scanId, tools: initialTools });
+
+      await aiService.recordDecision({
+        decision: `Starting AI-driven scan in ${operationMode} mode`,
+        rationale: `Initial reconnaissance with ${initialTools.join(', ')} to understand the target attack surface`,
+        selectedTool: initialTools[0],
+        scanId,
+      });
+
+      for (const tool of initialTools) {
+        if (state?.cancelled) break;
+        if (state?.paused) {
+          await this.handlePause(scanId, targetId, target, toolHistory, iteration);
+          return;
+        }
+        iteration++;
+
+        const result = await this.executeTool(scanId, targetId, target, tool, `${iteration}/?`);
+        toolHistory.push(this.summarizeResult(result));
+      }
     }
 
     // ── Phase 2: AI-driven loop ─────────────────────────────────────────
     while (iteration < MAX_AI_ITERATIONS && !state?.cancelled && !gateHit) {
+      // Check for pause at top of loop
+      if (state?.paused) {
+        await this.handlePause(scanId, targetId, target, toolHistory, iteration, consecutiveSkips, gateHit, operationMode);
+        return;
+      }
       // Check if there are any tools left to run
       const executedSet = new Set(toolHistory.map((h) => h.tool));
       const remainingCount = ALL_AVAILABLE_TOOLS.filter((t) => !executedSet.has(t)).length;
@@ -439,6 +604,18 @@ class ScanOrchestrator {
       );
       toolHistory.push(this.summarizeResult(result));
 
+      // Periodic checkpoint save (every 3 tools)
+      if (iteration % 3 === 0) {
+        await scanContextService.saveExecutionState(targetId, scanId, {
+          scanId,
+          iteration,
+          consecutiveSkips,
+          gateHit,
+          mode: operationMode,
+          toolsRun: toolHistory.map((h) => h.tool),
+        }).catch(() => {});
+      }
+
       // Record AI's observations about the result
       if (recommendation.observations) {
         await aiService.recordObservation({
@@ -456,6 +633,51 @@ class ScanOrchestrator {
         message: `AI pipeline hit max iterations (${MAX_AI_ITERATIONS}) — stopping`,
       });
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Pause handler
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Save state and mark scan as PAUSED.
+   */
+  private async handlePause(
+    scanId: string,
+    targetId: string,
+    target: string,
+    toolHistory: ToolRunSummary[],
+    iteration: number,
+    consecutiveSkips = 0,
+    gateHit = false,
+    mode = 'semi-auto',
+  ) {
+    // Save execution state
+    await scanContextService.saveExecutionState(targetId, scanId, {
+      scanId,
+      iteration,
+      consecutiveSkips,
+      gateHit,
+      mode,
+      toolsRun: toolHistory.map((h) => h.tool),
+    });
+
+    // Refresh context documents
+    await scanContextService.refreshFindingsSummary(targetId).catch(() => {});
+    await scanContextService.refreshAIReasoningSummary(targetId, scanId).catch(() => {});
+
+    // Mark scan as paused
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: { status: 'PAUSED' },
+    });
+
+    emitScanPaused({ scan_id: scanId, target });
+    emitLogEntry({
+      level: 'INFO',
+      source: 'orchestrator',
+      message: `Scan ${scanId} paused at iteration ${iteration} (${toolHistory.length} tools completed)`,
+    });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -623,6 +845,13 @@ class ScanOrchestrator {
       exploitSection = `\n\n## CONCURRENT EXPLOITATION FINDINGS\n${exploitCtx}\n`;
     }
 
+    // Add historical context from previous scans
+    let historicalSection = '';
+    const historicalCtx = await scanContextService.getContextForAIPrompt(targetId);
+    if (historicalCtx) {
+      historicalSection = `\n\n## HISTORICAL CONTEXT (from previous scans)\n${historicalCtx}\n`;
+    }
+
     return `You are the AI orchestrator for CStrike, an offensive security automation platform.
 You are conducting a security assessment of target: ${target}
 
@@ -634,7 +863,7 @@ ALREADY EXECUTED (do NOT recommend these again): ${alreadyRan || 'none'}
 ## RESULTS SO FAR
 
 ${resultsSummary || 'No tools have been executed yet.'}
-${exploitSection}
+${exploitSection}${historicalSection}
 ## YOUR TASK
 
 Analyze the scan results above and decide what to do next.

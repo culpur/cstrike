@@ -111,7 +111,7 @@ scansRouter.get('/active', async (_req, res, next) => {
     const scans = await prisma.scan.findMany({
       where: {
         OR: [
-          { status: { in: ['QUEUED', 'RUNNING'] } },
+          { status: { in: ['QUEUED', 'RUNNING', 'PAUSED'] } },
           { status: { in: ['COMPLETED', 'FAILED', 'CANCELLED'] }, endedAt: { gte: fiveMinAgo } },
         ],
       },
@@ -181,6 +181,59 @@ scansRouter.post('/batch', async (req, res, next) => {
     res.status(201).json({
       success: true,
       data: { scans: results, count: results.length },
+      timestamp: Date.now(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Pause a running scan
+scansRouter.post('/:scanId/pause', async (req, res, next) => {
+  try {
+    const { scanId } = req.params;
+    const scan = await prisma.scan.findUnique({ where: { id: scanId } });
+    if (!scan) throw new AppError(404, 'Scan not found');
+    if (scan.status !== 'RUNNING') throw new AppError(400, `Cannot pause — scan status is ${scan.status}`);
+
+    scanOrchestrator.pauseScan(scanId);
+
+    res.json({
+      success: true,
+      data: { scan_id: scanId, status: 'pausing' },
+      timestamp: Date.now(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Resume a paused scan
+scansRouter.post('/:scanId/resume', async (req, res, next) => {
+  try {
+    const { scanId } = req.params;
+    await scanOrchestrator.resumeScan(scanId);
+
+    res.json({
+      success: true,
+      data: { scan_id: scanId, status: 'resuming' },
+      timestamp: Date.now(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get scan context for a target
+scansRouter.get('/context/:targetId', async (req, res, next) => {
+  try {
+    const { targetId } = req.params;
+    const ctx = await prisma.scanContext.findUnique({ where: { targetId } });
+    if (!ctx) throw new AppError(404, 'No context found for this target');
+
+    res.json({
+      success: true,
+      data: ctx,
       timestamp: Date.now(),
     });
   } catch (err) {

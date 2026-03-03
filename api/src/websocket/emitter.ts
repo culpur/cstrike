@@ -241,6 +241,22 @@ export function emitExploitTrackSpawned(data: {
   io?.emit('exploit_track_spawned', data);
 }
 
+// ── Scan pause / resume events ───────────────────────────────────────────────
+
+export function emitScanPaused(data: {
+  scan_id: string;
+  target: string;
+}) {
+  io?.emit('scan_paused', data);
+}
+
+export function emitScanResumed(data: {
+  scan_id: string;
+  target: string;
+}) {
+  io?.emit('scan_resumed', data);
+}
+
 // ── Terminal / Shell session events ──────────────────────────────────────────
 
 export function emitTerminalOutput(data: {

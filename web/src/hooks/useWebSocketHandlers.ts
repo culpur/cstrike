@@ -466,6 +466,35 @@ export function useWebSocketHandlers() {
       });
     });
 
+    // ── Scan paused / resumed ───────────────────────────────────
+    const unsubScanPaused = wsService.on<any>('scan_paused', (data) => {
+      addNotification({
+        type: 'scan_complete',
+        title: 'Scan Paused',
+        message: `Scan paused for ${data.target || 'target'} — can be resumed later`,
+        severity: 'info',
+      });
+      addToast({
+        type: 'warning',
+        message: `Scan paused: ${data.target || 'unknown'}`,
+        duration: 5000,
+      });
+    });
+
+    const unsubScanResumed = wsService.on<any>('scan_resumed', (data) => {
+      addNotification({
+        type: 'scan_started',
+        title: 'Scan Resumed',
+        message: `Scan resumed for ${data.target || 'target'}`,
+        severity: 'info',
+      });
+      addToast({
+        type: 'success',
+        message: `Scan resumed: ${data.target || 'unknown'}`,
+        duration: 4000,
+      });
+    });
+
     // ── Terminal output streaming ──────────────────────────────
     const { appendOutput, addSession, markSessionInactive } = useTerminalStore.getState();
 
@@ -540,6 +569,8 @@ export function useWebSocketHandlers() {
       unsubGateReached();
       unsubPhaseChanged();
       unsubTrackSpawned();
+      unsubScanPaused();
+      unsubScanResumed();
       unsubTerminalOutput();
       unsubTerminalSessionCreated();
       unsubTerminalSessionClosed();

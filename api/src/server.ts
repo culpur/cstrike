@@ -110,6 +110,28 @@ app.use(errorHandler);
 // ── WebSocket ───────────────────────────────────────────────
 const io = setupWebSocket(httpServer);
 
+// ── Crash recovery ──────────────────────────────────────────
+async function recoverInterruptedScans() {
+  try {
+    const interrupted = await prisma.scan.findMany({
+      where: { status: 'RUNNING' },
+      include: { target: true },
+    });
+    if (interrupted.length > 0) {
+      for (const scan of interrupted) {
+        await prisma.scan.update({
+          where: { id: scan.id },
+          data: { status: 'PAUSED' },
+        });
+        console.log(`[CStrike API] Recovered interrupted scan ${scan.id} (${scan.target.url}) → PAUSED`);
+      }
+      console.log(`[CStrike API] ${interrupted.length} interrupted scan(s) marked as PAUSED`);
+    }
+  } catch (err: any) {
+    console.warn('[CStrike API] Scan recovery failed:', err.message);
+  }
+}
+
 // ── Start ───────────────────────────────────────────────────
 async function start() {
   try {
@@ -130,6 +152,9 @@ async function start() {
 
     // Start service health monitor (restart crashed services every 30s)
     startServiceMonitor();
+
+    // Recover interrupted scans — mark RUNNING as PAUSED (operator resumes manually)
+    await recoverInterruptedScans();
 
     // Start HTTP server
     httpServer.listen(env.PORT, env.HOST, () => {

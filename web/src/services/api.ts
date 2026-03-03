@@ -669,6 +669,25 @@ class ApiService {
     const { data } = await this.client.get(`/terminal/sessions/${sessionId}/output`);
     return data.data || { lines: [], active: false };
   }
+
+  // ============================================================================
+  // Scan Pause / Resume
+  // ============================================================================
+
+  async pauseScan(scanId: string): Promise<any> {
+    const { data } = await this.client.post(`/recon/${scanId}/pause`);
+    return data.data || data;
+  }
+
+  async resumeScan(scanId: string): Promise<any> {
+    const { data } = await this.client.post(`/recon/${scanId}/resume`);
+    return data.data || data;
+  }
+
+  async getTargetContext(targetId: string): Promise<any> {
+    const { data } = await this.client.get(`/recon/context/${targetId}`);
+    return data.data || data;
+  }
 }
 
 // ============================================================================

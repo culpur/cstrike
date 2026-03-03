@@ -209,6 +209,15 @@ class WebSocketService {
     this.socket.on('exploit_track_spawned', (data) => {
       this.handleServerMessage('exploit_track_spawned', data);
     });
+
+    // Scan pause / resume
+    this.socket.on('scan_paused', (data) => {
+      this.handleServerMessage('scan_paused', data);
+    });
+
+    this.socket.on('scan_resumed', (data) => {
+      this.handleServerMessage('scan_resumed', data);
+    });
   }
 
   /**

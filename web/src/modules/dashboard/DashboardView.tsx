@@ -19,6 +19,7 @@ import {
   HardDrive,
   Clock,
   Play,
+  Pause,
   Zap,
   Shield,
   Target,
@@ -37,6 +38,7 @@ import {
   ChevronRight,
   Server,
   Hash,
+  RotateCcw,
 } from 'lucide-react';
 import {
   PieChart,
@@ -70,6 +72,8 @@ interface ActiveScan {
   started_at: string;
   status: string;
   current_phase?: string;
+  phase?: string;
+  progress?: string;
 }
 
 interface ScanHistoryPoint {
@@ -566,41 +570,26 @@ export function DashboardView() {
                 </div>
               ) : (
                 activeScans.map((scan) => (
-                  <div
+                  <ScanCard
                     key={scan.scan_id}
-                    className="p-3 bg-[var(--grok-surface-2)] rounded border border-[var(--grok-border)] animate-fade-in"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-[var(--grok-recon-blue)] rounded-full animate-pulse" />
-                        <span className="text-sm font-mono font-semibold text-[var(--grok-text-heading)]">
-                          {scan.target}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-mono text-[var(--grok-text-muted)]">
-                        {scan.scan_id.substring(0, 12)}
-                      </span>
-                    </div>
-
-                    {scan.current_phase && (
-                      <div className="text-xs text-[var(--grok-scan-cyan)] font-mono mb-2">
-                        Phase: {getPhaseDisplayName(scan.current_phase as any)}
-                      </div>
-                    )}
-
-                    {scan.running_tools && scan.running_tools.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {scan.running_tools.map((tool) => (
-                          <span
-                            key={tool}
-                            className="text-[10px] font-mono px-2 py-0.5 bg-[var(--grok-recon-blue)]/10 text-[var(--grok-recon-blue)] rounded border border-[var(--grok-recon-blue)]/20"
-                          >
-                            {tool}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                    scan={scan}
+                    onPause={async () => {
+                      try {
+                        await apiService.pauseScan(scan.scan_id);
+                        addToast({ type: 'info', message: `Pausing scan: ${scan.target}`, duration: 3000 });
+                      } catch (err: any) {
+                        addToast({ type: 'error', message: err.message || 'Pause failed', duration: 5000 });
+                      }
+                    }}
+                    onResume={async () => {
+                      try {
+                        await apiService.resumeScan(scan.scan_id);
+                        addToast({ type: 'info', message: `Resuming scan: ${scan.target}`, duration: 3000 });
+                      } catch (err: any) {
+                        addToast({ type: 'error', message: err.message || 'Resume failed', duration: 5000 });
+                      }
+                    }}
+                  />
                 ))
               )}
             </div>
@@ -866,6 +855,137 @@ function EmptyChart({ label }: { label: string }) {
   return (
     <div className="h-28 flex items-center justify-center">
       <span className="text-xs text-[var(--grok-text-muted)]">{label}</span>
+    </div>
+  );
+}
+
+const SCAN_PIPELINE_PHASES = ['recon', 'ai_analysis_1', 'web_scans', 'exploitation', 'complete'] as const;
+const PHASE_LABELS: Record<string, string> = {
+  idle: 'Idle',
+  recon: 'Recon',
+  ai_analysis_1: 'AI',
+  web_scans: 'Web',
+  vulnapi: 'API',
+  metasploit: 'MSF',
+  ai_analysis_2: 'AI-2',
+  exploitation: 'Exploit',
+  reporting: 'Report',
+  complete: 'Done',
+};
+
+function ScanCard({
+  scan,
+  onPause,
+  onResume,
+}: {
+  scan: ActiveScan;
+  onPause: () => void;
+  onResume: () => void;
+}) {
+  const isRunning = scan.status === 'running';
+  const isPaused = scan.status === 'paused';
+  const isFinished = ['completed', 'failed', 'cancelled'].includes(scan.status);
+  const currentPhase = scan.current_phase || scan.phase || 'idle';
+
+  const statusColor = isPaused
+    ? 'var(--grok-warning)'
+    : isRunning
+    ? 'var(--grok-recon-blue)'
+    : isFinished
+    ? 'var(--grok-success)'
+    : 'var(--grok-text-muted)';
+
+  return (
+    <div className="p-3 bg-[var(--grok-surface-2)] rounded border border-[var(--grok-border)] animate-fade-in">
+      {/* Header: target + controls */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div
+            className={`w-2 h-2 rounded-full ${isRunning ? 'animate-pulse' : ''}`}
+            style={{ backgroundColor: statusColor }}
+          />
+          <span className="text-sm font-mono font-semibold text-[var(--grok-text-heading)]">
+            {scan.target}
+          </span>
+          {isPaused && (
+            <span className="text-[9px] font-mono px-1.5 py-0.5 bg-[var(--grok-warning)]/15 text-[var(--grok-warning)] rounded uppercase font-bold">
+              Paused
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {scan.progress && (
+            <span className="text-[10px] font-mono text-[var(--grok-text-muted)]">
+              {scan.progress}
+            </span>
+          )}
+          {isRunning && (
+            <button
+              onClick={onPause}
+              className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-warning)] transition-colors"
+              title="Pause scan"
+            >
+              <Pause className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {isPaused && (
+            <button
+              onClick={onResume}
+              className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-success)] transition-colors"
+              title="Resume scan"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Per-target pipeline mini-phase indicator */}
+      <div className="flex items-center gap-1 mb-2">
+        {SCAN_PIPELINE_PHASES.map((phase) => {
+          const phaseIdx = SCAN_PIPELINE_PHASES.indexOf(phase);
+          const currentIdx = SCAN_PIPELINE_PHASES.indexOf(
+            SCAN_PIPELINE_PHASES.find((p) => p === currentPhase) ?? 'recon'
+          );
+          const isPhaseComplete = currentIdx > phaseIdx || currentPhase === 'complete';
+          const isPhaseActive = currentPhase === phase || (currentIdx === -1 && phase === 'recon');
+
+          return (
+            <div key={phase} className="flex items-center gap-1">
+              <div
+                className={`w-4 h-4 rounded-full border flex items-center justify-center text-[6px] font-bold transition-all ${
+                  isPhaseComplete
+                    ? 'bg-[var(--grok-success)] border-[var(--grok-success)] text-black'
+                    : isPhaseActive
+                    ? isPaused
+                      ? 'border-[var(--grok-warning)] text-[var(--grok-warning)]'
+                      : 'border-[var(--grok-recon-blue)] text-[var(--grok-recon-blue)] animate-pulse'
+                    : 'border-[var(--grok-border)] text-[var(--grok-text-muted)]'
+                }`}
+              >
+                {isPhaseComplete ? '\u2713' : ''}
+              </div>
+              <span className="text-[7px] text-[var(--grok-text-muted)] mr-1">
+                {PHASE_LABELS[phase] || phase}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Running tools */}
+      {scan.running_tools && scan.running_tools.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {scan.running_tools.map((tool) => (
+            <span
+              key={tool}
+              className="text-[10px] font-mono px-2 py-0.5 bg-[var(--grok-recon-blue)]/10 text-[var(--grok-recon-blue)] rounded border border-[var(--grok-recon-blue)]/20"
+            >
+              {tool}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

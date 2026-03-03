@@ -47,6 +47,7 @@ model Target {
   lootItems   LootItem[]
   credentials CredentialPair[]
   cases       ExploitCase[]
+  scanContext ScanContext?
 
   @@unique([url])
   @@index([status])
@@ -485,4 +486,25 @@ enum WordlistCategory {
   WEB_CONTENT
   SUBDOMAINS
   CUSTOM
+}
+
+// ============================================================================
+// Scan Context — Per-target persistent context document for AI continuity
+// ============================================================================
+
+model ScanContext {
+  id                 String   @id @default(cuid())
+  targetId           String   @unique
+  scanId             String?
+  findingsSummary    Json     @default("{}")
+  executionState     Json     @default("{}")
+  aiReasoningSummary String   @default("")
+  exploitSnapshot    Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  target Target @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId])
+  @@map("scan_contexts")
 }

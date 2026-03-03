@@ -396,6 +396,8 @@ export type WSMessageType =
   | 'port_discovered'
   | 'subdomain_discovered'
   | 'exploit_track_spawned'
+  | 'scan_paused'
+  | 'scan_resumed'
   | 'terminal_output'
   | 'terminal_session_created'
   | 'terminal_session_closed';
