@@ -16,6 +16,7 @@ import { type ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { ToastContainer } from './ToastContainer';
 import { NotificationCenter } from './NotificationCenter';
+import { WorkflowDrawer } from './WorkflowDrawer';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -41,6 +42,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       </div>
 
       <ToastContainer />
+      <WorkflowDrawer />
     </div>
   );
 }

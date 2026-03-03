@@ -34,6 +34,7 @@ import {
 import { useUIStore } from '@stores/uiStore';
 import { useSystemStore } from '@stores/systemStore';
 import { apiService } from '@services/api';
+import { SectionPanel } from '@components/ui/SectionPanel';
 import type { Config, VpnConnection, VpnProvider } from '@/types';
 
 // ── Scan Modes (all 18 backend-supported modes) ─────────────────────────────
@@ -980,32 +981,6 @@ export function ConfigurationView() {
 
 /* ── Reusable Sub-Components ─────────────────────────────────────────────── */
 
-function SectionPanel({
-  title,
-  icon,
-  badge,
-  children,
-}: {
-  title: string;
-  icon?: React.ReactNode;
-  badge?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="cs-panel">
-      <div className="cs-panel-header flex items-center justify-between">
-        <span className="flex items-center gap-2">
-          {icon}
-          {title}
-        </span>
-        {badge && (
-          <span className="text-[10px] font-mono text-[var(--grok-text-muted)]">{badge}</span>
-        )}
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
-}
 
 function ConfigInput({
   label,

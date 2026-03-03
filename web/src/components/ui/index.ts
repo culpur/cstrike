@@ -8,3 +8,4 @@ export { MetricCard } from './MetricCard';
 export { StatusBadge } from './StatusBadge';
 export { Input } from './Input';
 export { ProgressBar } from './ProgressBar';
+export { SectionPanel } from './SectionPanel';

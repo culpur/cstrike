@@ -24,8 +24,10 @@ import {
   Zap,
   Network,
   ClipboardList,
+  Workflow,
+  Globe,
 } from 'lucide-react';
-import { Button, Panel } from '@components/ui';
+import { Button, Panel, SectionPanel } from '@components/ui';
 import { useUIStore } from '@stores/uiStore';
 import { apiService } from '@services/api';
 import { formatTime, cn } from '@utils/index';
@@ -650,12 +652,19 @@ export function ResultsView() {
   // Severity filter
   const [activeSeverities, setActiveSeverities] = useState<Set<Severity>>(new Set());
 
-  const { addToast } = useUIStore();
+  const { addToast, openWorkflowDrawer, workflowDrawerTarget } = useUIStore();
   const { copied, copy } = useCopyFinding();
 
   useEffect(() => {
     loadTargets();
   }, []);
+
+  // Auto-select target if navigated from WorkflowDrawer
+  useEffect(() => {
+    if (workflowDrawerTarget && targets.length > 0 && selectedTarget !== workflowDrawerTarget) {
+      loadTargetResults(workflowDrawerTarget);
+    }
+  }, [workflowDrawerTarget, targets]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset expanded rows and filters when target changes
   useEffect(() => {
@@ -789,546 +798,506 @@ export function ResultsView() {
             Browse and export scan results
           </p>
         </div>
-        <button className="cs-btn flex items-center gap-1.5" onClick={loadTargets}>
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className="cs-btn flex items-center gap-1.5"
+            onClick={() => openWorkflowDrawer()}
+          >
+            <Workflow className="w-3.5 h-3.5" />
+            Workflow
+          </button>
+          <button className="cs-btn flex items-center gap-1.5" onClick={loadTargets}>
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Target List */}
-        <div className="lg:col-span-1">
-          <Panel title={`Targets (${targets.length})`} noPadding>
-            <div className="divide-y divide-grok-border max-h-[700px] overflow-y-auto">
-              {targets.length === 0 ? (
-                <div className="p-6 text-center text-grok-text-muted">
-                  No scan results available
-                </div>
-              ) : (
-                targets.map((target) => (
-                  <button
-                    key={target.id}
-                    onClick={() => loadTargetResults(target.url)}
-                    className={cn(
-                      'w-full text-left p-4 hover:bg-grok-surface-2 transition-colors',
-                      selectedTarget === target.url && 'bg-grok-surface-2'
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-grok-text-heading truncate">
-                          {target.url}
-                        </p>
-                        <p className="text-xs text-grok-text-muted mt-1">
-                          {formatTime(target.addedAt)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 ml-2">
-                        <StatusBadge status={target.status} />
-                        <ChevronRight className="w-4 h-4 text-grok-text-muted" />
-                      </div>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </Panel>
-        </div>
-
-        {/* Detailed Results Panel */}
-        <div className="lg:col-span-2">
-          {!selectedTarget ? (
-            <Panel title="Select a Target">
-              <div className="text-center py-12">
-                <AlertCircle className="w-12 h-12 text-grok-text-muted mx-auto mb-3" />
-                <p className="text-grok-text-muted">
-                  Select a target from the list to view detailed results
-                </p>
-              </div>
-            </Panel>
-          ) : isLoadingResults ? (
-            <Panel title={selectedTarget}>
-              <div className="flex items-center justify-center py-12">
-                <RefreshCw className="w-8 h-8 text-grok-recon-blue animate-spin" />
-              </div>
-            </Panel>
-          ) : results ? (
-            <div className="space-y-4">
-              {/* Stats + Export header */}
-              <Panel
-                title={selectedTarget}
-                action={
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => exportCsv(filteredVulns, selectedTarget)}
-                      title="Export current vulnerability view to CSV"
-                    >
-                      <FileText className="w-3 h-3 mr-1" />
-                      CSV
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => exportJson(results)}
-                      title="Export full scan results as JSON"
-                    >
-                      <FileJson className="w-3 h-3 mr-1" />
-                      JSON
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => handleDownload('json')}
-                    >
-                      <Download className="w-3 h-3 mr-1" />
-                      Report
-                    </Button>
-                  </div>
-                }
-              >
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <MetricCard label="Total Ports" value={results.stats?.totalPorts || 0} />
-                  <MetricCard
-                    label="Open Ports"
-                    value={results.stats?.openPorts || 0}
-                    color="text-grok-ok-green"
-                  />
-                  <MetricCard
-                    label="Subdomains"
-                    value={results.stats?.totalSubdomains || 0}
-                  />
-                  <MetricCard
-                    label="Vulnerabilities"
-                    value={results.stats?.totalVulnerabilities || 0}
-                    color="text-grok-exploit-red"
-                  />
-                </div>
-
-                {/* Vuln severity mini-bar */}
-                {results.stats && results.stats.totalVulnerabilities > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {results.stats.criticalVulns > 0 && (
-                      <span className="px-2 py-0.5 text-xs rounded bg-red-900/30 text-red-400 border border-red-800">
-                        {results.stats.criticalVulns} CRIT
-                      </span>
-                    )}
-                    {results.stats.highVulns > 0 && (
-                      <span className="px-2 py-0.5 text-xs rounded bg-orange-900/30 text-orange-400 border border-orange-800">
-                        {results.stats.highVulns} HIGH
-                      </span>
-                    )}
-                    {results.stats.mediumVulns > 0 && (
-                      <span className="px-2 py-0.5 text-xs rounded bg-yellow-900/30 text-yellow-500 border border-yellow-800">
-                        {results.stats.mediumVulns} MED
-                      </span>
-                    )}
-                    {results.stats.lowVulns > 0 && (
-                      <span className="px-2 py-0.5 text-xs rounded bg-blue-900/30 text-blue-400 border border-blue-800">
-                        {results.stats.lowVulns} LOW
-                      </span>
-                    )}
-                  </div>
+      {/* ── Targets — horizontal pills ──────────────────────── */}
+      <SectionPanel
+        title={`Targets (${targets.length})`}
+        icon={<Globe className="w-3.5 h-3.5 text-[var(--grok-recon-blue)]" />}
+      >
+        {targets.length === 0 ? (
+          <p className="text-sm text-[var(--grok-text-muted)]">
+            No scan results available. Run a scan from the Targets page.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {targets.map((target) => (
+              <button
+                key={target.id}
+                onClick={() => loadTargetResults(target.url)}
+                className={cn(
+                  'px-3 py-1.5 rounded text-xs font-mono border transition-all',
+                  selectedTarget === target.url
+                    ? 'border-[var(--grok-recon-blue)] bg-[var(--grok-recon-blue)]/10 text-[var(--grok-recon-blue)] shadow-[0_0_8px_rgba(34,102,255,0.25)]'
+                    : 'border-[var(--grok-border)] bg-[var(--grok-surface-2)] text-[var(--grok-text-body)] hover:border-[var(--grok-border-glow)] hover:bg-[var(--grok-surface-3)]'
                 )}
-              </Panel>
+              >
+                <span className="flex items-center gap-1.5">
+                  <StatusBadge status={target.status} />
+                  {target.url}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </SectionPanel>
 
-              {/* Tab navigation */}
-              <div className="flex gap-1 border-b border-grok-border">
-                {(
-                  [
-                    {
-                      id: 'vulns' as const,
-                      label: 'Vulnerabilities',
-                      count: results.vulnerabilities?.length,
-                    },
-                    {
-                      id: 'ports' as const,
-                      label: 'Ports',
-                      count: results.ports?.length,
-                    },
-                    {
-                      id: 'subdomains' as const,
-                      label: 'Subdomains',
-                      count: results.subdomains?.length,
-                    },
-                    {
-                      id: 'raw' as const,
-                      label: 'Raw Output',
-                      count: results.rawOutput?.length,
-                    },
-                  ] as const
-                ).map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={cn(
-                      'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
-                      activeTab === tab.id
-                        ? 'border-grok-recon-blue text-grok-recon-blue'
-                        : 'border-transparent text-grok-text-muted hover:text-grok-text-body'
-                    )}
-                  >
-                    {tab.label}
-                    {tab.count ? (
-                      <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-grok-surface-2 text-grok-text-muted">
-                        {tab.count}
-                      </span>
-                    ) : null}
-                  </button>
-                ))}
+      {/* ── Selected target results ─────────────────────────── */}
+      {!selectedTarget ? (
+        <SectionPanel title="Select a Target" icon={<AlertCircle className="w-3.5 h-3.5" />}>
+          <div className="text-center py-8">
+            <AlertCircle className="w-10 h-10 text-[var(--grok-text-muted)] mx-auto mb-3" />
+            <p className="text-sm text-[var(--grok-text-muted)]">
+              Select a target above to view detailed results
+            </p>
+          </div>
+        </SectionPanel>
+      ) : isLoadingResults ? (
+        <SectionPanel title={selectedTarget}>
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw className="w-8 h-8 text-[var(--grok-recon-blue)] animate-spin" />
+          </div>
+        </SectionPanel>
+      ) : results ? (
+        <>
+          {/* Stats + Export row */}
+          <SectionPanel
+            title={selectedTarget}
+            icon={<Server className="w-3.5 h-3.5 text-[var(--grok-recon-blue)]" />}
+            action={
+              <div className="flex gap-1.5">
+                <button
+                  className="cs-btn flex items-center gap-1"
+                  onClick={() => exportCsv(filteredVulns, selectedTarget)}
+                  title="Export vulnerabilities as CSV"
+                >
+                  <FileText className="w-3 h-3" />
+                  CSV
+                </button>
+                <button
+                  className="cs-btn flex items-center gap-1"
+                  onClick={() => exportJson(results)}
+                  title="Export full results as JSON"
+                >
+                  <FileJson className="w-3 h-3" />
+                  JSON
+                </button>
+                <button
+                  className="cs-btn flex items-center gap-1"
+                  onClick={() => handleDownload('json')}
+                >
+                  <Download className="w-3 h-3" />
+                  Report
+                </button>
               </div>
+            }
+          >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <MetricCard label="Open Ports" value={results.stats?.openPorts || 0} color="text-[var(--grok-success)]" />
+              <MetricCard label="Vulnerabilities" value={results.stats?.totalVulnerabilities || 0} color="text-[var(--grok-exploit-red)]" />
+              <MetricCard label="Subdomains" value={results.stats?.totalSubdomains || 0} />
+              <MetricCard label="Endpoints" value={results.stats?.totalEndpoints || results.httpEndpoints?.length || 0} />
+            </div>
 
-              {/* === TAB: VULNERABILITIES === */}
-              {activeTab === 'vulns' && (
-                <Panel
-                  title={`Vulnerabilities (${filteredVulns.length}${activeSeverities.size > 0 ? ' filtered' : ''})`}
-                  noPadding
-                >
-                  {results.vulnerabilities && results.vulnerabilities.length > 0 ? (
-                    <>
-                      <SeverityFilterBar
-                        counts={severityCounts}
-                        active={activeSeverities}
-                        onToggle={toggleSeverity}
-                        onClearAll={clearSeverityFilter}
-                        total={results.vulnerabilities.length}
-                      />
+            {/* Severity summary bar */}
+            {results.stats && results.stats.totalVulnerabilities > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {results.stats.criticalVulns > 0 && (
+                  <span className="px-2 py-0.5 text-xs rounded bg-red-900/30 text-red-400 border border-red-800">
+                    {results.stats.criticalVulns} CRIT
+                  </span>
+                )}
+                {results.stats.highVulns > 0 && (
+                  <span className="px-2 py-0.5 text-xs rounded bg-orange-900/30 text-orange-400 border border-orange-800">
+                    {results.stats.highVulns} HIGH
+                  </span>
+                )}
+                {results.stats.mediumVulns > 0 && (
+                  <span className="px-2 py-0.5 text-xs rounded bg-yellow-900/30 text-yellow-500 border border-yellow-800">
+                    {results.stats.mediumVulns} MED
+                  </span>
+                )}
+                {results.stats.lowVulns > 0 && (
+                  <span className="px-2 py-0.5 text-xs rounded bg-blue-900/30 text-blue-400 border border-blue-800">
+                    {results.stats.lowVulns} LOW
+                  </span>
+                )}
+              </div>
+            )}
+          </SectionPanel>
 
-                      {filteredVulns.length === 0 ? (
-                        <div className="p-6 text-center text-grok-text-muted text-sm">
-                          No vulnerabilities match the selected filters.
-                        </div>
-                      ) : (
-                        <div>
-                          {filteredVulns.map((vuln) => {
-                            const isExpanded = expandedVulnId === vuln.id;
-                            const cfg =
-                              SEVERITY_CONFIG[vuln.severity as Severity] ?? SEVERITY_CONFIG.info;
-                            return (
-                              <div key={vuln.id} className="border-b border-grok-border last:border-b-0">
-                                {/* Row */}
-                                <button
-                                  className={cn(
-                                    'w-full text-left p-4 hover:bg-grok-surface-1 transition-colors',
-                                    isExpanded && 'bg-grok-surface-1'
-                                  )}
-                                  onClick={() => toggleVuln(vuln.id)}
-                                  aria-expanded={isExpanded}
-                                  aria-controls={`vuln-detail-${vuln.id}`}
-                                >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="flex items-start gap-2 flex-1 min-w-0">
-                                      <ChevronDown
-                                        className={cn(
-                                          'w-4 h-4 text-grok-text-muted mt-0.5 flex-shrink-0 transition-transform duration-200',
-                                          !isExpanded && '-rotate-90'
-                                        )}
-                                      />
-                                      <div className="min-w-0">
-                                        <h4 className="text-sm font-medium text-grok-text-heading">
-                                          {vuln.title}
-                                        </h4>
-                                        <p className="text-xs text-grok-text-muted mt-0.5 line-clamp-1">
-                                          {vuln.description}
-                                        </p>
-                                        {vuln.cve && (
-                                          <span className="text-[10px] font-mono text-grok-recon-blue mt-1 block">
-                                            {vuln.cve}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 flex-shrink-0">
-                                      {vuln.cvss !== undefined && (
-                                        <span
-                                          className="text-xs font-mono font-bold"
-                                          style={{
-                                            color:
-                                              vuln.cvss >= 9.0
-                                                ? 'var(--grok-crit-red)'
-                                                : vuln.cvss >= 7.0
-                                                  ? 'var(--grok-exploit-red)'
-                                                  : vuln.cvss >= 4.0
-                                                    ? 'var(--grok-loot-gold)'
-                                                    : 'var(--grok-ok-green)',
-                                          }}
-                                        >
-                                          {vuln.cvss.toFixed(1)}
-                                        </span>
-                                      )}
-                                      <span
-                                        className={cn(
-                                          'px-2 py-0.5 rounded text-xs font-medium border',
-                                          cfg.bg,
-                                          cfg.text,
-                                          cfg.border
-                                        )}
-                                      >
-                                        {cfg.label}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </button>
-
-                                {/* Expanded detail */}
-                                {isExpanded && (
-                                  <div id={`vuln-detail-${vuln.id}`}>
-                                    <VulnDetailPanel
-                                      vuln={vuln}
-                                      target={selectedTarget}
-                                      copied={copied}
-                                      onCopy={copy}
-                                    />
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="p-6 text-center text-grok-text-muted text-sm">
-                      No vulnerabilities found for this target.
-                    </div>
+          {/* Tab navigation */}
+          <div className="cs-panel">
+            <div className="flex gap-0 border-b border-[var(--grok-border)]">
+              {(
+                [
+                  { id: 'vulns' as const, label: 'Vulnerabilities', count: results.vulnerabilities?.length },
+                  { id: 'ports' as const, label: 'Ports', count: results.ports?.length },
+                  { id: 'subdomains' as const, label: 'Subdomains', count: results.subdomains?.length },
+                  { id: 'raw' as const, label: 'Raw Output', count: results.rawOutput?.length },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    'px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 -mb-px transition-colors',
+                    activeTab === tab.id
+                      ? 'border-[var(--grok-recon-blue)] text-[var(--grok-recon-blue)]'
+                      : 'border-transparent text-[var(--grok-text-muted)] hover:text-[var(--grok-text-body)]'
                   )}
-                </Panel>
-              )}
-
-              {/* === TAB: PORTS === */}
-              {activeTab === 'ports' && (
-                <Panel
-                  title={`Ports Discovered (${results.ports?.length ?? 0})`}
-                  noPadding
                 >
-                  {results.ports && results.ports.length > 0 ? (
-                    <div>
-                      {/* Table header */}
-                      <div className="grid grid-cols-5 gap-0 bg-grok-surface-2 border-b border-grok-border px-4 py-2">
-                        {['Port', 'Proto', 'State', 'Service', 'Version'].map((h) => (
-                          <span key={h} className="text-xs font-medium text-grok-text-muted uppercase">
-                            {h}
-                          </span>
-                        ))}
+                  {tab.label}
+                  {tab.count ? (
+                    <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-[var(--grok-surface-2)] text-[var(--grok-text-muted)]">
+                      {tab.count}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+
+            {/* === TAB: VULNERABILITIES === */}
+            {activeTab === 'vulns' && (
+              <div>
+                {results.vulnerabilities && results.vulnerabilities.length > 0 ? (
+                  <>
+                    <SeverityFilterBar
+                      counts={severityCounts}
+                      active={activeSeverities}
+                      onToggle={toggleSeverity}
+                      onClearAll={clearSeverityFilter}
+                      total={results.vulnerabilities.length}
+                    />
+
+                    {filteredVulns.length === 0 ? (
+                      <div className="p-6 text-center text-[var(--grok-text-muted)] text-sm">
+                        No vulnerabilities match the selected filters.
                       </div>
-                      {results.ports.map((port, idx) => {
-                        const isExpanded = expandedPortIdx === idx;
-                        const hasBanner = !!(
-                          port.banner ||
-                          (port.scripts && Object.keys(port.scripts).length > 0)
-                        );
-                        return (
-                          <div key={idx} className="border-b border-grok-border last:border-b-0">
-                            <button
-                              className={cn(
-                                'w-full text-left px-4 py-2 hover:bg-grok-surface-1 transition-colors',
-                                isExpanded && 'bg-grok-surface-1'
-                              )}
-                              onClick={() => togglePort(idx)}
-                              aria-expanded={isExpanded}
-                            >
-                              <div className="grid grid-cols-5 gap-0 items-center text-sm">
-                                <div className="flex items-center gap-1.5">
-                                  {hasBanner ? (
+                    ) : (
+                      <div>
+                        {filteredVulns.map((vuln) => {
+                          const isExpanded = expandedVulnId === vuln.id;
+                          const cfg =
+                            SEVERITY_CONFIG[vuln.severity as Severity] ?? SEVERITY_CONFIG.info;
+                          return (
+                            <div key={vuln.id} className="border-b border-[var(--grok-border)] last:border-b-0">
+                              <button
+                                className={cn(
+                                  'w-full text-left p-4 hover:bg-[var(--grok-surface-1)] transition-colors',
+                                  isExpanded && 'bg-[var(--grok-surface-1)]'
+                                )}
+                                onClick={() => toggleVuln(vuln.id)}
+                                aria-expanded={isExpanded}
+                                aria-controls={`vuln-detail-${vuln.id}`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-start gap-2 flex-1 min-w-0">
                                     <ChevronDown
                                       className={cn(
-                                        'w-3.5 h-3.5 text-grok-text-muted transition-transform duration-200',
+                                        'w-4 h-4 text-[var(--grok-text-muted)] mt-0.5 flex-shrink-0 transition-transform duration-200',
                                         !isExpanded && '-rotate-90'
                                       )}
                                     />
-                                  ) : (
-                                    <span className="w-3.5" />
-                                  )}
-                                  <span className="font-mono text-grok-text-heading">
-                                    {port.port}
-                                  </span>
-                                </div>
-                                <span className="text-grok-text-body text-xs uppercase">
-                                  {port.protocol}
-                                </span>
-                                <span>
-                                  <span
-                                    className={cn(
-                                      'px-2 py-0.5 rounded text-xs font-medium',
-                                      port.state === 'open'
-                                        ? 'bg-green-500/20 text-green-400'
-                                        : 'bg-gray-500/20 text-gray-400'
+                                    <div className="min-w-0">
+                                      <h4 className="text-sm font-medium text-[var(--grok-text-heading)]">
+                                        {vuln.title}
+                                      </h4>
+                                      <p className="text-xs text-[var(--grok-text-muted)] mt-0.5 line-clamp-1">
+                                        {vuln.description}
+                                      </p>
+                                      {vuln.cve && (
+                                        <span className="text-[10px] font-mono text-[var(--grok-recon-blue)] mt-1 block">
+                                          {vuln.cve}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    {vuln.cvss !== undefined && (
+                                      <span
+                                        className="text-xs font-mono font-bold"
+                                        style={{
+                                          color:
+                                            vuln.cvss >= 9.0
+                                              ? 'var(--grok-crit-red)'
+                                              : vuln.cvss >= 7.0
+                                                ? 'var(--grok-exploit-red)'
+                                                : vuln.cvss >= 4.0
+                                                  ? 'var(--grok-loot-gold)'
+                                                  : 'var(--grok-ok-green)',
+                                        }}
+                                      >
+                                        {vuln.cvss.toFixed(1)}
+                                      </span>
                                     )}
-                                  >
-                                    {port.state}
-                                  </span>
-                                </span>
-                                <span className="text-grok-text-body text-xs">
-                                  {port.service || '-'}
-                                </span>
-                                <span className="text-grok-text-muted text-xs truncate">
-                                  {port.version || '-'}
-                                </span>
-                              </div>
-                            </button>
+                                    <span
+                                      className={cn(
+                                        'px-2 py-0.5 rounded text-xs font-medium border',
+                                        cfg.bg,
+                                        cfg.text,
+                                        cfg.border
+                                      )}
+                                    >
+                                      {cfg.label}
+                                    </span>
+                                  </div>
+                                </div>
+                              </button>
 
-                            {isExpanded && <PortDetailPanel port={port} />}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="p-6 text-center text-grok-text-muted text-sm">
-                      No ports discovered for this target.
-                    </div>
-                  )}
-                </Panel>
-              )}
-
-              {/* === TAB: SUBDOMAINS === */}
-              {activeTab === 'subdomains' && (
-                <div className="space-y-4">
-                  {results.subdomains && results.subdomains.length > 0 && (
-                    <Panel
-                      title={`Subdomains Discovered (${results.subdomains.length})`}
-                      noPadding
-                    >
-                      <div className="max-h-96 overflow-y-auto divide-y divide-grok-border">
-                        {results.subdomains.map((subdomain, idx) => (
-                          <div key={idx} className="px-4 py-2 hover:bg-grok-surface-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-grok-text-body font-mono">
-                                {subdomain.subdomain}
-                              </span>
-                              {subdomain.alive && (
-                                <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">
-                                  ALIVE
-                                </span>
+                              {isExpanded && (
+                                <div id={`vuln-detail-${vuln.id}`}>
+                                  <VulnDetailPanel
+                                    vuln={vuln}
+                                    target={selectedTarget}
+                                    copied={copied}
+                                    onCopy={copy}
+                                  />
+                                </div>
                               )}
                             </div>
-                            {subdomain.ipAddresses && subdomain.ipAddresses.length > 0 && (
-                              <p className="text-xs text-grok-text-muted mt-1">
-                                {subdomain.ipAddresses.join(', ')}
-                              </p>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
-                    </Panel>
-                  )}
-
-                  {results.httpEndpoints && results.httpEndpoints.length > 0 && (
-                    <Panel
-                      title={`HTTP Endpoints (${results.httpEndpoints.length})`}
-                      noPadding
-                    >
-                      <div className="max-h-64 overflow-y-auto divide-y divide-grok-border">
-                        {results.httpEndpoints.map((endpoint, idx) => (
-                          <div key={idx} className="px-4 py-3 hover:bg-grok-surface-1">
-                            <div className="flex items-center justify-between mb-1">
-                              <a
-                                href={endpoint.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-grok-recon-blue hover:underline font-mono"
-                              >
-                                {endpoint.url}
-                              </a>
-                              <span className="text-xs text-grok-text-muted">
-                                {endpoint.statusCode}
-                              </span>
-                            </div>
-                            {endpoint.title && (
-                              <p className="text-xs text-grok-text-body truncate">
-                                {endpoint.title}
-                              </p>
-                            )}
-                            {endpoint.technologies && endpoint.technologies.length > 0 && (
-                              <div className="flex gap-1 mt-2 flex-wrap">
-                                {endpoint.technologies.map((tech, i) => (
-                                  <span
-                                    key={i}
-                                    className="px-2 py-0.5 rounded text-xs bg-grok-surface-2 border border-grok-border text-grok-text-muted"
-                                  >
-                                    {tech}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </Panel>
-                  )}
-
-                  {results.technologies && results.technologies.length > 0 && (
-                    <Panel title="Technologies Detected">
-                      <div className="flex flex-wrap gap-2">
-                        {results.technologies.map((tech, idx) => (
-                          <div
-                            key={idx}
-                            className="px-3 py-2 bg-grok-surface-2 border border-grok-border rounded"
-                          >
-                            <p className="text-sm font-medium text-grok-text-heading">
-                              {tech.name}
-                              {tech.version && (
-                                <span className="text-grok-text-muted ml-1">v{tech.version}</span>
-                              )}
-                            </p>
-                            <p className="text-xs text-grok-text-muted mt-0.5">{tech.category}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </Panel>
-                  )}
-
-                  {(!results.subdomains || results.subdomains.length === 0) &&
-                    (!results.httpEndpoints || results.httpEndpoints.length === 0) &&
-                    (!results.technologies || results.technologies.length === 0) && (
-                      <Panel title="Subdomains">
-                        <div className="text-center py-8 text-grok-text-muted text-sm">
-                          No subdomain data available.
-                        </div>
-                      </Panel>
                     )}
-                </div>
-              )}
-
-              {/* === TAB: RAW OUTPUT === */}
-              {activeTab === 'raw' && (
-                <Panel title="Raw Output" noPadding>
-                  {results.rawOutput && results.rawOutput.length > 0 ? (
-                    <div className="max-h-[500px] overflow-y-auto">
-                      <pre className="p-4 text-xs font-mono text-grok-text-body leading-relaxed whitespace-pre-wrap">
-                        {results.rawOutput.join('\n')}
-                      </pre>
-                    </div>
-                  ) : (
-                    <div className="p-6 text-center text-grok-text-muted text-sm">
-                      No raw output available.
-                    </div>
-                  )}
-                  {results.errors && results.errors.length > 0 && (
-                    <div className="border-t border-grok-border">
-                      <div className="px-4 py-2 bg-red-900/10 border-b border-grok-border">
-                        <span className="text-xs font-semibold text-grok-exploit-red uppercase tracking-wide">
-                          Errors ({results.errors.length})
-                        </span>
-                      </div>
-                      <pre className="p-4 text-xs font-mono text-red-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
-                        {results.errors.join('\n')}
-                      </pre>
-                    </div>
-                  )}
-                </Panel>
-              )}
-            </div>
-          ) : (
-            <Panel title={selectedTarget ?? ''}>
-              <div className="text-center py-12">
-                <AlertCircle className="w-12 h-12 text-grok-text-muted mx-auto mb-3" />
-                <p className="text-grok-text-muted">No results available for this target</p>
+                  </>
+                ) : (
+                  <div className="p-6 text-center text-[var(--grok-text-muted)] text-sm">
+                    No vulnerabilities found for this target.
+                  </div>
+                )}
               </div>
-            </Panel>
-          )}
-        </div>
-      </div>
+            )}
+
+            {/* === TAB: PORTS === */}
+            {activeTab === 'ports' && (
+              <div>
+                {results.ports && results.ports.length > 0 ? (
+                  <div>
+                    <div className="grid grid-cols-5 gap-0 bg-[var(--grok-surface-2)] border-b border-[var(--grok-border)] px-4 py-2">
+                      {['Port', 'Proto', 'State', 'Service', 'Version'].map((h) => (
+                        <span key={h} className="text-xs font-medium text-[var(--grok-text-muted)] uppercase">
+                          {h}
+                        </span>
+                      ))}
+                    </div>
+                    {results.ports.map((port, idx) => {
+                      const isExpanded = expandedPortIdx === idx;
+                      const hasBanner = !!(
+                        port.banner ||
+                        (port.scripts && Object.keys(port.scripts).length > 0)
+                      );
+                      return (
+                        <div key={idx} className="border-b border-[var(--grok-border)] last:border-b-0">
+                          <button
+                            className={cn(
+                              'w-full text-left px-4 py-2 hover:bg-[var(--grok-surface-1)] transition-colors',
+                              isExpanded && 'bg-[var(--grok-surface-1)]'
+                            )}
+                            onClick={() => togglePort(idx)}
+                            aria-expanded={isExpanded}
+                          >
+                            <div className="grid grid-cols-5 gap-0 items-center text-sm">
+                              <div className="flex items-center gap-1.5">
+                                {hasBanner ? (
+                                  <ChevronDown
+                                    className={cn(
+                                      'w-3.5 h-3.5 text-[var(--grok-text-muted)] transition-transform duration-200',
+                                      !isExpanded && '-rotate-90'
+                                    )}
+                                  />
+                                ) : (
+                                  <span className="w-3.5" />
+                                )}
+                                <span className="font-mono text-[var(--grok-text-heading)]">
+                                  {port.port}
+                                </span>
+                              </div>
+                              <span className="text-[var(--grok-text-body)] text-xs uppercase">
+                                {port.protocol}
+                              </span>
+                              <span>
+                                <span
+                                  className={cn(
+                                    'px-2 py-0.5 rounded text-xs font-medium',
+                                    port.state === 'open'
+                                      ? 'bg-green-500/20 text-green-400'
+                                      : 'bg-gray-500/20 text-gray-400'
+                                  )}
+                                >
+                                  {port.state}
+                                </span>
+                              </span>
+                              <span className="text-[var(--grok-text-body)] text-xs">
+                                {port.service || '-'}
+                              </span>
+                              <span className="text-[var(--grok-text-muted)] text-xs truncate">
+                                {port.version || '-'}
+                              </span>
+                            </div>
+                          </button>
+
+                          {isExpanded && <PortDetailPanel port={port} />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-[var(--grok-text-muted)] text-sm">
+                    No ports discovered for this target.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* === TAB: SUBDOMAINS === */}
+            {activeTab === 'subdomains' && (
+              <div>
+                {results.subdomains && results.subdomains.length > 0 && (
+                  <div className="max-h-96 overflow-y-auto divide-y divide-[var(--grok-border)]">
+                    {results.subdomains.map((subdomain, idx) => (
+                      <div key={idx} className="px-4 py-2 hover:bg-[var(--grok-surface-1)]">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-[var(--grok-text-body)] font-mono">
+                            {subdomain.subdomain}
+                          </span>
+                          {subdomain.alive && (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">
+                              ALIVE
+                            </span>
+                          )}
+                        </div>
+                        {subdomain.ipAddresses && subdomain.ipAddresses.length > 0 && (
+                          <p className="text-xs text-[var(--grok-text-muted)] mt-1">
+                            {subdomain.ipAddresses.join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {results.httpEndpoints && results.httpEndpoints.length > 0 && (
+                  <div className="border-t border-[var(--grok-border)]">
+                    <div className="px-4 py-2 bg-[var(--grok-surface-2)] border-b border-[var(--grok-border)]">
+                      <span className="text-xs font-semibold text-[var(--grok-text-muted)] uppercase tracking-wide">
+                        HTTP Endpoints ({results.httpEndpoints.length})
+                      </span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto divide-y divide-[var(--grok-border)]">
+                      {results.httpEndpoints.map((endpoint, idx) => (
+                        <div key={idx} className="px-4 py-3 hover:bg-[var(--grok-surface-1)]">
+                          <div className="flex items-center justify-between mb-1">
+                            <a
+                              href={endpoint.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-[var(--grok-recon-blue)] hover:underline font-mono"
+                            >
+                              {endpoint.url}
+                            </a>
+                            <span className="text-xs text-[var(--grok-text-muted)]">
+                              {endpoint.statusCode}
+                            </span>
+                          </div>
+                          {endpoint.title && (
+                            <p className="text-xs text-[var(--grok-text-body)] truncate">
+                              {endpoint.title}
+                            </p>
+                          )}
+                          {endpoint.technologies && endpoint.technologies.length > 0 && (
+                            <div className="flex gap-1 mt-2 flex-wrap">
+                              {endpoint.technologies.map((tech, i) => (
+                                <span
+                                  key={i}
+                                  className="px-2 py-0.5 rounded text-xs bg-[var(--grok-surface-2)] border border-[var(--grok-border)] text-[var(--grok-text-muted)]"
+                                >
+                                  {tech}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {results.technologies && results.technologies.length > 0 && (
+                  <div className="border-t border-[var(--grok-border)] p-4">
+                    <p className="text-xs font-semibold text-[var(--grok-text-muted)] uppercase tracking-wide mb-3">
+                      Technologies Detected
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {results.technologies.map((tech, idx) => (
+                        <div
+                          key={idx}
+                          className="px-3 py-2 bg-[var(--grok-surface-2)] border border-[var(--grok-border)] rounded"
+                        >
+                          <p className="text-sm font-medium text-[var(--grok-text-heading)]">
+                            {tech.name}
+                            {tech.version && (
+                              <span className="text-[var(--grok-text-muted)] ml-1">v{tech.version}</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-[var(--grok-text-muted)] mt-0.5">{tech.category}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(!results.subdomains || results.subdomains.length === 0) &&
+                  (!results.httpEndpoints || results.httpEndpoints.length === 0) &&
+                  (!results.technologies || results.technologies.length === 0) && (
+                    <div className="p-6 text-center text-[var(--grok-text-muted)] text-sm">
+                      No subdomain or endpoint data available.
+                    </div>
+                  )}
+              </div>
+            )}
+
+            {/* === TAB: RAW OUTPUT === */}
+            {activeTab === 'raw' && (
+              <div>
+                {results.rawOutput && results.rawOutput.length > 0 ? (
+                  <div className="max-h-[500px] overflow-y-auto">
+                    <pre className="p-4 text-xs font-mono text-[var(--grok-text-body)] leading-relaxed whitespace-pre-wrap">
+                      {results.rawOutput.join('\n')}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-[var(--grok-text-muted)] text-sm">
+                    No raw output available.
+                  </div>
+                )}
+                {results.errors && results.errors.length > 0 && (
+                  <div className="border-t border-[var(--grok-border)]">
+                    <div className="px-4 py-2 bg-red-900/10 border-b border-[var(--grok-border)]">
+                      <span className="text-xs font-semibold text-[var(--grok-exploit-red)] uppercase tracking-wide">
+                        Errors ({results.errors.length})
+                      </span>
+                    </div>
+                    <pre className="p-4 text-xs font-mono text-red-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+                      {results.errors.join('\n')}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <SectionPanel title={selectedTarget ?? ''}>
+          <div className="text-center py-8">
+            <AlertCircle className="w-10 h-10 text-[var(--grok-text-muted)] mx-auto mb-3" />
+            <p className="text-sm text-[var(--grok-text-muted)]">No results available for this target</p>
+          </div>
+        </SectionPanel>
+      )}
     </div>
   );
 }

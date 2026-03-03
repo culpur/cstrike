@@ -11,6 +11,8 @@ interface UIStore {
   sidebarCollapsed: boolean;
   activeView: string;
   toasts: ToastNotification[];
+  workflowDrawerOpen: boolean;
+  workflowDrawerTarget: string | null;
 
   // Actions
   toggleSidebar: () => void;
@@ -19,6 +21,9 @@ interface UIStore {
   addToast: (toast: Omit<ToastNotification, 'id' | 'timestamp'>) => void;
   removeToast: (id: string) => void;
   clearToasts: () => void;
+  openWorkflowDrawer: (target?: string) => void;
+  closeWorkflowDrawer: () => void;
+  navigateToResultsWithTarget: (target: string) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -26,6 +31,8 @@ export const useUIStore = create<UIStore>((set) => ({
   sidebarCollapsed: false,
   activeView: 'dashboard',
   toasts: [],
+  workflowDrawerOpen: false,
+  workflowDrawerTarget: null,
 
   // Actions
   toggleSidebar: () =>
@@ -67,4 +74,17 @@ export const useUIStore = create<UIStore>((set) => ({
     })),
 
   clearToasts: () => set({ toasts: [] }),
+
+  openWorkflowDrawer: (target) =>
+    set({ workflowDrawerOpen: true, workflowDrawerTarget: target ?? null }),
+
+  closeWorkflowDrawer: () =>
+    set({ workflowDrawerOpen: false }),
+
+  navigateToResultsWithTarget: (target) =>
+    set({
+      activeView: 'results',
+      workflowDrawerOpen: false,
+      workflowDrawerTarget: target,
+    }),
 }));
