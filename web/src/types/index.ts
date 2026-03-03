@@ -392,7 +392,9 @@ export type WSMessageType =
   | 'task_completed'
   | 'task_failed'
   | 'case_gate_reached'
-  | 'case_phase_changed';
+  | 'case_phase_changed'
+  | 'port_discovered'
+  | 'subdomain_discovered';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

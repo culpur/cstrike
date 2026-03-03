@@ -112,9 +112,9 @@ export function useWebSocketHandlers() {
     const unsubSubdomainDiscovered = wsService.on<any>('subdomain_discovered', (data) => {
       addSubdomainResult({
         subdomain: data.subdomain,
-        ip: data.ip,
-        alive: true,
+        target: data.target || '',
         source: data.source || 'unknown',
+        discoveredAt: Date.now(),
       });
     });
 
