@@ -13,7 +13,7 @@ interface LootStore {
   stats: LootStats;
 
   // Actions
-  addLootItem: (item: Omit<LootItem, 'id' | 'timestamp'>) => void;
+  addLootItem: (item: Omit<LootItem, 'id' | 'timestamp'> & { timestamp?: number }) => void;
   addCredential: (credential: Omit<CredentialPair, 'id' | 'timestamp'>) => void;
   validateCredential: (id: string, validated: boolean) => void;
   removeLootItem: (id: string) => void;
@@ -76,10 +76,22 @@ export const useLootStore = create<LootStore>((set, get) => ({
   // Actions
   addLootItem: (item) =>
     set((state) => {
+      // Deduplicate by value + category + target to prevent double-add
+      // when historical API load races with live WebSocket events.
+      const isDupe = state.items.some(
+        (existing) =>
+          existing.value === item.value &&
+          existing.category === item.category &&
+          existing.target === item.target,
+      );
+      if (isDupe) return state;
+
       const newItem: LootItem = {
         ...item,
         id: generateId(),
-        timestamp: Date.now(),
+        // Preserve the original timestamp from persisted API data when provided;
+        // fall back to Date.now() for live WebSocket events that carry no timestamp.
+        timestamp: item.timestamp ?? Date.now(),
       };
 
       const items = [...state.items, newItem];

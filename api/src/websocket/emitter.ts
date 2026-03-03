@@ -240,3 +240,26 @@ export function emitExploitTrackSpawned(data: {
 }) {
   io?.emit('exploit_track_spawned', data);
 }
+
+// ── Terminal / Shell session events ──────────────────────────────────────────
+
+export function emitTerminalOutput(data: {
+  sessionId: string;
+  output: string;
+}) {
+  io?.emit('terminal_output', data);
+}
+
+export function emitTerminalSessionCreated(data: {
+  sessionId: string;
+  type: string;
+  target: string;
+}) {
+  io?.emit('terminal_session_created', data);
+}
+
+export function emitTerminalSessionClosed(data: {
+  sessionId: string;
+}) {
+  io?.emit('terminal_session_closed', data);
+}

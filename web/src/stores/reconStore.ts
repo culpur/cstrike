@@ -13,6 +13,7 @@ import type {
   CompleteScanResults,
 } from '@/types';
 import { generateId } from '@utils/index';
+import { apiService } from '@services/api';
 
 interface ReconStore {
   // State
@@ -25,6 +26,7 @@ interface ReconStore {
   completedScans: Map<string, CompleteScanResults>; // scanId -> results
 
   // Actions
+  loadTargets: () => Promise<void>;
   addTarget: (url: string) => void;
   removeTarget: (id: string) => void;
   updateTargetStatus: (id: string, status: Target['status']) => void;
@@ -67,6 +69,28 @@ export const useReconStore = create<ReconStore>((set, get) => ({
   completedScans: new Map(),
 
   // Actions
+  loadTargets: async () => {
+    try {
+      const urls = await apiService.getTargets();
+      set((state) => {
+        // Collect URLs already in the store to avoid duplicates.
+        const existingUrls = new Set(state.targets.map((t) => t.url));
+        const newTargets: Target[] = urls
+          .filter((url) => !existingUrls.has(url))
+          .map((url) => ({
+            id: generateId(),
+            url,
+            addedAt: Date.now(),
+            status: 'pending' as const,
+          }));
+        if (newTargets.length === 0) return state;
+        return { targets: [...state.targets, ...newTargets] };
+      });
+    } catch {
+      // API unreachable — store stays with whatever is already in memory.
+    }
+  },
+
   addTarget: (url) =>
     set((state) => ({
       targets: [

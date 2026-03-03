@@ -33,6 +33,7 @@ import { exploitRouter } from './routes/exploit.js';
 import { casesRouter } from './routes/cases.js';
 import { campaignsRouter } from './routes/campaigns.js';
 import { wordlistsRouter } from './routes/wordlists.js';
+import { terminalRouter } from './routes/terminal.js';
 
 // Services
 import { startMetricsCollector } from './services/metricsCollector.js';
@@ -70,6 +71,7 @@ api.use('/ai', aiRouter);
 api.use('/vulnapi', vulnapiRouter);
 api.use('/mcp', mcpRouter);
 api.use('/vpn', vpnRouter);
+api.use('/terminal', terminalRouter);
 
 app.use('/api/v1', api);
 

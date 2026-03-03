@@ -17,6 +17,10 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     sudo curl wget netcat-openbsd procps iproute2 openssl \
     python3 python3-pip python3-venv \
     vim nano \
+    git \
+    redis-server \
+    nfs-kernel-server \
+    bash \
     && rm -rf /var/lib/apt/lists/*
 
 # Weak user accounts (use -f to ignore existing)
@@ -40,7 +44,8 @@ RUN mkdir -p /var/run/sshd && \
     ssh-keygen -A
 
 # Apache + PHP vulnerable webapp
-RUN a2enmod rewrite && \
+# Enable CGI module and headers for Shellshock and .git exposure
+RUN a2enmod rewrite cgi headers && \
     echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
     echo "Listen 80" > /etc/apache2/ports.conf
 COPY webapp/ /var/www/vulnbox/
@@ -49,6 +54,12 @@ RUN a2dissite 000-default && a2ensite vulnbox && \
     chown -R www-data:www-data /var/www/vulnbox && \
     chmod -R 777 /var/www/vulnbox/uploads && \
     chmod -R 755 /var/www/vulnbox/secret
+
+# CGI directory for Shellshock
+RUN mkdir -p /usr/lib/cgi-bin && \
+    chmod 755 /usr/lib/cgi-bin
+COPY config/cgi-bin/status.cgi /usr/lib/cgi-bin/status.cgi
+RUN chmod 755 /usr/lib/cgi-bin/status.cgi
 
 # MySQL seed
 COPY scripts/seed.sql /docker-entrypoint-initdb.d/seed.sql
@@ -73,9 +84,31 @@ RUN mkdir -p /srv/samba/public /srv/samba/backups && \
     echo "Database backup - admin:password123" > /srv/samba/backups/db_backup_notes.txt && \
     (echo "password123"; echo "password123") | smbpasswd -a -s admin 2>/dev/null || true
 
-# Flask API
+# Flask API — install PyJWT and requests for new vulnerabilities
+RUN pip3 install --break-system-packages --no-cache-dir flask flask-cors pymysql pyjwt requests 2>/dev/null || true
 COPY api/ /opt/vulnapi/
-RUN pip3 install --break-system-packages --no-cache-dir flask flask-cors pymysql 2>/dev/null || true
+
+# Redis — no auth, bound to all interfaces
+COPY config/redis.conf /etc/redis/redis.conf
+RUN chown redis:redis /etc/redis/redis.conf
+
+# NFS exports — no_root_squash (scanner-detectable configuration)
+RUN mkdir -p /export/public /export/backups && \
+    chmod 777 /export/public /export/backups && \
+    echo "# Sensitive data in NFS export" > /export/backups/server-config.txt && \
+    echo "DB_PASSWORD=SuperSecret2024!" >> /export/backups/server-config.txt && \
+    echo "API_KEY=master-key-do-not-share-98765" >> /export/backups/server-config.txt
+COPY config/exports /etc/exports
+
+# Wildcard injection + writable cron setup
+RUN mkdir -p /opt/scripts && \
+    chmod 777 /opt/scripts && \
+    echo "#!/bin/bash" > /opt/scripts/placeholder.sh && \
+    echo "echo 'backup running'" >> /opt/scripts/placeholder.sh && \
+    chmod 755 /opt/scripts/placeholder.sh
+COPY config/cron.d/wildcard-backup /etc/cron.d/wildcard-backup
+RUN chmod 644 /etc/cron.d/wildcard-backup && \
+    chmod 777 /etc/cron.d/
 
 # Cron (persistence vector)
 RUN echo "*/5 * * * * root curl -s http://localhost/ > /dev/null 2>&1" > /etc/cron.d/health-check && \
@@ -90,6 +123,6 @@ COPY supervisord.conf /etc/supervisor/conf.d/vulnbox.conf
 COPY scripts/init.sh /opt/init.sh
 RUN chmod +x /opt/init.sh
 
-EXPOSE 22 80 21 3306 161/udp 9090 445 21000-21010
+EXPOSE 22 80 21 3306 161/udp 9090 445 21000-21010 6379
 
 CMD ["/opt/init.sh"]

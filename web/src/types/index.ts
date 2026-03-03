@@ -395,7 +395,10 @@ export type WSMessageType =
   | 'case_phase_changed'
   | 'port_discovered'
   | 'subdomain_discovered'
-  | 'exploit_track_spawned';
+  | 'exploit_track_spawned'
+  | 'terminal_output'
+  | 'terminal_session_created'
+  | 'terminal_session_closed';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

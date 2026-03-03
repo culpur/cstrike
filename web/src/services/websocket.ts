@@ -191,6 +191,24 @@ class WebSocketService {
     this.socket.on('scan_started', (data) => {
       this.handleServerMessage('scan_started', data);
     });
+
+    // Terminal / shell session events
+    this.socket.on('terminal_output', (data) => {
+      this.handleServerMessage('terminal_output', data);
+    });
+
+    this.socket.on('terminal_session_created', (data) => {
+      this.handleServerMessage('terminal_session_created', data);
+    });
+
+    this.socket.on('terminal_session_closed', (data) => {
+      this.handleServerMessage('terminal_session_closed', data);
+    });
+
+    // Exploit track spawned
+    this.socket.on('exploit_track_spawned', (data) => {
+      this.handleServerMessage('exploit_track_spawned', data);
+    });
   }
 
   /**

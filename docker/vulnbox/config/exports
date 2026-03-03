@@ -1,0 +1,11 @@
+# VulnBox NFS exports — deliberately insecure
+# no_root_squash: remote root has full root access to the share
+# no_subtree_check: disables subtree checking (default but explicit here)
+# rw: read-write access
+# * : all hosts allowed
+#
+# Exploit: mount -t nfs <target>:/export/public /mnt && ls /mnt
+# With no_root_squash: touch /mnt/.ssh/authorized_keys (as root)
+
+/export/public  *(rw,sync,no_subtree_check,no_root_squash,insecure)
+/export/backups *(rw,sync,no_subtree_check,no_root_squash,insecure)

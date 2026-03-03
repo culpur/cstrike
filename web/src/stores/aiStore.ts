@@ -4,6 +4,7 @@
 
 import { create } from 'zustand';
 import type { AIThought, AIDecision } from '@/types';
+import { apiService } from '@services/api';
 
 interface AIStore {
   // State
@@ -13,14 +14,15 @@ interface AIStore {
   maxThoughts: number;
 
   // Actions
-  addThought: (thought: Omit<AIThought, 'id' | 'timestamp'>) => void;
+  loadThoughts: () => Promise<void>;
+  addThought: (thought: Omit<AIThought, 'id' | 'timestamp'> & { timestamp?: number }) => void;
   addDecision: (decision: Omit<AIDecision, 'id' | 'timestamp'>) => void;
   setThinking: (thinking: boolean) => void;
   clearThoughts: () => void;
   reset: () => void;
 }
 
-export const useAIStore = create<AIStore>((set) => ({
+export const useAIStore = create<AIStore>((set, get) => ({
   // Initial state
   thoughts: [],
   decisions: [],
@@ -28,6 +30,25 @@ export const useAIStore = create<AIStore>((set) => ({
   maxThoughts: 1000, // Keep last 1000 thoughts
 
   // Actions
+  loadThoughts: async () => {
+    try {
+      const raw = await apiService.getAIThoughts();
+      const { addThought } = get();
+      for (const t of raw) {
+        addThought({
+          thoughtType: t.thoughtType as AIThought['thoughtType'],
+          content: t.content,
+          command: t.command,
+          metadata: t.metadata,
+          // Preserve the original DB timestamp so historical thoughts sort correctly.
+          timestamp: t.timestamp,
+        });
+      }
+    } catch {
+      // API unreachable — store stays with whatever is already in memory.
+    }
+  },
+
   addThought: (thought) =>
     set((state) => {
       // Deduplicate — skip if we already have a thought with the same type + content
@@ -40,7 +61,8 @@ export const useAIStore = create<AIStore>((set) => ({
       const newThought: AIThought = {
         ...thought,
         id: `thought-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: Date.now(),
+        // Preserve timestamp from persisted data when provided; use Date.now() for live events.
+        timestamp: thought.timestamp ?? Date.now(),
       };
 
       const thoughts = [...state.thoughts, newThought];

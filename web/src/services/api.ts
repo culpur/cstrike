@@ -620,9 +620,54 @@ class ApiService {
   // ============================================================================
 
   async executeCommand(command: string): Promise<any> {
-    // Backend: POST /tools/execute  body: {command}
-    const { data } = await this.client.post('/tools/execute', { command }, { timeout: 120000 });
+    // Backend: POST /terminal/execute  body: {command}
+    const { data } = await this.client.post('/terminal/execute', { command }, { timeout: 120000 });
     return data.data || data;
+  }
+
+  // ============================================================================
+  // Terminal Sessions
+  // ============================================================================
+
+  async executeTerminalCommand(command: string, sessionId?: string): Promise<{ output: string; exitCode: number; sessionId: string }> {
+    const body: Record<string, unknown> = { command };
+    if (sessionId) body.sessionId = sessionId;
+    const { data } = await this.client.post('/terminal/execute', body, { timeout: 120000 });
+    return data.data || data;
+  }
+
+  async createTerminalSession(params: {
+    type?: 'local' | 'ssh' | 'reverse_shell' | 'bind_shell';
+    host?: string;
+    port?: number;
+    user?: string;
+    target?: string;
+  }): Promise<any> {
+    const { data } = await this.client.post('/terminal/sessions', params, { timeout: 30000 });
+    return data.data || data;
+  }
+
+  async getTerminalSessions(): Promise<any[]> {
+    const { data } = await this.client.get('/terminal/sessions');
+    return data.data || [];
+  }
+
+  async closeTerminalSession(sessionId: string): Promise<void> {
+    await this.client.delete(`/terminal/sessions/${sessionId}`);
+  }
+
+  async executeInSession(sessionId: string, command: string): Promise<{ output: string; exitCode: number; sessionId: string }> {
+    const { data } = await this.client.post(
+      `/terminal/sessions/${sessionId}/execute`,
+      { command },
+      { timeout: 120000 },
+    );
+    return data.data || data;
+  }
+
+  async getSessionOutput(sessionId: string): Promise<{ lines: string[]; active: boolean }> {
+    const { data } = await this.client.get(`/terminal/sessions/${sessionId}/output`);
+    return data.data || { lines: [], active: false };
   }
 }
 

@@ -16,6 +16,8 @@ import { useLootStore } from '@stores/lootStore';
 import { useUIStore } from '@stores/uiStore';
 import { useNotificationStore } from '@stores/notificationStore';
 import { useExploitTrackStore } from '@stores/exploitTrackStore';
+import { useTerminalStore } from '@stores/terminalStore';
+import { apiService } from '@services/api';
 import type { SystemMetrics, ServiceStatus } from '@/types';
 
 export function useWebSocketHandlers() {
@@ -205,7 +207,7 @@ export function useWebSocketHandlers() {
     );
 
     // ── Shell obtained ─────────────────────────────────────────
-    const unsubShellObtained = wsService.on<any>('shell_obtained', (data) => {
+    const unsubShellObtained = wsService.on<any>('shell_obtained', async (data) => {
       const host = data.host || data.target || 'target';
       const shellType = data.type || data.shell_type || 'shell';
       addNotification({
@@ -214,6 +216,44 @@ export function useWebSocketHandlers() {
         message: `${shellType.toUpperCase()} shell established on ${host}${data.port ? `:${data.port}` : ''}`,
         severity: 'critical',
       });
+
+      // Auto-create a terminal session tab for the obtained shell
+      try {
+        const sessionData = await apiService.createTerminalSession({
+          type: shellType === 'ssh' ? 'ssh' : shellType === 'bind' ? 'bind_shell' : 'reverse_shell',
+          host,
+          port: data.port ?? (shellType === 'ssh' ? 22 : 4444),
+          user: data.user ?? data.username ?? undefined,
+          target: host,
+        });
+
+        if (sessionData?.id) {
+          useTerminalStore.getState().addSession({
+            id: sessionData.id,
+            type: sessionData.type,
+            target: sessionData.target ?? host,
+            host: sessionData.host ?? host,
+            port: sessionData.port ?? 4444,
+            user: sessionData.user,
+            createdAt: sessionData.createdAt ?? Date.now(),
+            lastActivity: sessionData.lastActivity ?? Date.now(),
+            active: true,
+          });
+
+          addToast({
+            type: 'success',
+            message: `Shell obtained on ${host} — terminal tab opened`,
+            duration: 6000,
+          });
+        }
+      } catch {
+        // Shell tab creation failure should not break the notification
+        addToast({
+          type: 'warning',
+          message: `Shell obtained on ${host} — could not auto-open terminal tab`,
+          duration: 5000,
+        });
+      }
     });
 
     // ── Scan started ───────────────────────────────────────────
@@ -426,6 +466,49 @@ export function useWebSocketHandlers() {
       });
     });
 
+    // ── Terminal output streaming ──────────────────────────────
+    const { appendOutput, addSession, markSessionInactive } = useTerminalStore.getState();
+
+    const unsubTerminalOutput = wsService.on<any>('terminal_output', (data) => {
+      if (data.sessionId && data.output) {
+        // Split multi-line chunks and append each line
+        const lines: string[] = data.output.split('\n');
+        for (const line of lines) {
+          appendOutput(data.sessionId, line);
+        }
+      }
+    });
+
+    const unsubTerminalSessionCreated = wsService.on<any>('terminal_session_created', (data) => {
+      if (data.sessionId) {
+        // Session may already be in store if the REST response beat the WS event
+        const existing = useTerminalStore.getState().sessions.find((s) => s.id === data.sessionId);
+        if (!existing) {
+          addSession({
+            id: data.sessionId,
+            type: data.type ?? 'reverse_shell',
+            target: data.target ?? data.sessionId,
+            host: data.target ?? data.sessionId,
+            port: 0,
+            createdAt: Date.now(),
+            lastActivity: Date.now(),
+            active: true,
+          });
+        }
+      }
+    });
+
+    const unsubTerminalSessionClosed = wsService.on<any>('terminal_session_closed', (data) => {
+      if (data.sessionId) {
+        markSessionInactive(data.sessionId);
+        addToast({
+          type: 'warning',
+          message: `Terminal session closed: ${data.sessionId.substring(0, 8)}...`,
+          duration: 4000,
+        });
+      }
+    });
+
     // ── Connection health check ────────────────────────────────
     const connectionCheck = setInterval(() => {
       setConnected(wsService.isConnected());
@@ -457,6 +540,9 @@ export function useWebSocketHandlers() {
       unsubGateReached();
       unsubPhaseChanged();
       unsubTrackSpawned();
+      unsubTerminalOutput();
+      unsubTerminalSessionCreated();
+      unsubTerminalSessionClosed();
       clearInterval(connectionCheck);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

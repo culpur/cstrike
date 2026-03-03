@@ -89,9 +89,9 @@ const PORT_COLORS = ['#2266ff', '#00ccdd', '#8844ff', '#00cc66', '#ffaa00', '#ff
 
 export function DashboardView() {
   const { metrics, services, phaseProgress, connected } = useSystemStore();
-  const { targets } = useReconStore();
-  const { stats: lootStats, items: lootItems } = useLootStore();
-  const { thoughts } = useAIStore();
+  const { targets, loadTargets } = useReconStore();
+  const { stats: lootStats, items: lootItems, addLootItem } = useLootStore();
+  const { thoughts, loadThoughts } = useAIStore();
   const { addToast, setActiveView } = useUIStore();
   const exploitTracks = useExploitTrackStore((s) => s.tracks);
   const [activeScans, setActiveScans] = useState<ActiveScan[]>([]);
@@ -156,6 +156,38 @@ export function DashboardView() {
     apiService.getTargets().then((t) => {
       if (t.length > 0 && !scanTarget) setScanTarget(t[0]);
     }).catch(() => {});
+  }, []); // eslint-disable-line
+
+  // Hydrate reconStore targets from the DB on first mount so the Target counter
+  // and scan-launcher dropdown reflect persisted data after a page reload.
+  useEffect(() => {
+    loadTargets();
+  }, []); // eslint-disable-line
+
+  // Hydrate lootStore from the DB on first mount.  We fetch all loot items
+  // (target = 'all') and add them individually.  addLootItem deduplicates by
+  // value + category + target so live WebSocket events arriving later won't
+  // create duplicates.  Historical timestamps are preserved so the Findings
+  // Activity graph reflects real scan times rather than the current wall-clock.
+  useEffect(() => {
+    const hydrateLoot = async () => {
+      try {
+        const items = await apiService.getLoot('all');
+        for (const item of items) {
+          addLootItem(item);
+        }
+      } catch {
+        // API unreachable — loot store stays empty until WebSocket delivers live data.
+      }
+    };
+    hydrateLoot();
+  }, []); // eslint-disable-line
+
+  // Hydrate aiStore thoughts from the DB on first mount.  addThought deduplicates
+  // by thoughtType + content so live WebSocket events arriving later won't repeat
+  // thoughts already loaded from history.
+  useEffect(() => {
+    loadThoughts();
   }, []); // eslint-disable-line
 
   const launchScan = useCallback(async () => {
