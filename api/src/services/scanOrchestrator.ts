@@ -208,6 +208,8 @@ class ScanOrchestrator {
   ) {
     const toolHistory: ToolRunSummary[] = [];
     let iteration = 0;
+    let consecutiveSkips = 0;
+    const MAX_CONSECUTIVE_SKIPS = 3;
     let gateHit = false;
 
     emitPhaseChange({ phase: 'recon', target, status: 'running' });
@@ -238,6 +240,23 @@ class ScanOrchestrator {
 
     // ── Phase 2: AI-driven loop ─────────────────────────────────────────
     while (iteration < MAX_AI_ITERATIONS && !state?.cancelled && !gateHit) {
+      // Check if there are any tools left to run
+      const executedSet = new Set(toolHistory.map((h) => h.tool));
+      const remainingCount = ALL_AVAILABLE_TOOLS.filter((t) => !executedSet.has(t)).length;
+      if (remainingCount === 0) {
+        emitLogEntry({
+          level: 'INFO',
+          source: 'orchestrator',
+          message: 'All available tools have been executed — scan complete',
+        });
+        await aiService.recordDecision({
+          decision: 'Scan complete — all available tools exhausted',
+          rationale: `Executed ${toolHistory.length} tools against target, no remaining tools available`,
+          scanId,
+        });
+        break;
+      }
+
       // Build context for AI analysis
       const analysisPrompt = this.buildAIPrompt(target, toolHistory, operationMode);
 
@@ -337,33 +356,64 @@ class ScanOrchestrator {
 
       // Validate the tool exists
       if (!ALL_AVAILABLE_TOOLS.includes(recommendation.tool)) {
+        consecutiveSkips++;
         emitLogEntry({
           level: 'WARN',
           source: 'ai',
-          message: `AI recommended unknown tool "${recommendation.tool}" — skipping`,
+          message: `AI recommended unknown tool "${recommendation.tool}" — skipping (${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS})`,
         });
         await aiService.recordObservation({
           observation: `Skipped unknown tool: ${recommendation.tool}`,
           source: 'ai',
           scanId,
         });
+        if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
+          emitLogEntry({
+            level: 'WARN',
+            source: 'orchestrator',
+            message: `${MAX_CONSECUTIVE_SKIPS} consecutive invalid recommendations — ending AI loop`,
+          });
+          await aiService.recordDecision({
+            decision: 'Scan ended — AI could not recommend a valid next tool',
+            rationale: `After ${MAX_CONSECUTIVE_SKIPS} consecutive skipped recommendations, the AI pipeline was terminated`,
+            scanId,
+          });
+          break;
+        }
         continue;
       }
 
       // Skip tools we've already run
       if (toolHistory.some((h) => h.tool === recommendation.tool)) {
+        consecutiveSkips++;
         emitLogEntry({
           level: 'INFO',
           source: 'ai',
-          message: `AI recommended ${recommendation.tool} but already ran — asking for alternative`,
+          message: `AI recommended ${recommendation.tool} but already ran — asking for alternative (${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS})`,
         });
         await aiService.recordObservation({
           observation: `Skipped ${recommendation.tool}: already executed`,
           source: 'ai',
           scanId,
         });
+        if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
+          emitLogEntry({
+            level: 'WARN',
+            source: 'orchestrator',
+            message: `${MAX_CONSECUTIVE_SKIPS} consecutive skipped tools — AI keeps recommending already-executed tools, ending scan`,
+          });
+          await aiService.recordDecision({
+            decision: 'Scan complete — AI exhausted available tool recommendations',
+            rationale: `AI repeatedly recommended already-executed tools after ${toolHistory.length} tools completed`,
+            scanId,
+          });
+          break;
+        }
         continue;
       }
+
+      // Valid tool selected — reset skip counter
+      consecutiveSkips = 0;
 
       // Record the AI's decision
       await aiService.recordDecision({
@@ -522,7 +572,9 @@ class ScanOrchestrator {
     toolHistory: ToolRunSummary[],
     operationMode: OperationMode,
   ): string {
-    const toolList = ALL_AVAILABLE_TOOLS.join(', ');
+    const executedSet = new Set(toolHistory.map((h) => h.tool));
+    const remainingTools = ALL_AVAILABLE_TOOLS.filter((t) => !executedSet.has(t));
+    const toolList = remainingTools.length > 0 ? remainingTools.join(', ') : 'NONE';
     const alreadyRan = toolHistory.map((h) => h.tool).join(', ');
 
     const resultsSummary = toolHistory
@@ -543,8 +595,8 @@ You are conducting a security assessment of target: ${target}
 
 OPERATION MODE: ${operationMode.toUpperCase()}${gateNote}
 
-AVAILABLE TOOLS: ${toolList}
-ALREADY EXECUTED: ${alreadyRan || 'none'}
+TOOLS NOT YET EXECUTED (choose from these ONLY): ${toolList}
+ALREADY EXECUTED (do NOT recommend these again): ${alreadyRan || 'none'}
 
 ## RESULTS SO FAR
 
@@ -553,17 +605,18 @@ ${resultsSummary || 'No tools have been executed yet.'}
 ## YOUR TASK
 
 Analyze the scan results above and decide what to do next.
+IMPORTANT: You must ONLY recommend a tool from the "TOOLS NOT YET EXECUTED" list above. Do NOT recommend any tool from the "ALREADY EXECUTED" list.
 Consider:
 1. What attack surface has been revealed?
 2. What services, technologies, and potential vulnerabilities have been identified?
-3. What tool would provide the most value next?
-4. Are we done with reconnaissance?
+3. What tool from the NOT YET EXECUTED list would provide the most value next?
+4. Are we done with reconnaissance? If all valuable paths are explored, say DONE.
 
 ## RESPONSE FORMAT
 
 Respond with EXACTLY this format:
 
-NEXT_TOOL: <tool_name or DONE>
+NEXT_TOOL: <tool_name from NOT YET EXECUTED list, or DONE>
 REASONING: <1-3 sentences explaining why>
 OBSERVATIONS: <key findings from the latest results — ports, services, technologies, potential attack vectors>
 
