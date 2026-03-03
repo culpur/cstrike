@@ -265,18 +265,17 @@ class ApiService {
     const { data } = await this.client.get(`/loot/${encodedTarget}`);
 
     const items: LootItem[] = [];
-    const t = target === 'all' ? 'unknown' : target;
 
-    // Parse the nested {category: [{id, value, source, metadata, timestamp}]} structure
+    // Parse the nested {category: [{id, value, source, target, metadata, timestamp}]} structure
     const byCategory = data.data?.items || data.items || {};
     for (const [category, categoryItems] of Object.entries(byCategory)) {
-      for (const item of categoryItems as Array<{ id: string; value: string; source: string; timestamp: number }>) {
+      for (const item of categoryItems as Array<{ id: string; value: string; source: string; target?: string; timestamp: number }>) {
         items.push({
           id: item.id || `${category}-${items.length}`,
           category: category as LootCategory,
           value: item.value,
           source: item.source || 'unknown',
-          target: t,
+          target: item.target || (target === 'all' ? 'unknown' : target),
           timestamp: item.timestamp || Date.now(),
         });
       }

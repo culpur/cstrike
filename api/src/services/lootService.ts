@@ -198,6 +198,7 @@ class LootService {
   /**
    * Extract loot from raw tool output and persist it.
    * Called by scanOrchestrator after each tool completes.
+   * Also creates CredentialPair records when username+password pairs are found.
    */
   async extractFromOutput(
     output: string,
@@ -207,9 +208,85 @@ class LootService {
     const extracted = this.parseOutput(output, source);
     if (extracted.length === 0) return 0;
 
-    return this.addBulk(
+    const count = await this.addBulk(
       extracted.map((e) => ({ ...e, source, targetId })),
     );
+
+    // Create CredentialPair records from extracted username+password pairs
+    await this.pairCredentials(extracted, source, targetId).catch(() => {});
+
+    return count;
+  }
+
+  /**
+   * Pair extracted usernames and passwords into CredentialPair records with scoring.
+   * Handles hydra/medusa-style combined output as well as separate matches.
+   */
+  private async pairCredentials(
+    extracted: ExtractedLoot[],
+    source: string,
+    targetId?: string,
+  ): Promise<void> {
+    const usernames = extracted.filter((e) => e.category === 'USERNAME').map((e) => e.value);
+    const passwords = extracted.filter((e) => e.category === 'PASSWORD').map((e) => e.value);
+
+    if (usernames.length === 0 || passwords.length === 0) return;
+
+    // Pair them 1:1 when counts match (same tool output), otherwise cross-product
+    const pairs: Array<{ username: string; password: string }> = [];
+    if (usernames.length === passwords.length) {
+      for (let i = 0; i < usernames.length; i++) {
+        pairs.push({ username: usernames[i], password: passwords[i] });
+      }
+    } else {
+      // Cross-product but capped to prevent explosion
+      for (const u of usernames) {
+        for (const p of passwords) {
+          pairs.push({ username: u, password: p });
+          if (pairs.length >= 50) break;
+        }
+        if (pairs.length >= 50) break;
+      }
+    }
+
+    // Infer service from source tool
+    const serviceMap: Record<string, string> = {
+      hydra: 'ssh', medusa: 'ssh', ncrack: 'ssh',
+      sqlmap: 'mysql', enum4linux: 'smb', smbclient: 'smb',
+      ftp: 'ftp', smtp: 'smtp',
+    };
+    const service = serviceMap[source.toLowerCase()] ?? 'unknown';
+
+    for (const { username, password } of pairs) {
+      // Deduplicate: skip if this exact pair already exists for this target
+      const existing = await prisma.credentialPair.findFirst({
+        where: { targetId: targetId ?? null, username, password },
+      });
+      if (existing) continue;
+
+      // Score the credential
+      const scoreResult = await this.scoreCredential(username, password, service);
+
+      await prisma.credentialPair.create({
+        data: {
+          targetId: targetId ?? null,
+          username,
+          password,
+          service,
+          score: scoreResult.score,
+          scoreBreakdown: scoreResult.breakdown as any,
+          source,
+        },
+      });
+
+      // Emit credential_extracted WebSocket event
+      emitLootItem({
+        category: 'credential',
+        value: `${username}:***`,
+        source,
+        target: targetId ?? 'unknown',
+      });
+    }
   }
 
   /**
@@ -278,6 +355,20 @@ class LootService {
       while ((m = re.exec(output)) !== null) {
         const category: LootCategoryInput = pattern.source.startsWith('Bearer') ? 'SESSION' : 'API_KEY';
         push(category, m[1].trim());
+      }
+    }
+
+    // Credential pairs — hydra/medusa combined output: "login: admin  password: secret"
+    const credPairPatterns = [
+      /\[(?:\d+)\]\[(?:\w+)\]\s+host:\s*\S+\s+login:\s*(\S+)\s+password:\s*(\S+)/gi,
+      /\[\+\]\s+(\S+):(\S+)\s/gi,
+    ];
+    for (const pattern of credPairPatterns) {
+      let m: RegExpExecArray | null;
+      const re = new RegExp(pattern.source, pattern.flags);
+      while ((m = re.exec(output)) !== null) {
+        push('USERNAME', m[1].trim());
+        push('PASSWORD', m[2].trim());
       }
     }
 

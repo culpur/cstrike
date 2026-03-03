@@ -44,16 +44,21 @@ lootRouter.get('/:target', async (req, res, next) => {
   try {
     const { target } = req.params;
 
-    const where: Prisma.LootItemWhereInput = {
-      OR: [
-        { target: { url: { contains: target, mode: 'insensitive' } } },
-        { target: { hostname: { contains: target, mode: 'insensitive' } } },
-        { targetId: target },
-      ],
-    };
+    // 'all' is a special value: return every loot item without target filtering
+    const where: Prisma.LootItemWhereInput =
+      target === 'all'
+        ? {}
+        : {
+            OR: [
+              { target: { url: { contains: target, mode: 'insensitive' } } },
+              { target: { hostname: { contains: target, mode: 'insensitive' } } },
+              { targetId: target },
+            ],
+          };
 
     const items = await prisma.lootItem.findMany({
       where,
+      include: { target: { select: { url: true, hostname: true } } },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -66,6 +71,7 @@ lootRouter.get('/:target', async (req, res, next) => {
         id: item.id,
         value: item.value,
         source: item.source,
+        target: (item as any).target?.url ?? (item as any).target?.hostname ?? item.targetId ?? 'unknown',
         metadata: item.metadata,
         timestamp: item.createdAt.getTime(),
       });
