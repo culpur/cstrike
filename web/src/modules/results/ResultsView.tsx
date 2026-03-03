@@ -930,7 +930,7 @@ export function ResultsView() {
 
           {/* Tab navigation */}
           <div className="cs-panel">
-            <div className="flex gap-0 border-b border-[var(--grok-border)]">
+            <div className="flex gap-1 border-b border-[var(--grok-border)] px-2">
               {(
                 [
                   { id: 'vulns' as const, label: 'Vulnerabilities', count: results.vulnerabilities?.length },
@@ -943,7 +943,7 @@ export function ResultsView() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 -mb-px transition-colors',
+                    'px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 -mb-px transition-colors whitespace-nowrap',
                     activeTab === tab.id
                       ? 'border-[var(--grok-recon-blue)] text-[var(--grok-recon-blue)]'
                       : 'border-transparent text-[var(--grok-text-muted)] hover:text-[var(--grok-text-body)]'
