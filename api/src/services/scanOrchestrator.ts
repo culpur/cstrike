@@ -7,7 +7,7 @@ import { prisma } from '../config/database.js';
 import { toolExecutor } from './toolExecutor.js';
 import { lootService } from './lootService.js';
 import { getConfigValue } from '../middleware/guardrails.js';
-import { emitPhaseChange, emitReconOutput, emitScanComplete, emitLogEntry } from '../websocket/emitter.js';
+import { emitPhaseChange, emitReconOutput, emitScanComplete, emitLogEntry, emitPortDiscovered, emitSubdomainDiscovered } from '../websocket/emitter.js';
 
 // Active scan tracking for cancellation
 const activeScans = new Map<string, { cancelled: boolean }>();
@@ -101,6 +101,11 @@ class ScanOrchestrator {
             source: tool,
           },
         });
+
+        // Emit structured discoveries from tool output
+        if (result.output && !result.error) {
+          this.emitDiscoveries(tool, target, result.output, scanId);
+        }
 
         // Extract loot from tool output (credentials, ports, URLs, etc.)
         if (result.output && !result.error) {
@@ -201,6 +206,44 @@ class ScanOrchestrator {
           'nmap', 'subfinder', 'httpx', 'nikto', 'waybackurls',
           'gobuster', 'whatweb', 'sslscan', 'nuclei',
         ];
+    }
+  }
+
+  /**
+   * Parse tool output and emit structured port/subdomain discoveries.
+   */
+  private emitDiscoveries(tool: string, target: string, output: string, scanId: string) {
+    // Parse nmap output for open ports
+    if (['nmap', 'masscan', 'rustscan'].includes(tool)) {
+      const portRegex = /^(\d+)\/(tcp|udp)\s+(open)\s+(\S+)\s*(.*)/gm;
+      let match;
+      while ((match = portRegex.exec(output)) !== null) {
+        emitPortDiscovered({
+          port: parseInt(match[1], 10),
+          protocol: match[2],
+          state: match[3],
+          service: match[4],
+          version: (match[5] || '').trim(),
+          target,
+          scan_id: scanId,
+        });
+      }
+    }
+
+    // Parse subfinder/amass output for subdomains
+    if (['subfinder', 'amass', 'dnsenum', 'dnsrecon'].includes(tool)) {
+      const lines = output.split('\n').filter((l) => l.trim());
+      for (const line of lines) {
+        const subdomain = line.trim();
+        if (subdomain && subdomain.includes('.') && !subdomain.startsWith('[')) {
+          emitSubdomainDiscovered({
+            subdomain,
+            target,
+            source: tool,
+            scan_id: scanId,
+          });
+        }
+      }
     }
   }
 

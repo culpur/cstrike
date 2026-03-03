@@ -25,7 +25,7 @@ export function useWebSocketHandlers() {
     setConnected,
     setPhaseComplete,
   } = useSystemStore();
-  const { addReconOutput } = useReconStore();
+  const { addReconOutput, addPortScanResult, addSubdomainResult } = useReconStore();
   const { addThought } = useAIStore();
   const { addLog } = useLogStore();
   const { addLootItem } = useLootStore();
@@ -93,6 +93,28 @@ export function useWebSocketHandlers() {
         event: data.event,
         progress: data.progress,
         scan_id: data.scan_id,
+      });
+    });
+
+    // ── Port discovered ───────────────────────────────────────
+    const unsubPortDiscovered = wsService.on<any>('port_discovered', (data) => {
+      addPortScanResult({
+        port: data.port,
+        protocol: data.protocol || 'tcp',
+        state: data.state || 'open',
+        service: data.service || 'unknown',
+        version: data.version || '',
+        target: data.target || '',
+      });
+    });
+
+    // ── Subdomain discovered ────────────────────────────────
+    const unsubSubdomainDiscovered = wsService.on<any>('subdomain_discovered', (data) => {
+      addSubdomainResult({
+        subdomain: data.subdomain,
+        ip: data.ip,
+        alive: true,
+        source: data.source || 'unknown',
       });
     });
 
@@ -269,6 +291,8 @@ export function useWebSocketHandlers() {
       unsubStatus();
       unsubPhase();
       unsubRecon();
+      unsubPortDiscovered();
+      unsubSubdomainDiscovered();
       unsubScanComplete();
       unsubVulnDiscovered();
       unsubCredExtracted();

@@ -131,6 +131,28 @@ export function emitVulnapiOutput(data: {
   io?.emit('vulnapi_output', data);
 }
 
+export function emitPortDiscovered(data: {
+  port: number;
+  protocol: string;
+  state: string;
+  service: string;
+  version: string;
+  target: string;
+  scan_id?: string;
+}) {
+  io?.emit('port_discovered', data);
+}
+
+export function emitSubdomainDiscovered(data: {
+  subdomain: string;
+  ip?: string;
+  target: string;
+  source: string;
+  scan_id?: string;
+}) {
+  io?.emit('subdomain_discovered', data);
+}
+
 // ── Exploit Case / Task events ───────────────────────────────
 
 export function emitTaskCreated(data: {
