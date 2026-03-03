@@ -936,30 +936,29 @@ export function ResultsView() {
 
           {/* Tab navigation */}
           <div className="cs-panel">
-            <div className="grid grid-cols-4 gap-0 p-3 border-b border-[var(--grok-border)]">
+            <div className="flex gap-2 p-3 border-b border-[var(--grok-border)]">
               {(
                 [
-                  { id: 'vulns' as const, label: 'Vulnerabilities', count: results.vulnerabilities?.length },
+                  { id: 'vulns' as const, label: 'Vulns', count: results.vulnerabilities?.length },
                   { id: 'ports' as const, label: 'Ports', count: results.ports?.length },
-                  { id: 'subdomains' as const, label: 'Subdomains', count: results.subdomains?.length },
-                  { id: 'raw' as const, label: 'Raw Output', count: results.rawOutput?.length },
+                  { id: 'subdomains' as const, label: 'Subs', count: results.subdomains?.length },
+                  { id: 'raw' as const, label: 'Raw', count: results.rawOutput?.length },
                 ] as const
               ).map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'py-2 text-xs font-semibold uppercase tracking-wider border transition-all whitespace-nowrap text-center',
+                    'flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wider rounded border transition-all',
                     activeTab === tab.id
                       ? 'bg-[var(--grok-recon-blue)] border-[var(--grok-recon-blue)] text-white shadow-[0_0_10px_rgba(34,102,255,0.3)]'
-                      : 'bg-[var(--grok-surface-2)] border-[var(--grok-border)] text-[var(--grok-text-muted)] hover:bg-[var(--grok-surface-3)] hover:border-[var(--grok-border-glow)] hover:text-[var(--grok-text-body)]',
-                    'first:rounded-l last:rounded-r -ml-px first:ml-0'
+                      : 'bg-[var(--grok-surface-2)] border-[var(--grok-border)] text-[var(--grok-text-muted)] hover:bg-[var(--grok-surface-3)] hover:border-[var(--grok-border-glow)] hover:text-[var(--grok-text-body)]'
                   )}
                 >
-                  {tab.label}
+                  <span>{tab.label}</span>
                   {tab.count ? (
                     <span className={cn(
-                      'ml-2 px-2 py-0.5 text-[10px] rounded font-mono font-bold',
+                      'px-1.5 py-0.5 text-[10px] rounded font-mono font-bold leading-none',
                       activeTab === tab.id
                         ? 'bg-white/20 text-white'
                         : 'bg-[var(--grok-void)] text-[var(--grok-text-muted)] border border-[var(--grok-border)]'
