@@ -394,7 +394,8 @@ export type WSMessageType =
   | 'case_gate_reached'
   | 'case_phase_changed'
   | 'port_discovered'
-  | 'subdomain_discovered';
+  | 'subdomain_discovered'
+  | 'exploit_track_spawned';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;
