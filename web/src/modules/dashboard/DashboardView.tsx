@@ -56,6 +56,8 @@ import { useReconStore } from '@stores/reconStore';
 import { useLootStore } from '@stores/lootStore';
 import { useAIStore } from '@stores/aiStore';
 import { useUIStore } from '@stores/uiStore';
+import { useExploitTrackStore } from '@stores/exploitTrackStore';
+import { ExploitTrackPanel } from '@modules/exploitation/components/ExploitTrackPanel';
 import { apiService } from '@services/api';
 import { formatPercent, formatUptime, getPhaseDisplayName, formatNumber } from '@utils/index';
 import type { PhaseProgress, ServiceStatus } from '@/types';
@@ -91,6 +93,7 @@ export function DashboardView() {
   const { stats: lootStats, items: lootItems } = useLootStore();
   const { thoughts } = useAIStore();
   const { addToast, setActiveView } = useUIStore();
+  const exploitTracks = useExploitTrackStore((s) => s.tracks);
   const [activeScans, setActiveScans] = useState<ActiveScan[]>([]);
   const [scanTarget, setScanTarget] = useState('');
   const [launching, setLaunching] = useState(false);
@@ -570,6 +573,9 @@ export function DashboardView() {
               )}
             </div>
           </div>
+
+          {/* Exploitation Tracks (shown during active scans) */}
+          {exploitTracks.length > 0 && <ExploitTrackPanel tracks={exploitTracks} />}
         </div>
 
         {/* ── Right column: Loot + AI + Findings ───────────────── */}

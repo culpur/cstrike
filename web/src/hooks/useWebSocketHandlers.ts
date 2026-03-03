@@ -15,6 +15,7 @@ import { useLogStore } from '@stores/logStore';
 import { useLootStore } from '@stores/lootStore';
 import { useUIStore } from '@stores/uiStore';
 import { useNotificationStore } from '@stores/notificationStore';
+import { useExploitTrackStore } from '@stores/exploitTrackStore';
 import type { SystemMetrics, ServiceStatus } from '@/types';
 
 export function useWebSocketHandlers() {
@@ -405,6 +406,26 @@ export function useWebSocketHandlers() {
       });
     });
 
+    // ── Exploit track spawned ───────────────────────────────────
+    const { addTrack } = useExploitTrackStore.getState();
+
+    const unsubTrackSpawned = wsService.on<any>('exploit_track_spawned', (data) => {
+      addTrack({ ...data, spawnedAt: Date.now() });
+
+      addNotification({
+        type: data.mode === 'full-auto' ? 'scan_started' : 'gate_reached',
+        title: 'Exploitation Track Spawned',
+        message: `${data.trigger} → ${data.taskCount} tasks (${data.autoCount} auto, ${data.gatedCount} gated)`,
+        severity: 'high',
+      });
+
+      addToast({
+        type: data.gatedCount > 0 && data.mode !== 'full-auto' ? 'warning' : 'info',
+        message: `Exploit track: ${data.trigger} → ${data.taskCount} tasks`,
+        duration: 6000,
+      });
+    });
+
     // ── Connection health check ────────────────────────────────
     const connectionCheck = setInterval(() => {
       setConnected(wsService.isConnected());
@@ -435,6 +456,7 @@ export function useWebSocketHandlers() {
       unsubTaskFailed();
       unsubGateReached();
       unsubPhaseChanged();
+      unsubTrackSpawned();
       clearInterval(connectionCheck);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

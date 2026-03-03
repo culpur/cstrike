@@ -227,3 +227,16 @@ export function emitCasePhaseChanged(data: {
 }) {
   io?.emit('case_phase_changed', data);
 }
+
+export function emitExploitTrackSpawned(data: {
+  scanId: string;
+  caseId: string;
+  trigger: string;
+  taskCount: number;
+  autoCount: number;
+  gatedCount: number;
+  mode: string;
+  tasks: Array<{ tool: string; target: string; phase: string }>;
+}) {
+  io?.emit('exploit_track_spawned', data);
+}

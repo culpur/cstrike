@@ -33,13 +33,13 @@ import {
 export const casesRouter = Router();
 
 // Active task processes for cancellation
-const activeProcesses = new Map<string, { cancelled: boolean }>();
+export const activeProcesses = new Map<string, { cancelled: boolean }>();
 
 // ---------------------------------------------------------------------------
 // Helper: run a task in background
 // ---------------------------------------------------------------------------
 
-async function executeTask(taskId: string, caseId: string) {
+export async function executeTask(taskId: string, caseId: string) {
   const task = await prisma.exploitTask.findUnique({ where: { id: taskId } });
   if (!task || task.status !== 'QUEUED') return;
 
@@ -133,7 +133,7 @@ async function executeTask(taskId: string, caseId: string) {
   }
 }
 
-async function reanalyzeAfterTask(caseId: string, targetId: string) {
+export async function reanalyzeAfterTask(caseId: string, targetId: string) {
   if (!targetId) return;
   try {
     const recs = await intelligenceEngine.analyzeFindings(caseId, targetId);
@@ -159,7 +159,7 @@ async function reanalyzeAfterTask(caseId: string, targetId: string) {
 // Feed findings to AI for strategic analysis
 // ---------------------------------------------------------------------------
 
-async function feedFindingsToAI(caseId: string, targetId: string) {
+export async function feedFindingsToAI(caseId: string, targetId: string) {
   if (!targetId) return;
   try {
     const target = await prisma.target.findUnique({ where: { id: targetId } });
@@ -249,14 +249,14 @@ async function feedFindingsToAI(caseId: string, targetId: string) {
 // Simple findings parser
 // ---------------------------------------------------------------------------
 
-interface Finding {
+export interface Finding {
   type: 'vulnerability' | 'credential' | 'endpoint' | 'info';
   severity?: string;
   title: string;
   detail: string;
 }
 
-function parseFindingsFromOutput(output: string, tool: string): Finding[] {
+export function parseFindingsFromOutput(output: string, tool: string): Finding[] {
   const findings: Finding[] = [];
   if (!output) return findings;
 

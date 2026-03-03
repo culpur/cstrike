@@ -23,6 +23,7 @@ import {
   emitSubdomainDiscovered,
   emitCaseGateReached,
 } from '../websocket/emitter.js';
+import { exploitTrackManager } from './exploitTrackManager.js';
 
 // Active scan tracking for cancellation
 const activeScans = new Map<string, { cancelled: boolean }>();
@@ -107,6 +108,9 @@ class ScanOrchestrator {
         message: `Scan starting in ${operationMode.toUpperCase()} mode against ${target}`,
       });
 
+      // Register scan with exploit track manager for concurrent exploitation
+      exploitTrackManager.registerScan(scanId, targetId, operationMode);
+
       if (operationMode === 'manual') {
         await this.runManualPipeline(scanId, target, targetId, requestedTools, mode, state);
       } else {
@@ -153,6 +157,7 @@ class ScanOrchestrator {
 
     } finally {
       activeScans.delete(scanId);
+      exploitTrackManager.cleanupScan(scanId);
     }
   }
 
@@ -258,7 +263,7 @@ class ScanOrchestrator {
       }
 
       // Build context for AI analysis
-      const analysisPrompt = this.buildAIPrompt(target, toolHistory, operationMode);
+      const analysisPrompt = await this.buildAIPrompt(target, targetId, toolHistory, operationMode);
 
       emitLogEntry({
         level: 'INFO',
@@ -515,9 +520,29 @@ class ScanOrchestrator {
             source: 'loot',
             message: `Extracted ${lootCount} loot items from ${tool}`,
           });
+
+          // Trigger concurrent exploitation evaluation if findings warrant it
+          const ctx = exploitTrackManager.getScanContext(scanId);
+          if (ctx && ctx.operationMode !== 'manual') {
+            setImmediate(() => {
+              exploitTrackManager.evaluateFindings(scanId, targetId, tool, ctx.operationMode)
+                .catch((err) => console.error('[ExploitTrack] Evaluation failed:', err.message));
+            });
+          }
         }
       } catch (err: any) {
         console.error(`[Loot] Extraction failed for ${tool}:`, err.message);
+      }
+    }
+
+    // Port scan tools always produce actionable findings — trigger evaluation
+    if (['nmap', 'masscan', 'rustscan'].includes(tool) && result.output && !result.error) {
+      const ctx = exploitTrackManager.getScanContext(scanId);
+      if (ctx && ctx.operationMode !== 'manual') {
+        setImmediate(() => {
+          exploitTrackManager.evaluateFindings(scanId, targetId, tool, ctx.operationMode)
+            .catch((err) => console.error('[ExploitTrack] Port evaluation failed:', err.message));
+        });
       }
     }
 
@@ -567,11 +592,12 @@ class ScanOrchestrator {
 
   // ── AI prompt construction ────────────────────────────────────────────────
 
-  private buildAIPrompt(
+  private async buildAIPrompt(
     target: string,
+    targetId: string,
     toolHistory: ToolRunSummary[],
     operationMode: OperationMode,
-  ): string {
+  ): Promise<string> {
     const executedSet = new Set(toolHistory.map((h) => h.tool));
     const remainingTools = ALL_AVAILABLE_TOOLS.filter((t) => !executedSet.has(t));
     const toolList = remainingTools.length > 0 ? remainingTools.join(', ') : 'NONE';
@@ -590,6 +616,13 @@ class ScanOrchestrator {
         ? '\nFull-auto mode: you may recommend exploitation tools without restriction.'
         : '';
 
+    // Add concurrent exploitation context if available
+    let exploitSection = '';
+    const exploitCtx = await exploitTrackManager.getExploitContext(targetId);
+    if (exploitCtx) {
+      exploitSection = `\n\n## CONCURRENT EXPLOITATION FINDINGS\n${exploitCtx}\n`;
+    }
+
     return `You are the AI orchestrator for CStrike, an offensive security automation platform.
 You are conducting a security assessment of target: ${target}
 
@@ -601,7 +634,7 @@ ALREADY EXECUTED (do NOT recommend these again): ${alreadyRan || 'none'}
 ## RESULTS SO FAR
 
 ${resultsSummary || 'No tools have been executed yet.'}
-
+${exploitSection}
 ## YOUR TASK
 
 Analyze the scan results above and decide what to do next.
