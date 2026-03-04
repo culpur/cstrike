@@ -101,6 +101,10 @@ export interface ReconOutput {
   event?: string; // tool_start, tool_complete, tool_error, tool_timeout, tool_retry, tool_failed
   progress?: string; // "5/15" format showing completed/total tools
   scan_id?: string;
+  rawOutput?: string;
+  exitCode?: number;
+  duration?: number;
+  targetId?: string;
 }
 
 // ============================================================================
