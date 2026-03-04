@@ -799,6 +799,93 @@ class ScanOrchestrator {
     if (!state?.cancelled && !state?.paused) {
       await this.waitForExploitTasks(scanId, targetId, target, state);
     }
+
+    // ── Phase 4: AI-driven exploitation loop ─────────────────────────
+    // After ETM tasks complete, run the AI exploitation planning loop
+    // to recommend targeted exploitation tools (sqlmap, zap, metasploit, hydra, etc.)
+    if (!state?.cancelled && !state?.paused && operationMode !== 'manual') {
+      emitLogEntry({
+        level: 'INFO',
+        source: 'orchestrator',
+        message: 'Starting AI exploitation planning loop',
+      });
+
+      emitPhaseChange({ phase: 'exploit', target, status: 'running' });
+      await prisma.scan.update({
+        where: { id: scanId },
+        data: { phase: 'EXPLOITATION' },
+      });
+
+      const MAX_EXPLOIT_ITERATIONS = 10;
+      let exploitIteration = 0;
+
+      while (exploitIteration < MAX_EXPLOIT_ITERATIONS) {
+        if (state?.cancelled || state?.paused) break;
+        exploitIteration++;
+
+        const exploitPrompt = await this.buildAIPrompt(target, targetId, toolHistory, operationMode, 'exploitation');
+        const recommendation = await aiService.getRecommendation(exploitPrompt, target);
+
+        if (!recommendation) {
+          emitLogEntry({ level: 'WARN', source: 'orchestrator', message: 'AI returned no recommendation for exploitation' });
+          break;
+        }
+
+        await aiService.recordDecision({
+          decision: recommendation.tool === 'DONE'
+            ? 'Exploitation planning complete'
+            : `Run ${recommendation.tool} for exploitation`,
+          rationale: recommendation.reasoning,
+          selectedTool: recommendation.tool === 'DONE' ? undefined : recommendation.tool,
+          scanId,
+        });
+
+        if (recommendation.tool === 'DONE') {
+          emitLogEntry({
+            level: 'INFO',
+            source: 'orchestrator',
+            message: `AI exploitation loop complete — ${recommendation.reasoning}`,
+          });
+          break;
+        }
+
+        // Execute the recommended exploitation tool
+        iteration++;
+        const result = await this.executeTool(scanId, targetId, target, recommendation.tool, `${iteration}/?`);
+
+        const summary = this.summarizeResult(result);
+        toolHistory.push(summary);
+
+        // Store result
+        await prisma.scanResult.create({
+          data: {
+            scanId,
+            source: recommendation.tool,
+            severity: 'info',
+            data: {
+              tool: recommendation.tool,
+              output: result.output,
+              exitCode: result.exitCode,
+              duration: result.duration,
+              error: result.error,
+              phase: 'exploitation',
+            },
+          },
+        });
+
+        // Parse and store loot
+        await lootService.parseAndStore(result.output, recommendation.tool, targetId, target);
+
+        emitReconOutput({
+          target,
+          tool: recommendation.tool,
+          output: result.output,
+          exitCode: result.exitCode,
+          duration: result.duration,
+          phase: 'exploitation',
+        });
+      }
+    }
   }
 
   /**
