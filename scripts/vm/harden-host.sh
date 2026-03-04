@@ -124,8 +124,9 @@ install hfsplus /bin/true
 install jffs2 /bin/true
 install squashfs /bin/true
 install udf /bin/true
-install fat /bin/true
-install vfat /bin/true
+# fat/vfat needed for EFI partition mount — do NOT blacklist
+# install fat /bin/true
+# install vfat /bin/true
 
 # USB storage (not needed on VM)
 install usb-storage /bin/true
@@ -373,6 +374,8 @@ cat > /etc/fail2ban/jail.local << 'EOF'
 # Derived from puppet fail2ban module
 
 [DEFAULT]
+# Whitelist QEMU user-mode networking gateway (host SSH comes from 10.0.2.2)
+ignoreip = 127.0.0.1/8 ::1 10.0.2.2
 bantime = 600
 bantime.increment = true
 bantime.factor = 24
