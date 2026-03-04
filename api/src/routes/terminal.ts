@@ -1,7 +1,7 @@
 /**
  * Terminal routes — interactive shell sessions and one-shot command execution.
  *
- * POST   /api/v1/terminal/execute                 — one-shot command (local)
+ * POST   /api/v1/terminal/execute                 — streaming command (local)
  * POST   /api/v1/terminal/sessions                — create SSH/shell session
  * GET    /api/v1/terminal/sessions                — list active sessions
  * DELETE /api/v1/terminal/sessions/:id            — close a session
@@ -9,7 +9,6 @@
  */
 
 import { Router } from 'express';
-import { exec } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -33,6 +32,7 @@ export interface SessionInfo {
   host: string;
   port: number;
   user?: string;
+  password?: string;
   createdAt: number;
   lastActivity: number;
   active: boolean;
@@ -100,35 +100,71 @@ terminalRouter.post('/execute', async (req, res, next) => {
       }
     }
 
-    // One-shot local execution
+    // Streaming local execution via spawn
     const execSessionId = sessionId ?? `local-${Date.now()}`;
 
-    const output = await new Promise<string>((resolve, reject) => {
-      exec(
-        command,
-        {
-          timeout: 60_000,
-          maxBuffer: 10 * 1024 * 1024,
-          env: { ...process.env },
-          shell: '/bin/bash',
-        },
-        (err, stdout, stderr) => {
-          const combined = [stdout, stderr].filter(Boolean).join('\n').trim();
-          if (err && !combined) {
-            reject(new Error(err.message));
-          } else {
-            resolve(combined);
-          }
-        },
-      );
+    // Create a transient session so the process is tracked and can receive stdin
+    const now = Date.now();
+    const transientSession: SessionInfo = {
+      id: execSessionId,
+      type: 'local',
+      target: 'localhost',
+      host: 'localhost',
+      port: 0,
+      createdAt: now,
+      lastActivity: now,
+      active: true,
+      outputBuffer: [],
+    };
+
+    const proc = spawn('/bin/bash', ['-c', command], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, TERM: 'xterm-256color' },
     });
 
-    // Broadcast via WebSocket
-    emitTerminalOutput({ sessionId: execSessionId, output });
+    transientSession.process = proc;
+    sessions.set(execSessionId, transientSession);
 
+    proc.stdout.on('data', (chunk: Buffer) => {
+      const text = chunk.toString();
+      appendToBuffer(transientSession, text);
+      emitTerminalOutput({ sessionId: execSessionId, output: text });
+    });
+
+    proc.stderr.on('data', (chunk: Buffer) => {
+      const text = chunk.toString();
+      appendToBuffer(transientSession, text);
+      emitTerminalOutput({ sessionId: execSessionId, output: text });
+    });
+
+    proc.on('close', (code) => {
+      const s = sessions.get(execSessionId);
+      if (s) {
+        s.active = false;
+        s.process = undefined;
+      }
+      emitTerminalOutput({
+        sessionId: execSessionId,
+        output: `\n[Process exited with code ${code ?? 0}]`,
+      });
+    });
+
+    proc.on('error', (err) => {
+      emitTerminalOutput({
+        sessionId: execSessionId,
+        output: `[ERROR] ${err.message}\n`,
+      });
+      const s = sessions.get(execSessionId);
+      if (s) {
+        s.active = false;
+        s.process = undefined;
+      }
+    });
+
+    // Return immediately — output streams via WebSocket
     return res.json({
       success: true,
-      data: { sessionId: execSessionId, output, exitCode: 0 },
+      data: { sessionId: execSessionId, output: '', exitCode: 0, streaming: true },
       timestamp: Date.now(),
     });
   } catch (err) {
@@ -140,11 +176,12 @@ terminalRouter.post('/execute', async (req, res, next) => {
 
 terminalRouter.post('/sessions', async (req, res, next) => {
   try {
-    const { type, host, port, user, target } = req.body as {
+    const { type, host, port, user, password, target } = req.body as {
       type?: SessionType;
       host?: string;
       port?: number;
       user?: string;
+      password?: string;
       target?: string;
     };
 
@@ -163,6 +200,7 @@ terminalRouter.post('/sessions', async (req, res, next) => {
       host: sessionHost,
       port: sessionPort,
       user: sessionUser,
+      password: password,
       createdAt: now,
       lastActivity: now,
       active: true,
@@ -179,6 +217,9 @@ terminalRouter.post('/sessions', async (req, res, next) => {
         '-o', 'StrictHostKeyChecking=no',
         '-o', 'UserKnownHostsFile=/dev/null',
         '-o', 'ConnectTimeout=10',
+        '-o', 'ServerAliveInterval=30',
+        '-o', 'ServerAliveCountMax=3',
+        '-tt',
         '-p', String(sessionPort),
       ];
 
@@ -188,7 +229,18 @@ terminalRouter.post('/sessions', async (req, res, next) => {
         sshArgs.push(sessionHost);
       }
 
-      const sshProcess = spawn('ssh', sshArgs, {
+      // Use sshpass for password-based authentication
+      let spawnCmd: string;
+      let spawnArgs: string[];
+      if (password) {
+        spawnCmd = 'sshpass';
+        spawnArgs = ['-p', password, 'ssh', ...sshArgs];
+      } else {
+        spawnCmd = 'ssh';
+        spawnArgs = sshArgs;
+      }
+
+      const sshProcess = spawn(spawnCmd, spawnArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, TERM: 'xterm-256color' },
       });
@@ -357,43 +409,45 @@ terminalRouter.post('/sessions/:id/execute', async (req, res, next) => {
       });
     }
 
-    // Otherwise run as an isolated exec (stateless local fallback)
-    const output = await new Promise<{ out: string; exitCode: number }>((resolve) => {
-      const proc = exec(
-        command.trim(),
-        {
-          timeout: 60_000,
-          maxBuffer: 10 * 1024 * 1024,
-          env: { ...process.env },
-          shell: '/bin/bash',
-        },
-        (err, stdout, stderr) => {
-          const combined = [stdout, stderr].filter(Boolean).join('\n').trim();
-          resolve({ out: combined, exitCode: err?.code ?? 0 });
-        },
-      );
-
-      // Stream partial output as it arrives
-      proc.stdout?.on('data', (chunk: Buffer) => {
-        const text = chunk.toString();
-        appendToBuffer(session, text);
-        emitTerminalOutput({ sessionId: id, output: text });
-      });
-
-      proc.stderr?.on('data', (chunk: Buffer) => {
-        const text = chunk.toString();
-        appendToBuffer(session, text);
-        emitTerminalOutput({ sessionId: id, output: text });
-      });
+    // Spawn a streaming local process for this session
+    const proc = spawn('/bin/bash', ['-c', command.trim()], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, TERM: 'xterm-256color' },
     });
 
-    console.log(
-      `[Terminal] ${id} executed: ${cleanForLog(command.trim()).substring(0, 80)}, exit=${output.exitCode}`,
-    );
+    session.process = proc;
+
+    proc.stdout.on('data', (chunk: Buffer) => {
+      const text = chunk.toString();
+      appendToBuffer(session, text);
+      emitTerminalOutput({ sessionId: id, output: text });
+    });
+
+    proc.stderr.on('data', (chunk: Buffer) => {
+      const text = chunk.toString();
+      appendToBuffer(session, text);
+      emitTerminalOutput({ sessionId: id, output: text });
+    });
+
+    proc.on('close', (code) => {
+      session.process = undefined;
+      emitTerminalOutput({
+        sessionId: id,
+        output: `\n[Process exited with code ${code ?? 0}]`,
+      });
+      console.log(
+        `[Terminal] ${id} executed: ${cleanForLog(command.trim()).substring(0, 80)}, exit=${code}`,
+      );
+    });
+
+    proc.on('error', (err) => {
+      session.process = undefined;
+      emitTerminalOutput({ sessionId: id, output: `[ERROR] ${err.message}\n` });
+    });
 
     return res.json({
       success: true,
-      data: { sessionId: id, output: output.out, exitCode: output.exitCode },
+      data: { sessionId: id, output: '', exitCode: 0, streaming: true },
       timestamp: Date.now(),
     });
   } catch (err) {

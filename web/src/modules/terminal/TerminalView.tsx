@@ -20,7 +20,6 @@ import {
 import {
   Terminal,
   Play,
-  Square,
   Trash2,
   Download,
   ChevronUp,
@@ -29,7 +28,6 @@ import {
   Check,
   Maximize2,
   Minimize2,
-  Zap,
   X,
   MonitorDot,
   Network,
@@ -37,6 +35,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@utils/index';
 import { apiService } from '@services/api';
+import { wsService } from '@services/websocket';
 import { useUIStore } from '@stores/uiStore';
 import { useTerminalStore } from '@stores/terminalStore';
 import type { ShellSession, ShellSessionType } from '@stores/terminalStore';
@@ -190,13 +189,14 @@ function sessionTabLabel(session: ShellSession): string {
 
 interface NewSSHDialogProps {
   onClose: () => void;
-  onCreate: (params: { type: ShellSessionType; host: string; port: number; user?: string }) => void;
+  onCreate: (params: { type: ShellSessionType; host: string; port: number; user?: string; password?: string }) => void;
 }
 
 function NewSSHDialog({ onClose, onCreate }: NewSSHDialogProps) {
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
   const [user, setUser] = useState('');
+  const [password, setPassword] = useState('');
   const [sessionType, setSessionType] = useState<ShellSessionType>('ssh');
   const [creating, setCreating] = useState(false);
 
@@ -210,6 +210,7 @@ function NewSSHDialog({ onClose, onCreate }: NewSSHDialogProps) {
         host: host.trim(),
         port: parseInt(port, 10) || 22,
         user: user.trim() || undefined,
+        password: password || undefined,
       });
       onClose();
     } finally {
@@ -281,6 +282,20 @@ function NewSSHDialog({ onClose, onCreate }: NewSSHDialogProps) {
             />
           </div>
 
+          {/* Password (for SSH with sshpass) */}
+          {sessionType === 'ssh' && (
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-[var(--grok-text-muted)] mb-1">Password (optional)</label>
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="leave blank for key-based auth"
+                type="password"
+                className="w-full bg-[var(--grok-surface-2)] border border-[var(--grok-border)] rounded px-2 py-1.5 text-xs font-mono text-[var(--grok-text-body)] placeholder:text-[var(--grok-text-muted)] outline-none focus:border-[var(--grok-recon-blue)]"
+              />
+            </div>
+          )}
+
           <div className="flex gap-2 pt-1">
             <button
               type="button"
@@ -328,7 +343,6 @@ export function TerminalView() {
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
-  const [running, setRunning] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showQuickActions, setShowQuickActions] = useState(true);
@@ -358,6 +372,20 @@ export function TerminalView() {
   const addLocalLine = useCallback((type: TermLine['type'], text: string, tool?: string) => {
     const id = lineIdRef.current++;
     setLocalLines((prev) => [...prev, { id, type, text, timestamp: Date.now(), tool }]);
+  }, []);
+
+  // ── WebSocket listener for local tab streaming output ────────────
+  useEffect(() => {
+    const unsub = wsService.on<any>('terminal_output', (data) => {
+      if (data.sessionId && data.output && String(data.sessionId).startsWith('local-')) {
+        const lines: string[] = data.output.split('\n');
+        for (const line of lines) {
+          const id = lineIdRef.current++;
+          setLocalLines((prev) => [...prev, { id, type: 'output', text: line, timestamp: Date.now() }]);
+        }
+      }
+    });
+    return unsub;
   }, []);
 
   // ── Auto-scroll ──────────────────────────────────────────────────
@@ -404,13 +432,14 @@ export function TerminalView() {
   );
 
   const handleNewSSH = useCallback(
-    async (params: { type: ShellSessionType; host: string; port: number; user?: string }) => {
+    async (params: { type: ShellSessionType; host: string; port: number; user?: string; password?: string }) => {
       try {
         const sessionData = await apiService.createTerminalSession({
           type: params.type,
           host: params.host,
           port: params.port,
           user: params.user,
+          password: params.password,
           target: params.host,
         });
         if (sessionData?.id) {
@@ -474,28 +503,12 @@ export function TerminalView() {
           return;
         }
 
-        setRunning(true);
         setInput('');
-        try {
-          const tool = cmd.trim().split(/\s+/)[0];
-          const response = await apiService.executeCommand(cmd);
-          const output =
-            typeof response === 'string'
-              ? response
-              : response?.output || response?.data?.output || JSON.stringify(response, null, 2);
-
-          if (output) {
-            output.split('\n').forEach((line: string) => addLocalLine('output', line, tool));
-          } else {
-            addLocalLine('system', 'Command completed (no output).');
-          }
-        } catch (err: any) {
+        // Fire-and-forget: output streams via WebSocket terminal_output events
+        apiService.executeCommand(cmd).catch((err: any) => {
           const msg = err.response?.data?.error || err.message || 'Command execution failed';
           addLocalLine('error', `Error: ${msg}`);
-        } finally {
-          setRunning(false);
-          addLocalLine('divider', '');
-        }
+        });
         return;
       }
 
@@ -512,24 +525,18 @@ export function TerminalView() {
       // will stream back via WebSocket terminal_output events)
       useTerminalStore.getState().appendOutput(session.id, `$ ${cmd}`);
 
-      setRunning(true);
       setInput('');
-      try {
-        await apiService.executeInSession(session.id, cmd);
-        // Output arrives via WebSocket; nothing more to do here
-      } catch (err: any) {
+      apiService.executeInSession(session.id, cmd).catch((err: any) => {
         const msg = err.response?.data?.error || err.message || 'Command failed';
         useTerminalStore.getState().appendOutput(session.id, `[ERROR] ${msg}`);
-      } finally {
-        setRunning(false);
-      }
+      });
     },
     [activeTabId, sessions, history, addLocalLine, addToast],
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !running) {
+      if (e.key === 'Enter') {
         executeCommand(input);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
@@ -548,15 +555,12 @@ export function TerminalView() {
           setHistoryIdx(-1);
           setInput('');
         }
-      } else if (e.key === 'c' && e.ctrlKey && running) {
-        setRunning(false);
-        if (activeTabId === LOCAL_TAB_ID) addLocalLine('system', '^C');
       } else if (e.key === 'l' && e.ctrlKey) {
         e.preventDefault();
         if (activeTabId === LOCAL_TAB_ID) setLocalLines([]);
       }
     },
-    [input, running, history, historyIdx, activeTabId, executeCommand, addLocalLine],
+    [input, history, historyIdx, activeTabId, executeCommand, addLocalLine],
   );
 
   // ── Copy + export ────────────────────────────────────────────────
@@ -612,11 +616,6 @@ export function TerminalView() {
         <div className="flex items-center gap-3">
           <Terminal className="w-5 h-5 text-[var(--grok-success)]" />
           <h1 className="text-lg font-bold text-[var(--grok-text-heading)]">Terminal</h1>
-          {running && (
-            <span className="flex items-center gap-1.5 text-[10px] text-[var(--grok-ok-green)] animate-pulse">
-              <Zap className="w-3 h-3" /> Running...
-            </span>
-          )}
           {activeSession && (
             <span
               className={cn(
@@ -789,28 +788,21 @@ export function TerminalView() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={running || (activeTabId !== LOCAL_TAB_ID && !activeSession?.active)}
+            disabled={activeTabId !== LOCAL_TAB_ID && !activeSession?.active}
             placeholder={
-              running
-                ? 'Waiting for command to complete...'
-                : activeTabId !== LOCAL_TAB_ID && !activeSession?.active
-                  ? 'Session ended'
-                  : 'Enter command...'
+              activeTabId !== LOCAL_TAB_ID && !activeSession?.active
+                ? 'Session ended'
+                : 'Enter command...'
             }
             className="flex-1 bg-transparent text-xs font-mono text-[var(--grok-text-body)] placeholder:text-[var(--grok-text-muted)] outline-none"
             autoFocus
           />
           <button
-            onClick={() => (running ? setRunning(false) : executeCommand(input))}
+            onClick={() => executeCommand(input)}
             disabled={activeTabId !== LOCAL_TAB_ID && !activeSession?.active}
-            className={cn(
-              'p-1.5 rounded transition-colors disabled:opacity-30',
-              running
-                ? 'text-[var(--grok-crit-red)] hover:bg-[var(--grok-crit-red)]/10'
-                : 'text-[var(--grok-ok-green)] hover:bg-[var(--grok-ok-green)]/10',
-            )}
+            className="p-1.5 rounded transition-colors disabled:opacity-30 text-[var(--grok-ok-green)] hover:bg-[var(--grok-ok-green)]/10"
           >
-            {running ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            <Play className="w-4 h-4" />
           </button>
         </div>
       </div>

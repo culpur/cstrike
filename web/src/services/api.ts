@@ -642,6 +642,7 @@ class ApiService {
     host?: string;
     port?: number;
     user?: string;
+    password?: string;
     target?: string;
   }): Promise<any> {
     const { data } = await this.client.post('/terminal/sessions', params, { timeout: 30000 });
