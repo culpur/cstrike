@@ -411,6 +411,7 @@ class AIService {
         { role: 'user', content: input.prompt },
       ],
       stream: false,
+      think: false, // Disable CoT reasoning for speed (qwen3, etc.)
       options: {
         temperature: config.temperature,
         num_predict: config.maxTokens,
@@ -421,7 +422,7 @@ class AIService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(300_000), // Ollama can be slow
+      signal: AbortSignal.timeout(120_000), // 2 min timeout
     });
 
     if (!response.ok) {

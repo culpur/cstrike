@@ -250,15 +250,33 @@ class LootService {
       }
     }
 
-    // Infer service from source tool
+    // Build a map of per-credential metadata from CREDENTIAL loot items (hydra/medusa output)
+    const credMeta = new Map<string, { service: string; port: number | null; host: string }>();
+    for (const e of extracted) {
+      if (e.category === 'CREDENTIAL' && e.metadata) {
+        const key = e.value; // "user:pass"
+        credMeta.set(key, {
+          service: (e.metadata.service as string) ?? 'unknown',
+          port: (e.metadata.port as number) ?? null,
+          host: (e.metadata.host as string) ?? '',
+        });
+      }
+    }
+
+    // Fallback service from source tool (only when no per-credential metadata)
     const serviceMap: Record<string, string> = {
-      hydra: 'ssh', medusa: 'ssh', ncrack: 'ssh',
+      medusa: 'ssh', ncrack: 'ssh',
       sqlmap: 'mysql', enum4linux: 'smb', smbclient: 'smb',
       ftp: 'ftp', smtp: 'smtp',
     };
-    const service = serviceMap[source.toLowerCase()] ?? 'unknown';
+    const fallbackService = serviceMap[source.toLowerCase()] ?? 'unknown';
 
     for (const { username, password } of pairs) {
+      // Use per-credential metadata if available (hydra output includes service/port)
+      const meta = credMeta.get(`${username}:${password}`);
+      const service = meta?.service ?? fallbackService;
+      const port = meta?.port ?? null;
+
       // Deduplicate: skip if this exact pair already exists for this target
       const existing = await prisma.credentialPair.findFirst({
         where: { targetId: targetId ?? null, username, password },
@@ -274,6 +292,7 @@ class LootService {
           username,
           password,
           service,
+          port,
           score: scoreResult.score,
           scoreBreakdown: scoreResult.breakdown as any,
           source,
@@ -404,8 +423,8 @@ class LootService {
         });
       }
     }
-    // Generic credential pair format: "[+] user:pass"
-    const genericCredRe = /\[\+\]\s+(\S+):(\S+)\s/gi;
+    // Generic credential pair format: "[+] user:pass" — exclude IP:port patterns
+    const genericCredRe = /\[\+\]\s+(?!(?:\d{1,3}\.){3}\d{1,3}:)(\S+):(\S+)\s/gi;
     {
       let m: RegExpExecArray | null;
       const re = new RegExp(genericCredRe.source, genericCredRe.flags);
