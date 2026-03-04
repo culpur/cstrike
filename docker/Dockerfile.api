@@ -52,8 +52,9 @@ RUN GOBUSTER_VERSION=3.6.0 && \
     chmod +x /tmp/tools/gobuster 2>/dev/null || touch /tmp/tools/gobuster
 
 # Docker CLI (for exec into MSF container — metasploit tool execution)
+# Must match or exceed the host daemon's minimum API version (1.44+)
 RUN DOCKER_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64";; esac) && \
-    DOCKER_VERSION=24.0.9 && \
+    DOCKER_VERSION=27.0.3 && \
     curl -fsSL "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-${DOCKER_VERSION}.tgz" | \
     tar xz --strip-components=1 -C /tmp/tools docker/docker && \
     chmod +x /tmp/tools/docker 2>/dev/null || touch /tmp/tools/docker
@@ -61,7 +62,7 @@ RUN DOCKER_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64"
 # Feroxbuster (Rust-based content discovery scanner)
 RUN FEROX_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64";; esac) && \
     FEROX_VERSION=2.11.0 && \
-    curl -fsSL "https://github.com/epi052/feroxbuster/releases/download/v${FEROX_VERSION}/feroxbuster-v${FEROX_VERSION}-${FEROX_ARCH}-unknown-linux-gnu.tar.gz" | \
+    curl -fsSL "https://github.com/epi052/feroxbuster/releases/download/v${FEROX_VERSION}/${FEROX_ARCH}-linux-feroxbuster.tar.gz" | \
     tar xz -C /tmp/tools && \
     chmod +x /tmp/tools/feroxbuster 2>/dev/null || touch /tmp/tools/feroxbuster
 
@@ -86,7 +87,14 @@ RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto && \
 
 # Install Python-based security tools
 RUN pip3 install --break-system-packages --no-cache-dir \
-    wafw00f wfuzz sslyze dnsrecon enum4linux-ng 2>/dev/null || true
+    wafw00f wfuzz sslyze dnsrecon 2>/dev/null || true
+
+# Install enum4linux-ng (Python rewrite of enum4linux for SMB/LDAP enumeration)
+RUN pip3 install --break-system-packages --no-cache-dir \
+    impacket ldap3 pyyaml 2>/dev/null || true && \
+    git clone --depth 1 https://github.com/cddmp/enum4linux-ng.git /opt/enum4linux-ng && \
+    ln -sf /opt/enum4linux-ng/enum4linux-ng.py /usr/local/bin/enum4linux-ng && \
+    chmod +x /opt/enum4linux-ng/enum4linux-ng.py || true
 
 # Install searchsploit (ExploitDB search tool)
 RUN git clone --depth 1 https://gitlab.com/exploit-database/exploitdb.git /opt/exploitdb && \
