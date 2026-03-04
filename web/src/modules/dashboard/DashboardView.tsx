@@ -39,6 +39,7 @@ import {
   Server,
   Hash,
   RotateCcw,
+  Key,
 } from 'lucide-react';
 import {
   PieChart,
@@ -651,6 +652,30 @@ export function DashboardView() {
                 value={lootStats.byCategory.file || 0}
                 color="var(--grok-loot-green)"
               />
+              {(lootStats.byCategory.token || 0) > 0 && (
+                <LootRow
+                  icon={<Key className="w-3 h-3" />}
+                  label="Tokens"
+                  value={lootStats.byCategory.token}
+                  color="var(--grok-warning)"
+                />
+              )}
+              {(lootStats.byCategory.api_key || 0) > 0 && (
+                <LootRow
+                  icon={<Key className="w-3 h-3" />}
+                  label="API Keys"
+                  value={lootStats.byCategory.api_key}
+                  color="var(--grok-exploit-red)"
+                />
+              )}
+              {(lootStats.byCategory.session || 0) > 0 && (
+                <LootRow
+                  icon={<Key className="w-3 h-3" />}
+                  label="Sessions"
+                  value={lootStats.byCategory.session}
+                  color="var(--grok-ai-purple)"
+                />
+              )}
             </div>
             <div className="pt-2 border-t border-[var(--grok-border)]">
               <div className="flex items-center justify-between">

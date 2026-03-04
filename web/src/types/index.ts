@@ -287,7 +287,7 @@ export interface ExploitResult {
 // Loot Types
 // ============================================================================
 
-export type LootCategory = 'username' | 'password' | 'hash' | 'url' | 'port' | 'credential' | 'file';
+export type LootCategory = 'username' | 'password' | 'hash' | 'url' | 'port' | 'credential' | 'file' | 'token' | 'api_key' | 'session';
 
 export interface LootItem {
   id: string;

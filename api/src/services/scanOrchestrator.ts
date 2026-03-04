@@ -492,35 +492,58 @@ class ScanOrchestrator {
 
       // Check if the recommended tool is an exploitation tool
       if (EXPLOIT_TOOLS.has(recommendation.tool) && operationMode === 'semi-auto') {
-        // Gate: pause for operator approval
+        // Spawn as a gated exploitation task instead of silently skipping
+        try {
+          const caseId = await this.findOrCreateExploitCase(targetId, target);
+          if (caseId) {
+            await prisma.exploitTask.create({
+              data: {
+                caseId,
+                tool: recommendation.tool,
+                target,
+                phase: 'EXPLOITATION',
+                status: 'QUEUED',
+                trigger: `ai:${recommendation.reasoning}`,
+                config: {},
+              },
+            });
+
+            // Count total pending gated tasks for this case
+            const pendingCount = await prisma.exploitTask.count({
+              where: { caseId, status: 'QUEUED', phase: { in: ['EXPLOITATION', 'PERSISTENCE'] } },
+            });
+
+            emitCaseGateReached({ caseId, pendingTasks: pendingCount, phase: 'EXPLOITATION' });
+
+            await prisma.exploitCase.update({
+              where: { id: caseId },
+              data: { gateStatus: 'PENDING_APPROVAL' },
+            });
+
+            emitLogEntry({
+              level: 'WARN',
+              source: 'orchestrator',
+              message: `GATE: ${recommendation.tool} queued for operator approval on Exploitation page (${pendingCount} pending)`,
+            });
+          }
+        } catch (err: any) {
+          console.error(`[Orchestrator] Failed to create gated exploit task:`, err.message);
+        }
+
         await aiService.recordDecision({
-          decision: `GATE — exploitation tool ${recommendation.tool} requires operator approval`,
+          decision: `${recommendation.tool} queued for operator approval (semi-auto gate)`,
           rationale: recommendation.reasoning,
           selectedTool: recommendation.tool,
           scanId,
         });
 
-        emitCaseGateReached({
-          caseId: scanId,
-          pendingTasks: 1,
-          phase: 'exploitation',
+        // Add to toolHistory so AI doesn't re-recommend it
+        toolHistory.push({
+          tool: recommendation.tool,
+          exitCode: -1,
+          duration: 0,
+          outputSnippet: 'Queued for operator approval (semi-auto gate)',
         });
-
-        emitLogEntry({
-          level: 'WARN',
-          source: 'orchestrator',
-          message: `GATE: AI wants to run ${recommendation.tool} but semi-auto mode requires approval — skipping exploitation tools`,
-        });
-
-        // In semi-auto, skip exploitation tools and continue with recon
-        // Record observation about what we would have done
-        await aiService.recordObservation({
-          observation: `Skipped ${recommendation.tool}: semi-auto gate. AI reasoning: ${recommendation.reasoning}`,
-          source: 'gate',
-          scanId,
-        });
-
-        // Ask AI for next recon tool instead
         continue;
       }
 
@@ -662,6 +685,24 @@ class ScanOrchestrator {
       },
     });
 
+    // Also check for gated tasks awaiting operator approval
+    const gatedTasks = await prisma.exploitTask.count({
+      where: {
+        case: { targetId },
+        status: 'QUEUED',
+        phase: { in: ['EXPLOITATION', 'PERSISTENCE'] },
+      },
+    });
+
+    if (activeTasks === 0 && gatedTasks > 0) {
+      emitLogEntry({
+        level: 'WARN',
+        source: 'orchestrator',
+        message: `Recon complete — ${gatedTasks} exploitation task(s) awaiting approval on the Exploitation page`,
+      });
+      return;
+    }
+
     if (activeTasks === 0) return;
 
     emitPhaseChange({ phase: 'exploit', target, status: 'running' });
@@ -731,6 +772,31 @@ class ScanOrchestrator {
       source: 'orchestrator',
       message: `Exploitation wait timed out — ${stillRunning} task(s) still pending`,
     });
+  }
+
+  /**
+   * Find or create an exploit case for a target. Used by the semi-auto gate
+   * to spawn gated tasks in the exploitation pipeline.
+   */
+  private async findOrCreateExploitCase(targetId: string, targetUrl: string): Promise<string | null> {
+    const existing = await prisma.exploitCase.findFirst({
+      where: { targetId, status: 'ACTIVE' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) return existing.id;
+
+    const newCase = await prisma.exploitCase.create({
+      data: {
+        name: `Auto: ${targetUrl}`,
+        description: 'Created by scan orchestrator for gated exploitation tasks',
+        targetId,
+        status: 'ACTIVE',
+        currentPhase: 'ENUMERATION',
+        gateStatus: 'NONE',
+      },
+    });
+    console.log(`[Orchestrator] Created exploit case ${newCase.id} for ${targetUrl}`);
+    return newCase.id;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -958,7 +1024,9 @@ class ScanOrchestrator {
     // so the AI should focus on what additional recon/scanning is valuable.
     const exploitNote = operationMode === 'full-auto'
       ? `\nNOTE: Exploitation (sqlmap, hydra, etc.) is running CONCURRENTLY in the background via the exploit track manager. You do NOT need to recommend exploitation tools — they are spawned automatically when vulnerabilities are discovered. Focus on which remaining reconnaissance/scanning tools would reveal NEW attack surface.`
-      : '';
+      : operationMode === 'semi-auto'
+        ? `\nNOTE: When you recommend exploitation tools (sqlmap, hydra, etc.), they are queued for operator approval on the Exploitation page. The exploit track manager also creates exploitation tasks automatically from findings. Do NOT keep recommending the same exploitation tool — once recommended, it is queued. Focus on which remaining reconnaissance tools would reveal NEW attack surface.`
+        : '';
 
     return `You are the AI orchestrator for CStrike, an offensive security automation platform.
 You are conducting a security assessment of target: ${target}

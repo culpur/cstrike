@@ -81,6 +81,13 @@ export async function executeTask(taskId: string, caseId: string) {
     // Parse findings from output
     const findings = parseFindingsFromOutput(result.output ?? '', task.tool);
 
+    // Bridge structured findings to the loot system so dashboard counters update
+    if (findings.length > 0 && caseRecord) {
+      try {
+        await persistFindingsToLoot(findings, task.tool, task.target, caseRecord.targetId);
+      } catch { /* best effort */ }
+    }
+
     // Update task
     await prisma.exploitTask.update({
       where: { id: taskId },
@@ -305,6 +312,84 @@ export function parseFindingsFromOutput(output: string, tool: string): Finding[]
   }
 
   return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Bridge exploit findings → LootItem / CredentialPair tables
+// ---------------------------------------------------------------------------
+
+async function persistFindingsToLoot(
+  findings: Finding[],
+  tool: string,
+  taskTarget: string,
+  targetId: string,
+): Promise<void> {
+  // Get target URL for building full endpoint URLs
+  const target = await prisma.target.findUnique({ where: { id: targetId } });
+  const baseUrl = target?.url ?? taskTarget;
+
+  for (const finding of findings) {
+    if (finding.type === 'credential') {
+      // Parse "username:password" from finding.title (Hydra format)
+      const parts = finding.title.split(':');
+      if (parts.length >= 2) {
+        const username = parts[0];
+        const password = parts.slice(1).join(':'); // handle passwords with colons
+
+        await lootService.addLoot({ targetId, category: 'USERNAME', value: username, source: tool });
+        await lootService.addLoot({ targetId, category: 'PASSWORD', value: password, source: tool });
+        await lootService.addLoot({
+          targetId,
+          category: 'CREDENTIAL',
+          value: `${username}:***`,
+          source: tool,
+          metadata: { detail: finding.detail },
+        });
+
+        // Create CredentialPair if it doesn't already exist
+        const portMatch = finding.detail?.match(/port\s+(\d+)/i);
+        const port = portMatch ? parseInt(portMatch[1], 10) : undefined;
+        const serviceMatch = finding.detail?.match(/via\s+(\w+)/i);
+        const service = serviceMatch ? serviceMatch[1] : 'unknown';
+
+        const existing = await prisma.credentialPair.findFirst({
+          where: { targetId, username, password },
+        });
+        if (!existing) {
+          await prisma.credentialPair.create({
+            data: {
+              targetId,
+              username,
+              password,
+              service,
+              port,
+              source: tool,
+              score: 0,
+              scoreBreakdown: {},
+            },
+          });
+        }
+      }
+    } else if (finding.type === 'endpoint') {
+      // Build full URL from base + discovered path
+      const path = finding.title;
+      let fullUrl: string;
+      try {
+        fullUrl = new URL(path, baseUrl).toString();
+      } catch {
+        fullUrl = path; // Already absolute or can't parse
+      }
+
+      await lootService.addLoot({
+        targetId,
+        category: 'URL',
+        value: fullUrl,
+        source: tool,
+        metadata: { statusCode: finding.detail },
+      });
+    }
+    // vulnerability / info findings stay in ExploitTask.findings only
+  }
 }
 
 // ---------------------------------------------------------------------------

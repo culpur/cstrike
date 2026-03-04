@@ -37,6 +37,9 @@ const calculateStats = (
     port: 0,
     credential: 0,
     file: 0,
+    token: 0,
+    api_key: 0,
+    session: 0,
   };
 
   items.forEach((item) => {
@@ -68,6 +71,9 @@ export const useLootStore = create<LootStore>((set, get) => ({
       port: 0,
       credential: 0,
       file: 0,
+      token: 0,
+      api_key: 0,
+      session: 0,
     },
     uniqueTargets: 0,
     validatedCredentials: 0,
