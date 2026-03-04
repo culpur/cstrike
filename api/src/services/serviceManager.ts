@@ -74,7 +74,7 @@ function dockerApiPost(containerName: string, action: string): Promise<{ statusC
     const req = http.request(
       {
         socketPath: '/var/run/docker.sock',
-        path: `/v1.41/containers/${containerName}/${action}`,
+        path: `/v1.46/containers/${containerName}/${action}`,
         method: 'POST',
       },
       (res) => {
