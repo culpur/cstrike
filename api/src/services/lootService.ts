@@ -5,7 +5,8 @@
  */
 
 import { prisma } from '../config/database.js';
-import { emitLootItem } from '../websocket/emitter.js';
+import { emitLootItem, emitLogEntry } from '../websocket/emitter.js';
+import { credentialValidator } from './credentialValidator.js';
 
 // ── Scoring tables (ported from loot_tracker.py) ─────────────────────────────
 
@@ -267,7 +268,7 @@ class LootService {
       // Score the credential
       const scoreResult = await this.scoreCredential(username, password, service);
 
-      await prisma.credentialPair.create({
+      const credPair = await prisma.credentialPair.create({
         data: {
           targetId: targetId ?? null,
           username,
@@ -286,6 +287,35 @@ class LootService {
         source,
         target: targetId ?? 'unknown',
       });
+
+      // Auto-validate credential in background (non-blocking)
+      if (targetId && service !== 'unknown') {
+        setImmediate(async () => {
+          try {
+            const targetRecord = await prisma.target.findUnique({ where: { id: targetId } });
+            const host = targetRecord?.hostname ?? targetRecord?.url?.replace(/^https?:\/\//, '').replace(/[:/].*$/, '') ?? 'localhost';
+            const result = await credentialValidator.validate({
+              id: credPair.id,
+              username,
+              password,
+              target: host,
+              service,
+              port: credPair.port ?? undefined,
+            });
+            await prisma.credentialPair.update({
+              where: { id: credPair.id },
+              data: { validationStatus: result.valid ? 'VALID' : 'INVALID' },
+            });
+            emitLogEntry({
+              level: result.valid ? 'INFO' : 'DEBUG',
+              source: 'credential_validator',
+              message: `Auto-validated ${username}@${host}:${service} → ${result.valid ? 'VALID' : 'INVALID'}`,
+            });
+          } catch {
+            // Non-critical — validation can be retried later
+          }
+        });
+      }
     }
   }
 
@@ -358,14 +388,27 @@ class LootService {
       }
     }
 
-    // Credential pairs — hydra/medusa combined output: "login: admin  password: secret"
-    const credPairPatterns = [
-      /\[(?:\d+)\]\[(?:\w+)\]\s+host:\s*\S+\s+login:\s*(\S+)\s+password:\s*(\S+)/gi,
-      /\[\+\]\s+(\S+):(\S+)\s/gi,
-    ];
-    for (const pattern of credPairPatterns) {
+    // Credential pairs — hydra/medusa combined output: "[22][ssh] host: 10.10.10.100  login: admin  password: secret"
+    const hydraRe = /\[(\d+)\]\[(\w+)\]\s+host:\s*(\S+)\s+login:\s*(\S+)\s+password:\s*(\S+)/gi;
+    {
       let m: RegExpExecArray | null;
-      const re = new RegExp(pattern.source, pattern.flags);
+      const re = new RegExp(hydraRe.source, hydraRe.flags);
+      while ((m = re.exec(output)) !== null) {
+        push('USERNAME', m[4].trim());
+        push('PASSWORD', m[5].trim());
+        // Store port/service/host as metadata on the credential
+        push('CREDENTIAL', `${m[4].trim()}:${m[5].trim()}`, {
+          port: parseInt(m[1], 10),
+          service: m[2].trim(),
+          host: m[3].trim(),
+        });
+      }
+    }
+    // Generic credential pair format: "[+] user:pass"
+    const genericCredRe = /\[\+\]\s+(\S+):(\S+)\s/gi;
+    {
+      let m: RegExpExecArray | null;
+      const re = new RegExp(genericCredRe.source, genericCredRe.flags);
       while ((m = re.exec(output)) !== null) {
         push('USERNAME', m[1].trim());
         push('PASSWORD', m[2].trim());

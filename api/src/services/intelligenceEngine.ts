@@ -257,24 +257,8 @@ class IntelligenceEngine {
       }
     }
 
-    // 3. Analyze credential discoveries → persistence recommendations
-    const credFindings = await this.getCredentialFindings(targetId);
-    for (const cf of credFindings) {
-      if (cf.service?.toLowerCase() === 'ssh') {
-        const sshTarget = `${target.hostname ?? 'localhost'}:${cf.port ?? 22}`;
-        if (!existing.has(existingKey('ssh_persist', sshTarget))) {
-          recommendations.push({
-            tool: 'ssh_persist',
-            target: sshTarget,
-            phase: 'PERSISTENCE',
-            trigger: `auto:SSH credential ${cf.username}:*** validated`,
-            autoRun: false,
-            config: { username: cf.username, password: cf.password, port: cf.port },
-            priority: 20,
-          });
-        }
-      }
-    }
+    // 3. Note: Credential-based post-exploitation (SSH shells, privesc) is
+    //    handled by Phase 5 postExploitService — no tasks generated here.
 
     // Sort by priority
     recommendations.sort((a, b) => a.priority - b.priority);

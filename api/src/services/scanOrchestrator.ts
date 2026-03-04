@@ -894,6 +894,26 @@ class ScanOrchestrator {
         });
       }
     }
+
+    // ── Phase 5: Post-exploitation — obtain shells + escalate privileges ──
+    if (!state?.cancelled && !state?.paused && operationMode !== 'manual') {
+      try {
+        const { postExploitService } = await import('./postExploitService.js');
+        const results = await postExploitService.run(scanId, targetId, target, operationMode);
+
+        await aiService.recordDecision({
+          decision: `Post-exploitation complete: ${results.shellsObtained} shells, ${results.credentialsValidated} creds validated`,
+          rationale: `Phase 5 used ${results.iterationsUsed} iterations. Highest privilege: ${results.privilegeLevel}`,
+          scanId,
+        });
+      } catch (err: any) {
+        emitLogEntry({
+          level: 'ERROR',
+          source: 'post_exploit',
+          message: `Phase 5 failed: ${err.message}`,
+        });
+      }
+    }
   }
 
   /**

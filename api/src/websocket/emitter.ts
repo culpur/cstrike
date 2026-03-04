@@ -283,3 +283,19 @@ export function emitTerminalSessionClosed(data: {
 }) {
   io?.emit('terminal_session_closed', data);
 }
+
+// ── Shell obtained — triggers auto-tab in frontend ─────────────────────────
+
+export function emitShellObtained(data: {
+  host: string;
+  port: number;
+  type: string;
+  user: string;
+  password?: string;
+  target: string;
+  privilegeLevel?: string;
+  method?: string;
+  credentialPairId?: string;
+}) {
+  io?.emit('shell_obtained', data);
+}

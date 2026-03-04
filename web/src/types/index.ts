@@ -7,7 +7,7 @@
 // System & Status Types
 // ============================================================================
 
-export type PhaseType = 'recon' | 'ai' | 'zap' | 'metasploit' | 'exploit' | 'apiscan' | 'idle';
+export type PhaseType = 'recon' | 'ai' | 'zap' | 'metasploit' | 'exploit' | 'post_exploit' | 'apiscan' | 'idle';
 
 export type ServiceStatus = 'running' | 'stopped' | 'error' | 'starting' | 'stopping';
 
@@ -45,6 +45,7 @@ export interface PhaseProgress {
   zapScanComplete: boolean;
   metasploitScanComplete: boolean;
   exploitationComplete: boolean;
+  postExploitComplete: boolean;
 }
 
 // ============================================================================

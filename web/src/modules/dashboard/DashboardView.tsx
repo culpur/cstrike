@@ -884,7 +884,7 @@ function EmptyChart({ label }: { label: string }) {
   );
 }
 
-const SCAN_PIPELINE_PHASES = ['recon', 'ai_analysis_1', 'web_scans', 'exploitation', 'complete'] as const;
+const SCAN_PIPELINE_PHASES = ['recon', 'ai_analysis_1', 'web_scans', 'exploitation', 'post_exploitation', 'complete'] as const;
 const PHASE_LABELS: Record<string, string> = {
   idle: 'Idle',
   recon: 'Recon',
@@ -894,6 +894,8 @@ const PHASE_LABELS: Record<string, string> = {
   metasploit: 'MSF',
   ai_analysis_2: 'AI-2',
   exploitation: 'Exploit',
+  post_exploitation: 'Shells',
+  post_exploit: 'Shells',
   reporting: 'Report',
   complete: 'Done',
 };

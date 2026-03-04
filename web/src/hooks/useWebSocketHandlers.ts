@@ -76,6 +76,7 @@ export function useWebSocketHandlers() {
             web_scans: 'zapScanComplete',
             metasploit: 'metasploitScanComplete',
             exploitation: 'exploitationComplete',
+            post_exploit: 'postExploitComplete',
           };
           if (data.status === 'complete' || data.status === 'done') {
             const key = phaseMap[data.phase];
@@ -224,6 +225,7 @@ export function useWebSocketHandlers() {
           host,
           port: data.port ?? (shellType === 'ssh' ? 22 : 4444),
           user: data.user ?? data.username ?? undefined,
+          password: data.password ?? undefined,
           target: host,
         });
 

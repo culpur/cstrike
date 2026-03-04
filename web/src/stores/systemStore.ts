@@ -55,6 +55,7 @@ const initialPhaseProgress: PhaseProgress = {
   zapScanComplete: false,
   metasploitScanComplete: false,
   exploitationComplete: false,
+  postExploitComplete: false,
 };
 
 export const useSystemStore = create<SystemStore>((set) => ({
