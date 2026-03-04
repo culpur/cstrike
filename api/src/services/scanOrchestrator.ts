@@ -857,8 +857,20 @@ class ScanOrchestrator {
           break;
         }
 
-        // Execute the recommended exploitation tool
+        // Dedup: skip tools already executed in the exploitation phase
         const exploitTool = recommendation.tool!;
+        const alreadyRan = toolHistory.filter((h) => h.tool === exploitTool);
+        if (alreadyRan.length > 0) {
+          emitLogEntry({
+            level: 'WARN',
+            source: 'orchestrator',
+            message: `AI recommended already-executed tool "${exploitTool}" — skipping (ran ${alreadyRan.length}x)`,
+          });
+          // Count as a wasted iteration so the loop still terminates
+          continue;
+        }
+
+        // Execute the recommended exploitation tool
         iteration++;
         const result = await this.executeTool(scanId, targetId, target, exploitTool, `${iteration}/?`);
 
@@ -1359,7 +1371,8 @@ Tool priority for exploitation:
 4. hydra — Credential brute-forcing
 5. john/hashcat — Hash cracking
 
-IMPORTANT: Do NOT say DONE unless ALL exploitation tools have been run or would provide no value against the discovered attack surface. ALWAYS try zap and metasploit if a web application or network services were discovered.
+CRITICAL RULE: You MUST NEVER recommend a tool that appears in the "ALREADY EXECUTED" list above. If a tool has already been executed, it is FINISHED. Pick a DIFFERENT tool.
+Say DONE when all remaining exploitation tools would provide no value against the discovered attack surface.
 
 ## RESPONSE FORMAT
 
