@@ -384,16 +384,38 @@ class ScanOrchestrator {
       });
 
       if (priorResults.length > 0) {
-        // Rebuild toolHistory from prior scans so the AI knows what ran
+        // Rebuild toolHistory from prior scans — ONLY recon tools go into toolHistory
+        // (so the AI won't mark exploitation tools as "already executed")
+        // Exploitation tool outputs are included as read-only context in findings summary
+        const exploitFindings: string[] = [];
         for (const r of priorResults) {
           const data = r.data as Record<string, any>;
+          const toolName = data?.tool || r.source || 'unknown';
           const output = String(data?.output || '');
           const maxLen = 2000;
+          const snippet = output.length > maxLen ? output.slice(0, maxLen) + '\n... [output truncated]' : output;
+
+          if (RECON_TOOLS.has(toolName)) {
+            // Recon tools → full history entry (marks them as already-executed)
+            toolHistory.push({
+              tool: toolName,
+              exitCode: data?.exitCode ?? 0,
+              duration: data?.duration ?? 0,
+              outputSnippet: snippet,
+            });
+          } else if (EXPLOIT_TOOLS.has(toolName)) {
+            // Exploitation tools → capture findings as context but do NOT mark as executed
+            exploitFindings.push(`### PRIOR ${toolName.toUpperCase()} FINDINGS\n${snippet}`);
+          }
+        }
+
+        // Store exploit findings context for the AI prompt (appended to recon findings)
+        if (exploitFindings.length > 0) {
           toolHistory.push({
-            tool: data?.tool || r.source || 'unknown',
-            exitCode: data?.exitCode ?? 0,
-            duration: data?.duration ?? 0,
-            outputSnippet: output.length > maxLen ? output.slice(0, maxLen) + '\n... [output truncated]' : output,
+            tool: '__prior_exploit_findings__',
+            exitCode: 0,
+            duration: 0,
+            outputSnippet: `## PRIOR EXPLOITATION RESULTS (for context — these tools should be RE-RUN with targeted parameters)\n\n${exploitFindings.join('\n\n')}`,
           });
         }
 
@@ -1106,10 +1128,13 @@ class ScanOrchestrator {
     phase: 'recon' | 'exploitation' = 'recon',
   ): Promise<string> {
     // Build executed set including exploit track manager tools
-    const executedSet = new Set(toolHistory.map((h) => h.tool));
+    // Filter out pseudo-entries (like __prior_exploit_findings__) from the executed set
+    const executedSet = new Set(toolHistory.map((h) => h.tool).filter((t) => !t.startsWith('__')));
     try {
+      // Only count CURRENTLY active ETM tasks (running/queued) as executed —
+      // completed tasks from prior scans should not block re-execution
       const etmTasks = await prisma.exploitTask.findMany({
-        where: { case: { targetId }, status: { in: ['COMPLETED', 'RUNNING', 'QUEUED', 'FAILED'] } },
+        where: { case: { targetId }, status: { in: ['RUNNING', 'QUEUED'] } },
         select: { tool: true },
       });
       for (const et of etmTasks) executedSet.add(et.tool);
