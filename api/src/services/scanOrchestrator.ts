@@ -26,6 +26,7 @@ import {
   emitScanResumed,
 } from '../websocket/emitter.js';
 import { exploitTrackManager } from './exploitTrackManager.js';
+import { executeTask } from '../routes/cases.js';
 import { scanContextService, type ExecutionState } from './scanContextService.js';
 
 // Active scan tracking for cancellation and pause
@@ -948,12 +949,37 @@ class ScanOrchestrator {
     });
 
     if (activeTasks === 0 && gatedTasks > 0) {
-      emitLogEntry({
-        level: 'WARN',
-        source: 'orchestrator',
-        message: `Recon complete — ${gatedTasks} exploitation task(s) awaiting approval on the Exploitation page`,
-      });
-      return;
+      const operationMode = await getConfigValue<string>('operation_mode', 'full-auto');
+      if (operationMode === 'full-auto') {
+        // Auto-approve all gated cases and execute queued tasks
+        const gatedCases = await prisma.exploitCase.findMany({
+          where: { targetId, gateStatus: 'PENDING_APPROVAL' },
+        });
+        for (const ec of gatedCases) {
+          await prisma.exploitCase.update({
+            where: { id: ec.id },
+            data: { gateStatus: 'APPROVED' },
+          });
+        }
+        const queuedTasks = await prisma.exploitTask.findMany({
+          where: { case: { targetId }, status: 'QUEUED', phase: { in: ['EXPLOITATION', 'PERSISTENCE'] } },
+        });
+        emitLogEntry({
+          level: 'INFO',
+          source: 'orchestrator',
+          message: `Full-auto: auto-approved ${gatedCases.length} case(s), executing ${queuedTasks.length} gated task(s)`,
+        });
+        for (const task of queuedTasks) {
+          setImmediate(() => executeTask(task.id, task.caseId));
+        }
+      } else {
+        emitLogEntry({
+          level: 'WARN',
+          source: 'orchestrator',
+          message: `Recon complete — ${gatedTasks} exploitation task(s) awaiting approval on the Exploitation page`,
+        });
+        return;
+      }
     }
 
     if (activeTasks === 0) return;
