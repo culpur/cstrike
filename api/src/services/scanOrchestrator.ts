@@ -262,7 +262,7 @@ class ScanOrchestrator {
         await scanContextService.clearActiveScan(scan.targetId).catch(() => {});
       }
 
-      emitPhaseChange({ phase: 'recon', target, status: 'complete' });
+      emitPhaseChange({ phase: 'complete', target, status: 'complete' });
       emitScanComplete({ target, scan_id: scanId });
 
     } catch (err: any) {
@@ -633,6 +633,104 @@ class ScanOrchestrator {
         message: `AI pipeline hit max iterations (${MAX_AI_ITERATIONS}) — stopping`,
       });
     }
+
+    // ── Phase 3: Wait for concurrent exploitation to finish ────────────
+    if (!state?.cancelled && !state?.paused) {
+      await this.waitForExploitTasks(scanId, targetId, target, state);
+    }
+  }
+
+  /**
+   * After recon completes, wait for any in-flight exploitation tasks to finish.
+   * Polls every 5s for up to 10 minutes.
+   */
+  private async waitForExploitTasks(
+    scanId: string,
+    targetId: string,
+    target: string,
+    state?: { cancelled: boolean; paused: boolean } | null,
+  ) {
+    const MAX_WAIT_MS = 600_000; // 10 minutes
+    const POLL_INTERVAL_MS = 5_000;
+    const startWait = Date.now();
+
+    // Check if there are any active exploit cases with running/queued tasks
+    const activeTasks = await prisma.exploitTask.count({
+      where: {
+        case: { targetId },
+        status: { in: ['RUNNING', 'QUEUED'] },
+      },
+    });
+
+    if (activeTasks === 0) return;
+
+    emitPhaseChange({ phase: 'exploit', target, status: 'running' });
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: { phase: 'EXPLOITATION' },
+    });
+
+    emitLogEntry({
+      level: 'INFO',
+      source: 'orchestrator',
+      message: `Recon complete — waiting for ${activeTasks} exploitation task(s) to finish`,
+    });
+
+    await aiService.recordDecision({
+      decision: 'Transitioning to exploitation phase',
+      rationale: `Recon complete. ${activeTasks} exploitation task(s) still running/queued. Waiting for completion.`,
+      scanId,
+    });
+
+    while (Date.now() - startWait < MAX_WAIT_MS) {
+      if (state?.cancelled || state?.paused) break;
+
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+      const remaining = await prisma.exploitTask.count({
+        where: {
+          case: { targetId },
+          status: { in: ['RUNNING', 'QUEUED'] },
+        },
+      });
+
+      if (remaining === 0) {
+        // All exploit tasks finished
+        const completedTasks = await prisma.exploitTask.count({
+          where: {
+            case: { targetId },
+            status: 'COMPLETED',
+          },
+        });
+
+        emitLogEntry({
+          level: 'INFO',
+          source: 'orchestrator',
+          message: `All exploitation tasks complete (${completedTasks} total)`,
+        });
+
+        await aiService.recordDecision({
+          decision: 'Exploitation phase complete',
+          rationale: `${completedTasks} exploit task(s) finished. Scan fully complete.`,
+          scanId,
+        });
+        return;
+      }
+    }
+
+    // Timed out
+    const stillRunning = await prisma.exploitTask.count({
+      where: {
+        case: { targetId },
+        status: { in: ['RUNNING', 'QUEUED'] },
+      },
+    });
+
+    emitLogEntry({
+      level: 'WARN',
+      source: 'orchestrator',
+      message: `Exploitation wait timed out — ${stillRunning} task(s) still pending`,
+    });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -856,10 +954,16 @@ class ScanOrchestrator {
       historicalSection = `\n\n## HISTORICAL CONTEXT (from previous scans)\n${historicalCtx}\n`;
     }
 
+    // Exploitation tools are handled concurrently by the exploit track manager,
+    // so the AI should focus on what additional recon/scanning is valuable.
+    const exploitNote = operationMode === 'full-auto'
+      ? `\nNOTE: Exploitation (sqlmap, hydra, etc.) is running CONCURRENTLY in the background via the exploit track manager. You do NOT need to recommend exploitation tools — they are spawned automatically when vulnerabilities are discovered. Focus on which remaining reconnaissance/scanning tools would reveal NEW attack surface.`
+      : '';
+
     return `You are the AI orchestrator for CStrike, an offensive security automation platform.
 You are conducting a security assessment of target: ${target}
 
-OPERATION MODE: ${operationMode.toUpperCase()}${gateNote}
+OPERATION MODE: ${operationMode.toUpperCase()}${gateNote}${exploitNote}
 
 TOOLS NOT YET EXECUTED (choose from these ONLY): ${toolList}
 ALREADY EXECUTED (do NOT recommend these again): ${alreadyRan || 'none'}
@@ -876,7 +980,7 @@ Consider:
 1. What attack surface has been revealed?
 2. What services, technologies, and potential vulnerabilities have been identified?
 3. What tool from the NOT YET EXECUTED list would provide the most value next?
-4. Are we done with reconnaissance? If all valuable paths are explored, say DONE.
+4. Are we done with reconnaissance? If all remaining tools would not reveal significant new attack surface, say DONE. Exploitation tasks will continue to run after recon completes.
 
 ## RESPONSE FORMAT
 
