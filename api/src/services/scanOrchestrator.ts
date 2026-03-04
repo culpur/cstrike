@@ -123,7 +123,7 @@ class ScanOrchestrator {
     exploitTrackManager.rebuildFingerprints(targetId, exploitTasks);
 
     // Get operation mode
-    const operationMode = await getConfigValue<string>('operation_mode', 'semi-auto') as OperationMode;
+    const operationMode = await getConfigValue<string>('operation_mode', 'full-auto') as OperationMode;
 
     // Mark as running
     await prisma.scan.update({
@@ -207,7 +207,7 @@ class ScanOrchestrator {
       }
 
       // Check operation mode
-      const operationMode = await getConfigValue<string>('operation_mode', 'semi-auto') as OperationMode;
+      const operationMode = await getConfigValue<string>('operation_mode', 'full-auto') as OperationMode;
 
       if (!resumeState) {
         emitLogEntry({

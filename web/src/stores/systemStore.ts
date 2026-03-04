@@ -64,7 +64,7 @@ export const useSystemStore = create<SystemStore>((set) => ({
   phaseProgress: initialPhaseProgress,
   connected: false,
   vpnConnections: [],
-  operationMode: 'semi-auto',
+  operationMode: 'full-auto',
 
   updateMetrics: (metrics) =>
     set((state) => ({
@@ -112,6 +112,6 @@ export const useSystemStore = create<SystemStore>((set) => ({
       phaseProgress: initialPhaseProgress,
       connected: false,
       vpnConnections: [],
-      operationMode: 'semi-auto',
+      operationMode: 'full-auto',
     }),
 }));

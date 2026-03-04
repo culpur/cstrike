@@ -387,7 +387,7 @@ class ApiService {
 
   async getOperationMode(): Promise<string> {
     const config = await this.getConfig();
-    return (config as any).operation_mode ?? 'semi-auto';
+    return (config as any).operation_mode ?? 'full-auto';
   }
 
   // ============================================================================
