@@ -376,37 +376,96 @@ class ScanOrchestrator {
       consecutiveSkips = 0;
       gateHit = false;
 
-      emitPhaseChange({ phase: 'recon', target, status: 'running' });
-
-      // ── Phase 1: Initial reconnaissance ─────────────────────────────
-      const initialTools = requestedTools?.length
-        ? requestedTools
-        : ['nmap'];
-
-      emitScanStarted({ target, scan_id: scanId, tools: initialTools });
-
-      await aiService.recordDecision({
-        decision: `Starting AI-driven scan in ${operationMode} mode`,
-        rationale: `Initial reconnaissance with ${initialTools.join(', ')} to understand the target attack surface`,
-        selectedTool: initialTools[0],
-        scanId,
+      // ── Check for prior scan history on this target ─────────────────
+      // If recon has already been done, load that history and skip ahead
+      const priorResults = await prisma.scanResult.findMany({
+        where: { scan: { targetId } },
+        orderBy: { createdAt: 'asc' },
       });
 
-      for (const tool of initialTools) {
-        if (state?.cancelled) break;
-        if (state?.paused) {
-          await this.handlePause(scanId, targetId, target, toolHistory, iteration);
-          return;
+      if (priorResults.length > 0) {
+        // Rebuild toolHistory from prior scans so the AI knows what ran
+        for (const r of priorResults) {
+          const data = r.data as Record<string, any>;
+          const output = String(data?.output || '');
+          const maxLen = 2000;
+          toolHistory.push({
+            tool: data?.tool || r.source || 'unknown',
+            exitCode: data?.exitCode ?? 0,
+            duration: data?.duration ?? 0,
+            outputSnippet: output.length > maxLen ? output.slice(0, maxLen) + '\n... [output truncated]' : output,
+          });
         }
-        iteration++;
 
-        const result = await this.executeTool(scanId, targetId, target, tool, `${iteration}/?`);
-        toolHistory.push(this.summarizeResult(result));
+        iteration = toolHistory.length;
+
+        // Check if recon tools have already been run
+        const reconToolsRan = toolHistory.filter((h) => RECON_TOOLS.has(h.tool));
+        const hasReconData = reconToolsRan.length >= 3; // At minimum 3 recon tools ran previously
+
+        emitLogEntry({
+          level: 'INFO',
+          source: 'orchestrator',
+          message: `Found ${priorResults.length} prior results (${reconToolsRan.length} recon tools) — ${hasReconData ? 'skipping recon, starting at exploitation' : 'continuing recon'}`,
+        });
+
+        await aiService.recordDecision({
+          decision: hasReconData
+            ? `Skipping recon — prior scan data available (${reconToolsRan.map((h) => h.tool).join(', ')})`
+            : `Partial history loaded — continuing reconnaissance`,
+          rationale: `${priorResults.length} tool results from prior scans loaded into context`,
+          scanId,
+        });
+
+        if (hasReconData) {
+          // Jump straight to exploitation phase
+          emitPhaseChange({ phase: 'exploit', target, status: 'running' });
+          emitScanStarted({ target, scan_id: scanId, tools: ['ai-exploitation'] });
+
+          await prisma.scan.update({
+            where: { id: scanId },
+            data: { phase: 'EXPLOITATION' },
+          });
+        } else {
+          emitPhaseChange({ phase: 'recon', target, status: 'running' });
+          emitScanStarted({ target, scan_id: scanId, tools: ['ai-recon'] });
+        }
+      } else {
+        // No prior history — run initial recon
+        emitPhaseChange({ phase: 'recon', target, status: 'running' });
+
+        // ── Phase 1: Initial reconnaissance ─────────────────────────────
+        const initialTools = requestedTools?.length
+          ? requestedTools
+          : ['nmap'];
+
+        emitScanStarted({ target, scan_id: scanId, tools: initialTools });
+
+        await aiService.recordDecision({
+          decision: `Starting AI-driven scan in ${operationMode} mode`,
+          rationale: `Initial reconnaissance with ${initialTools.join(', ')} to understand the target attack surface`,
+          selectedTool: initialTools[0],
+          scanId,
+        });
+
+        for (const tool of initialTools) {
+          if (state?.cancelled) break;
+          if (state?.paused) {
+            await this.handlePause(scanId, targetId, target, toolHistory, iteration);
+            return;
+          }
+          iteration++;
+
+          const result = await this.executeTool(scanId, targetId, target, tool, `${iteration}/?`);
+          toolHistory.push(this.summarizeResult(result));
+        }
       }
     }
 
     // ── Phase 2: AI-driven loop ─────────────────────────────────────────
-    let currentPhase: 'recon' | 'exploitation' = 'recon';
+    // Determine starting phase based on prior history
+    const reconToolsExecuted = toolHistory.filter((h) => RECON_TOOLS.has(h.tool));
+    let currentPhase: 'recon' | 'exploitation' = reconToolsExecuted.length >= 3 ? 'exploitation' : 'recon';
     while (iteration < MAX_AI_ITERATIONS && !state?.cancelled && !gateHit) {
       // Check for pause at top of loop
       if (state?.paused) {
