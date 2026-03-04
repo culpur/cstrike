@@ -655,16 +655,34 @@ class ScanOrchestrator {
         scanId,
       });
 
-      // Execute the tool
+      // Execute the tool (wrapped in try-catch so a single tool failure
+      // doesn't crash the entire AI pipeline)
       iteration++;
-      const result = await this.executeTool(
-        scanId,
-        targetId,
-        target,
-        recommendation.tool,
-        `${iteration}/?`,
-      );
-      toolHistory.push(this.summarizeResult(result));
+      try {
+        const result = await this.executeTool(
+          scanId,
+          targetId,
+          target,
+          recommendation.tool,
+          `${iteration}/?`,
+        );
+        toolHistory.push(this.summarizeResult(result));
+      } catch (toolErr: any) {
+        console.error(`[Orchestrator] Tool ${recommendation.tool} crashed: ${toolErr.message}`);
+        emitLogEntry({
+          level: 'ERROR',
+          source: 'orchestrator',
+          message: `Tool ${recommendation.tool} failed: ${toolErr.message}`,
+        });
+        // Push a failure summary so the AI knows this tool failed
+        toolHistory.push({
+          tool: recommendation.tool,
+          outputSnippet: `ERROR: ${recommendation.tool} failed to execute — ${toolErr.message}`,
+          exitCode: -1,
+          duration: 0,
+          error: toolErr.message,
+        });
+      }
 
       // Periodic checkpoint save (every 3 tools)
       if (iteration % 3 === 0) {
