@@ -34,8 +34,8 @@ echo "  Base system ready"
 echo ""
 echo "[2/7] Adding Kali repository and installing tools..."
 
-# Add Kali GPG key and repo
-curl -fsSL https://archive.kali.org/archive-key.asc | gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg
+# Add Kali GPG key and repo (--batch for non-interactive SSH/cloud-init context)
+curl -fsSL https://archive.kali.org/archive-key.asc | gpg --batch --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/kali-archive-keyring.gpg] https://http.kali.org/kali kali-rolling main non-free non-free-firmware" \
     > /etc/apt/sources.list.d/kali.list
 
@@ -62,7 +62,7 @@ apt-get install -y -qq -t kali-rolling \
 for tool in nmap nikto sqlmap dirb gobuster wfuzz hydra john hashcat \
     whatweb wafw00f sslscan sslyze testssl.sh masscan \
     enum4linux smbclient nbtscan onesixtyone snmpwalk \
-    wpscan commix; do
+    wpscan commix smbmap ldap-utils theharvester; do
     apt-get install -y -qq -t kali-rolling "$tool" 2>/dev/null || \
         echo "  $tool: not available in repos, will install separately"
 done

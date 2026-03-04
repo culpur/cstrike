@@ -120,6 +120,15 @@ RUN pip3 install --break-system-packages --no-cache-dir \
     ln -sf /opt/enum4linux-ng/enum4linux-ng.py /usr/local/bin/enum4linux-ng && \
     chmod +x /opt/enum4linux-ng/enum4linux-ng.py || true
 
+# Create impacket tool wrapper scripts (pip installs the library but not the CLI scripts)
+RUN IMPACKET_EXAMPLES=$(python3 -c "import impacket; import os; print(os.path.join(os.path.dirname(impacket.__path__[0]), 'impacket', 'examples'))" 2>/dev/null || echo "/usr/local/lib/python3.11/dist-packages/impacket/examples") && \
+    for script in psexec smbexec wmiexec secretsdump getTGT getST GetNPUsers GetUserSPNs smbclient ntlmrelayx; do \
+      if [ -f "${IMPACKET_EXAMPLES}/${script}.py" ]; then \
+        printf '#!/bin/sh\nexec python3 %s/%s.py "$@"\n' "${IMPACKET_EXAMPLES}" "${script}" > "/usr/local/bin/impacket-${script}" && \
+        chmod +x "/usr/local/bin/impacket-${script}"; \
+      fi; \
+    done || true
+
 # Install searchsploit (ExploitDB search tool)
 RUN git clone --depth 1 https://gitlab.com/exploit-database/exploitdb.git /opt/exploitdb && \
     ln -sf /opt/exploitdb/searchsploit /usr/local/bin/searchsploit && \
