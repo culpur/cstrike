@@ -197,8 +197,19 @@ services:
     restart: unless-stopped
     cap_add:
       - NET_RAW
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       MSF_PASSWORD: ${MSF_PASSWORD:-msf}
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: msf
+      POSTGRES_PASSWORD: msf
+      POSTGRES_DB: msf
+      PG_ADMIN_USER: ${POSTGRES_USER:-cstrike}
+      PG_ADMIN_PASSWORD: ${POSTGRES_PASSWORD:-cstrike}
+      PG_ADMIN_DB: ${POSTGRES_DB:-cstrike}
     volumes:
       - msfdata:/root/.msf4
     healthcheck:
