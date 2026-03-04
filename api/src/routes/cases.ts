@@ -118,6 +118,23 @@ export async function executeTask(taskId: string, caseId: string) {
     // After task completes, re-analyze for new opportunities
     await reanalyzeAfterTask(caseId, caseRecord?.targetId ?? '');
 
+    // Auto-reset stale gateStatus when no more queued gated tasks remain
+    try {
+      const remainingQueued = await prisma.exploitTask.count({
+        where: {
+          caseId,
+          status: 'QUEUED',
+          phase: { in: ['EXPLOITATION', 'PERSISTENCE'] },
+        },
+      });
+      if (remainingQueued === 0) {
+        await prisma.exploitCase.updateMany({
+          where: { id: caseId, gateStatus: 'PENDING_APPROVAL' },
+          data: { gateStatus: 'NONE' },
+        });
+      }
+    } catch { /* best effort */ }
+
     // Feed findings to AI for strategic analysis
     setImmediate(() => feedFindingsToAI(caseId, caseRecord?.targetId ?? ''));
   } catch (err: any) {
