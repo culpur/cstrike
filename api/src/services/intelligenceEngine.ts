@@ -267,12 +267,15 @@ class IntelligenceEngine {
 
   /**
    * Create ExploitTask rows from recommendations.
-   * Auto-run tasks are set to QUEUED, gated tasks to QUEUED but case is GATED.
+   * In full-auto mode, ALL tasks are auto-run (no gating).
+   * In semi-auto mode, gated tasks require operator approval.
    */
   async materializeTasks(
     caseId: string,
     recommendations: TaskRecommendation[],
+    operationMode?: string,
   ): Promise<{ autoTasks: string[]; gatedTasks: string[] }> {
+    const isFullAuto = operationMode === 'full-auto';
     const autoTaskIds: string[] = [];
     const gatedTaskIds: string[] = [];
 
@@ -289,15 +292,16 @@ class IntelligenceEngine {
         },
       });
 
-      if (rec.autoRun) {
+      // In full-auto, everything is auto-run — no gates
+      if (rec.autoRun || isFullAuto) {
         autoTaskIds.push(task.id);
       } else {
         gatedTaskIds.push(task.id);
       }
     }
 
-    // If there are gated tasks, update case gate status
-    if (gatedTaskIds.length > 0) {
+    // Only set PENDING_APPROVAL in non-full-auto modes
+    if (gatedTaskIds.length > 0 && !isFullAuto) {
       const exploitCase = await prisma.exploitCase.findUnique({ where: { id: caseId } });
       if (exploitCase && exploitCase.gateStatus === 'NONE') {
         await prisma.exploitCase.update({
