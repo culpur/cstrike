@@ -23,6 +23,15 @@ export const env = {
   HOST_LOCAL_BIN_PATH: process.env.HOST_LOCAL_BIN_PATH || '/host/usr/local/bin',
   HOST_OPT_PATH: process.env.HOST_OPT_PATH || '/host/opt',
 
+  // ZAP
+  ZAP_HOST: process.env.ZAP_HOST || '127.0.0.1',
+  ZAP_PORT: parseInt(process.env.ZAP_PORT || '8090', 10),
+
+  // Metasploit RPC
+  MSF_HOST: process.env.MSF_HOST || '127.0.0.1',
+  MSF_PORT: parseInt(process.env.MSF_PORT || '55553', 10),
+  MSF_PASSWORD: process.env.MSF_PASSWORD || 'msf',
+
   // Logging
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',
 

@@ -2,6 +2,8 @@
  * Tool Executor — runs security tools via child_process.spawn.
  * Resolves binaries from host-mounted paths, enforces guardrails,
  * streams output to WebSocket, and parses results.
+ *
+ * Also supports API-based tools (ZAP, Metasploit) via HTTP integrations.
  */
 
 import { spawn } from 'node:child_process';
@@ -172,10 +174,34 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
   wpscan: (target) => ['wpscan', '--url', target, '--no-banner'],
   commix: (target) => ['commix', '--url', target, '--batch'],
   gowitness: (target) => ['gowitness', 'single', target],
-  searchsploit: (target) => {
-    // Search ExploitDB for known exploits matching the target's services
+  searchsploit: (target, opts) => {
+    // Search ExploitDB for known exploits — use query if provided, else target host
+    const query = opts.args?.[0] || extractHost(target);
+    return ['searchsploit', query, '--json', '--colour'];
+  },
+  metasploit: (target) => {
     const host = extractHost(target);
-    return ['searchsploit', host, '--json'];
+    const port = extractPort(target);
+    // Build comprehensive auxiliary scan commands
+    const modules: string[] = [
+      // Service version detection
+      `use auxiliary/scanner/smb/smb_version; set RHOSTS ${host}; set THREADS 5; run`,
+      `use auxiliary/scanner/ssh/ssh_version; set RHOSTS ${host}; run`,
+      `use auxiliary/scanner/ftp/ftp_version; set RHOSTS ${host}; run`,
+      `use auxiliary/scanner/http/http_version; set RHOSTS ${host}; set RPORT ${port || 80}; run`,
+      // Vulnerability scanning
+      `use auxiliary/scanner/smb/smb_ms17_010; set RHOSTS ${host}; run`,
+      `use auxiliary/scanner/ssl/openssl_heartbleed; set RHOSTS ${host}; set RPORT ${port || 443}; run`,
+      // Enumeration
+      `use auxiliary/scanner/smb/smb_enumshares; set RHOSTS ${host}; run`,
+      `use auxiliary/scanner/smb/smb_enumusers; set RHOSTS ${host}; run`,
+      // MySQL
+      `use auxiliary/scanner/mysql/mysql_version; set RHOSTS ${host}; run`,
+      // HTTP
+      `use auxiliary/scanner/http/http_header; set RHOSTS ${host}; set RPORT ${port || 80}; run`,
+    ];
+    const fullCommand = modules.join('; ') + '; exit';
+    return ['msfconsole', '-q', '-n', '-x', fullCommand];
   },
 };
 
@@ -209,10 +235,20 @@ class ToolExecutor {
     return name;
   }
 
+  // Tool-specific timeout overrides (ms)
+  private static readonly TOOL_TIMEOUTS: Record<string, number> = {
+    metasploit: 600_000,   // 10 min — MSF loads slowly + multiple modules
+    zap: 600_000,          // 10 min — spider + active scan
+    searchsploit: 60_000,  // 1 min
+  };
+
   /**
    * Run a tool against a target.
    */
   async run(tool: string, target: string, opts: ToolOptions = {}): Promise<ToolResult> {
+    // API-based tools dispatch to dedicated handlers
+    if (tool === 'zap') return this.runZapScan(target, opts);
+
     const commandBuilder = TOOL_COMMANDS[tool];
     if (!commandBuilder) {
       return {
@@ -228,7 +264,7 @@ class ToolExecutor {
     const args = commandBuilder(target, opts);
     const binary = this.resolveBinary(args[0]);
     const spawnArgs = args.slice(1);
-    const timeout = opts.timeout ?? 300_000; // 5 min default
+    const timeout = opts.timeout ?? ToolExecutor.TOOL_TIMEOUTS[tool] ?? 300_000;
 
     console.log(`[ToolExec] ${tool}: ${binary} ${spawnArgs.join(' ')}`);
 
@@ -298,6 +334,228 @@ class ToolExecutor {
         });
       });
     });
+  }
+
+  // ── ZAP REST API integration ────────────────────────────────────────────
+
+  /**
+   * Run OWASP ZAP scan via REST API.
+   * Flow: spider target → active scan → retrieve alerts.
+   */
+  private async runZapScan(target: string, opts: ToolOptions): Promise<ToolResult> {
+    const startTime = Date.now();
+    const zapBase = `http://${env.ZAP_HOST}:${env.ZAP_PORT}`;
+    const targetUrl = ensureHttpUrl(target);
+
+    emitLogEntry({
+      level: 'INFO',
+      source: 'zap',
+      message: `Starting ZAP scan against ${targetUrl}`,
+    });
+
+    emitReconOutput({
+      tool: 'zap',
+      target,
+      output: `[ZAP] Connecting to ZAP daemon at ${zapBase}...\n`,
+      complete: false,
+    });
+
+    try {
+      // Verify ZAP is running
+      const versionResp = await fetch(`${zapBase}/JSON/core/view/version/`);
+      if (!versionResp.ok) throw new Error(`ZAP daemon not responding (HTTP ${versionResp.status})`);
+      const versionData = await versionResp.json() as { version: string };
+
+      emitReconOutput({
+        tool: 'zap',
+        target,
+        output: `[ZAP] Connected — ZAP version ${versionData.version}\n`,
+        complete: false,
+      });
+
+      // ── Step 1: Spider ──────────────────────────────────────────
+      emitReconOutput({
+        tool: 'zap',
+        target,
+        output: `[ZAP] Spidering ${targetUrl}...\n`,
+        complete: false,
+      });
+
+      const spiderResp = await fetch(
+        `${zapBase}/JSON/spider/action/scan/?url=${encodeURIComponent(targetUrl)}&maxChildren=20&recurse=true`,
+      );
+      const spiderData = await spiderResp.json() as { scan: string };
+      const spiderId = spiderData.scan;
+
+      // Wait for spider to complete (max 2 minutes)
+      const spiderTimeout = Date.now() + 120_000;
+      let spiderProgress = 0;
+      while (spiderProgress < 100 && Date.now() < spiderTimeout) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const statusResp = await fetch(`${zapBase}/JSON/spider/view/status/?scanId=${spiderId}`);
+        const statusData = await statusResp.json() as { status: string };
+        spiderProgress = parseInt(statusData.status, 10) || 0;
+
+        emitReconOutput({
+          tool: 'zap',
+          target,
+          output: `[ZAP] Spider progress: ${spiderProgress}%\n`,
+          complete: false,
+        });
+      }
+
+      // Get spider results
+      const spiderResultsResp = await fetch(`${zapBase}/JSON/spider/view/results/?scanId=${spiderId}`);
+      const spiderResults = await spiderResultsResp.json() as { results: string[] };
+      const discoveredUrls = spiderResults.results || [];
+
+      emitReconOutput({
+        tool: 'zap',
+        target,
+        output: `[ZAP] Spider complete — ${discoveredUrls.length} URLs discovered\n`,
+        complete: false,
+      });
+
+      // ── Step 2: Active Scan ─────────────────────────────────────
+      emitReconOutput({
+        tool: 'zap',
+        target,
+        output: `[ZAP] Starting active scan...\n`,
+        complete: false,
+      });
+
+      const ascanResp = await fetch(
+        `${zapBase}/JSON/ascan/action/scan/?url=${encodeURIComponent(targetUrl)}&recurse=true&scanPolicyName=`,
+      );
+      const ascanData = await ascanResp.json() as { scan: string };
+      const ascanId = ascanData.scan;
+
+      // Wait for active scan (max 8 minutes)
+      const scanTimeout = Date.now() + 480_000;
+      let scanProgress = 0;
+      while (scanProgress < 100 && Date.now() < scanTimeout) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const statusResp = await fetch(`${zapBase}/JSON/ascan/view/status/?scanId=${ascanId}`);
+        const statusData = await statusResp.json() as { status: string };
+        scanProgress = parseInt(statusData.status, 10) || 0;
+
+        emitReconOutput({
+          tool: 'zap',
+          target,
+          output: `[ZAP] Active scan progress: ${scanProgress}%\n`,
+          complete: false,
+        });
+      }
+
+      // ── Step 3: Retrieve alerts ─────────────────────────────────
+      const alertsResp = await fetch(
+        `${zapBase}/JSON/core/view/alerts/?baseurl=${encodeURIComponent(targetUrl)}&start=0&count=200`,
+      );
+      const alertsData = await alertsResp.json() as {
+        alerts: Array<{
+          risk: string;
+          confidence: string;
+          alert: string;
+          url: string;
+          description: string;
+          solution: string;
+          param: string;
+          attack: string;
+          evidence: string;
+          cweid: string;
+        }>;
+      };
+      const alerts = alertsData.alerts || [];
+
+      // Format output
+      const lines: string[] = [
+        `OWASP ZAP Scan Report — ${targetUrl}`,
+        `Spider: ${discoveredUrls.length} URLs discovered`,
+        `Alerts: ${alerts.length} findings`,
+        '',
+      ];
+
+      // Group by risk level
+      const byRisk: Record<string, typeof alerts> = {};
+      for (const alert of alerts) {
+        const risk = alert.risk || 'Informational';
+        if (!byRisk[risk]) byRisk[risk] = [];
+        byRisk[risk].push(alert);
+      }
+
+      for (const risk of ['High', 'Medium', 'Low', 'Informational']) {
+        const group = byRisk[risk];
+        if (!group?.length) continue;
+        lines.push(`\n═══ ${risk.toUpperCase()} RISK (${group.length}) ═══`);
+        for (const a of group) {
+          lines.push(`  [${a.risk}/${a.confidence}] ${a.alert}`);
+          lines.push(`    URL: ${a.url}`);
+          if (a.param) lines.push(`    Param: ${a.param}`);
+          if (a.attack) lines.push(`    Attack: ${a.attack}`);
+          if (a.evidence) lines.push(`    Evidence: ${a.evidence.slice(0, 200)}`);
+          if (a.cweid && a.cweid !== '-1') lines.push(`    CWE: ${a.cweid}`);
+          lines.push(`    Solution: ${a.solution.slice(0, 200)}`);
+          lines.push('');
+        }
+      }
+
+      // Include discovered URLs
+      if (discoveredUrls.length > 0) {
+        lines.push(`\n═══ DISCOVERED URLs (${discoveredUrls.length}) ═══`);
+        for (const url of discoveredUrls.slice(0, 50)) {
+          lines.push(`  ${url}`);
+        }
+        if (discoveredUrls.length > 50) {
+          lines.push(`  ... and ${discoveredUrls.length - 50} more`);
+        }
+      }
+
+      const output = lines.join('\n');
+
+      emitReconOutput({
+        tool: 'zap',
+        target,
+        output: `[ZAP] Complete — ${alerts.length} alerts found\n`,
+        complete: true,
+      });
+
+      return {
+        tool: 'zap',
+        target,
+        output,
+        exitCode: 0,
+        duration: Date.now() - startTime,
+        findings: alerts.map((a) => ({
+          type: a.risk === 'High' || a.risk === 'Medium' ? 'vulnerability' : 'info',
+          title: a.alert,
+          detail: `${a.url} — ${a.description.slice(0, 200)}`,
+        })),
+      };
+    } catch (err: any) {
+      const errorMsg = err.message || 'Unknown error';
+
+      emitReconOutput({
+        tool: 'zap',
+        target,
+        output: `[ZAP] Error: ${errorMsg}\n`,
+        complete: true,
+      });
+
+      emitLogEntry({
+        level: 'ERROR',
+        source: 'zap',
+        message: `ZAP scan failed: ${errorMsg}. Is the ZAP container running? (docker compose up zap)`,
+      });
+
+      return {
+        tool: 'zap',
+        target,
+        output: `ZAP scan failed: ${errorMsg}\nEnsure the ZAP container is running: docker compose up -d zap`,
+        exitCode: 1,
+        duration: Date.now() - startTime,
+        error: errorMsg,
+      };
+    }
   }
 }
 

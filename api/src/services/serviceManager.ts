@@ -17,7 +17,7 @@ const SERVICE_COMMANDS: Record<string, {
   stop: string[];
 }> = {
   metasploit: {
-    start: ['msfrpcd', '-P', 'msf', '-S', '-a', '127.0.0.1', '-p', '55552'],
+    start: ['msfrpcd', '-P', 'msf', '-S', '-a', '127.0.0.1', '-p', '55553'],
     stop: ['pkill', '-f', 'msfrpcd'],
   },
   zap: {
@@ -72,7 +72,7 @@ class ServiceManager {
     // Update Metasploit args with config values
     if (name === 'metasploit' && action === 'start') {
       const password = await getConfigValue('msf_password', 'msf');
-      const port = await getConfigValue('msf_port', 55552);
+      const port = await getConfigValue('msf_port', 55553);
       const host = await getConfigValue('msf_host', '127.0.0.1');
       args[1] = String(password);
       args[5] = String(host);

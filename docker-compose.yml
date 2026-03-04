@@ -162,6 +162,52 @@ services:
       retries: 3
       start_period: 60s
 
+  # ── OWASP ZAP Daemon ──────────────────────────────────────
+  # Web application security scanner — runs as a daemon with REST API on :8090
+  # The API container calls ZAP's API for spider + active scan + alerts
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: cstrike-zap
+    network_mode: host
+    restart: unless-stopped
+    user: zap
+    command: >
+      zap.sh -daemon -port 8090 -host 0.0.0.0
+      -config api.disablekey=true
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+      -config scanner.threadPerHost=4
+      -config connection.timeoutInSecs=60
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8090/JSON/core/view/version/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ── Metasploit Framework ─────────────────────────────────
+  # RPC daemon for programmatic exploit/auxiliary module execution
+  # The API container calls MSF's JSON-RPC API on :55553
+  metasploit:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.msf
+    container_name: cstrike-msf
+    network_mode: host
+    restart: unless-stopped
+    cap_add:
+      - NET_RAW
+    environment:
+      MSF_PASSWORD: ${MSF_PASSWORD:-msf}
+    volumes:
+      - msfdata:/root/.msf4
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:55553/api/v1/health 2>/dev/null || msfconsole -v >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
   # ── VulnBox Target ─────────────────────────────────────────
   # Deliberately vulnerable target host with its own IP address.
   # Services on standard ports: SSH:22, HTTP:80, FTP:21, MySQL:3306,
@@ -214,4 +260,6 @@ volumes:
   apidata:
     driver: local
   vulnbox-data:
+    driver: local
+  msfdata:
     driver: local

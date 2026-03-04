@@ -48,6 +48,7 @@ const RECON_TOOLS = new Set([
 const EXPLOIT_TOOLS = new Set([
   'sqlmap', 'xsstrike', 'commix',
   'hydra', 'john', 'hashcat',
+  'metasploit', 'zap',
 ]);
 
 const ALL_AVAILABLE_TOOLS = [...RECON_TOOLS, ...EXPLOIT_TOOLS];
@@ -1100,13 +1101,22 @@ Step 2 — PLAN: Which exploitation tool targets the most critical weakness foun
 Step 3 — RECOMMEND: Pick the most impactful tool from the available list.
 
 Attack vector analysis:
-- Web application vulnerabilities (SQL injection, XSS, command injection) → sqlmap, xsstrike, commix
+- Web application vulnerabilities (SQL injection, XSS, command injection) → sqlmap, xsstrike, commix, zap
+- Comprehensive web app security scanning (OWASP Top 10, spider, active scan) → zap
+- Service-level exploitation (EternalBlue, Heartbleed, known CVEs) → metasploit
 - Weak/default credentials on exposed services (SSH, FTP, SMB, HTTP auth) → hydra
 - Password hashes discovered → john, hashcat
-- Known CVEs found by nuclei/nmap → searchsploit for exploit research
+- Known CVEs found by nuclei/nmap → searchsploit for exploit research, then metasploit
 - Directory/file discovery gaps → remaining fuzzing tools (ffuf, feroxbuster, dirb)
 
-IMPORTANT: Do NOT say DONE unless ALL exploitation tools have been run or would provide no value against the discovered attack surface. If there are untried exploitation tools that could target discovered weaknesses, recommend one.
+Tool priority for exploitation:
+1. zap — Comprehensive web application security scan (spider + active scan + OWASP checks)
+2. metasploit — Service-level vulnerability scanning and exploitation (auxiliary modules)
+3. sqlmap/xsstrike/commix — Targeted injection attacks
+4. hydra — Credential brute-forcing
+5. john/hashcat — Hash cracking
+
+IMPORTANT: Do NOT say DONE unless ALL exploitation tools have been run or would provide no value against the discovered attack surface. ALWAYS try zap and metasploit if a web application or network services were discovered.
 
 ## RESPONSE FORMAT
 

@@ -11,7 +11,7 @@ INSERT INTO services (id, name, status, port, optional, auto_start, "createdAt",
 VALUES
   ('svc_api',        'api_server',  'STOPPED', 3001,  false, false, NOW(), NOW()),
   ('svc_frontend',   'frontend',    'STOPPED', 3000,  false, false, NOW(), NOW()),
-  ('svc_metasploit', 'metasploit',  'STOPPED', 55552, true,  true,  NOW(), NOW()),
+  ('svc_metasploit', 'metasploit',  'STOPPED', 55553, true,  true,  NOW(), NOW()),
   ('svc_zap',        'zap',         'STOPPED', 8090,  true,  true,  NOW(), NOW()),
   ('svc_burp',       'burp',        'STOPPED', NULL,  true,  true,  NOW(), NOW())
 ON CONFLICT (name) DO UPDATE SET auto_start = EXCLUDED.auto_start;
@@ -46,7 +46,7 @@ VALUES
   (gen_random_uuid(), 'msf_username',      '"msf"',     1, NOW(), NOW()),
   (gen_random_uuid(), 'msf_password',      '"msf"',     1, NOW(), NOW()),
   (gen_random_uuid(), 'msf_host',          '"127.0.0.1"', 1, NOW(), NOW()),
-  (gen_random_uuid(), 'msf_port',          '55552',     1, NOW(), NOW()),
+  (gen_random_uuid(), 'msf_port',          '55553',     1, NOW(), NOW()),
   -- OWASP ZAP
   (gen_random_uuid(), 'zap_host',          '"127.0.0.1"', 1, NOW(), NOW()),
   (gen_random_uuid(), 'zap_port',          '8090',      1, NOW(), NOW()),

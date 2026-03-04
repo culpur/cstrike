@@ -73,6 +73,11 @@ RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto && \
 RUN pip3 install --break-system-packages --no-cache-dir \
     wafw00f wfuzz sslyze dnsrecon 2>/dev/null || true
 
+# Install searchsploit (ExploitDB search tool)
+RUN git clone --depth 1 https://gitlab.com/exploit-database/exploitdb.git /opt/exploitdb && \
+    ln -sf /opt/exploitdb/searchsploit /usr/local/bin/searchsploit && \
+    sed -i 's|/opt/exploitdb|/opt/exploitdb|g' /opt/exploitdb/.searchsploit_rc 2>/dev/null || true
+
 # Install testssl.sh (bash-based SSL scanner)
 RUN curl -fsSL https://raw.githubusercontent.com/drwetter/testssl.sh/3.2/testssl.sh -o /usr/local/bin/testssl.sh && \
     chmod +x /usr/local/bin/testssl.sh || true

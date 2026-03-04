@@ -82,7 +82,7 @@ export function ServicesView() {
       id: 'metasploit',
       name: 'metasploit',
       displayName: 'Metasploit RPC',
-      port: 55552,
+      port: 55553,
       status: services.metasploitRpc,
       optional: true,
       description: 'Exploitation framework daemon',
@@ -430,7 +430,7 @@ function getFeatureMatrix(
   return [
     { name: 'REST API', available: connected, detail: ':8000' },
     { name: 'WebSocket', available: connected, detail: 'Socket.IO' },
-    { name: 'Metasploit RPC', available: services.metasploitRpc === 'running', detail: ':55552' },
+    { name: 'Metasploit RPC', available: services.metasploitRpc === 'running', detail: ':55553' },
     { name: 'OWASP ZAP', available: services.zap === 'running', detail: ':8090' },
     { name: 'Burp Suite', available: services.burp === 'running' },
     { name: 'AI Provider', available: aiAvailable, detail: aiDetail },

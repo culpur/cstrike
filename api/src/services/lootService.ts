@@ -324,7 +324,7 @@ class LootService {
     }
 
     // Hashes — only from hash-focused tools to avoid false positives
-    if (['john', 'hashcat', 'hydra', 'enum4linux', 'smbclient'].includes(source)) {
+    if (['john', 'hashcat', 'hydra', 'enum4linux', 'smbclient', 'metasploit'].includes(source)) {
       for (const pattern of HASH_PATTERNS) {
         let m: RegExpExecArray | null;
         const re = new RegExp(pattern.source, pattern.flags);
@@ -335,7 +335,7 @@ class LootService {
     }
 
     // URLs — from web-focused tools
-    if (['waybackurls', 'gau', 'gobuster', 'ffuf', 'feroxbuster', 'dirb', 'katana', 'httpx', 'nuclei', 'nikto'].includes(source)) {
+    if (['waybackurls', 'gau', 'gobuster', 'ffuf', 'feroxbuster', 'dirb', 'katana', 'httpx', 'nuclei', 'nikto', 'zap', 'wpscan'].includes(source)) {
       for (const pattern of URL_PATTERNS) {
         let m: RegExpExecArray | null;
         const re = new RegExp(pattern.source, pattern.flags);

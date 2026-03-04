@@ -1,0 +1,35 @@
+# CStrike — Metasploit Framework Container
+# Provides msfconsole + msfrpcd for automated exploitation
+# Uses Kali Rolling for reliable arm64/amd64 MSF packages
+
+FROM kalilinux/kali-rolling
+
+# Install Metasploit Framework + dependencies
+RUN apt-get update -qq && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      metasploit-framework \
+      curl \
+      ca-certificates \
+      postgresql-client \
+      nmap \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install searchsploit (exploitdb)
+RUN apt-get update -qq && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      exploitdb \
+    && rm -rf /var/lib/apt/lists/* || \
+    (git clone --depth 1 https://gitlab.com/exploit-database/exploitdb.git /opt/exploitdb && \
+     ln -sf /opt/exploitdb/searchsploit /usr/local/bin/searchsploit) || true
+
+# Create MSF data directory
+RUN mkdir -p /root/.msf4
+
+# Default: start msfconsole in RPC daemon mode
+# The API container connects via HTTP to run modules
+COPY docker/msf-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 55553
+
+ENTRYPOINT ["/entrypoint.sh"]
