@@ -7,7 +7,9 @@
  */
 
 import { spawn } from 'node:child_process';
+import { accessSync } from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import { env } from '../config/env.js';
 import { getConfigValue } from '../middleware/guardrails.js';
 
@@ -54,7 +56,6 @@ function resolveCommand(cmd: string): string {
   for (const p of paths) {
     const full = `${p}/${cmd}`;
     try {
-      const { accessSync } = require('node:fs');
       accessSync(full);
       return full;
     } catch {
@@ -112,7 +113,6 @@ export async function probeHealth(url: string, timeoutMs = 5000): Promise<boolea
  * Used for services like msfrpcd that don't have a REST health endpoint.
  */
 export function probeTcpPort(port: number, host = '127.0.0.1', timeoutMs = 3000): Promise<boolean> {
-  const net = require('node:net') as typeof import('node:net');
   return new Promise((resolve) => {
     const socket = new net.Socket();
     socket.setTimeout(timeoutMs);
