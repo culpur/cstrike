@@ -16,6 +16,7 @@
 import { Router } from 'express';
 import { prisma } from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { getConfigValue } from '../middleware/guardrails.js';
 import { intelligenceEngine } from '../services/intelligenceEngine.js';
 import { toolExecutor } from '../services/toolExecutor.js';
 import { lootService } from '../services/lootService.js';
@@ -160,17 +161,18 @@ export async function executeTask(taskId: string, caseId: string) {
 export async function reanalyzeAfterTask(caseId: string, targetId: string) {
   if (!targetId) return;
   try {
+    const operationMode = await getConfigValue<string>('operation_mode', 'full-auto');
     const recs = await intelligenceEngine.analyzeFindings(caseId, targetId);
     if (recs.length === 0) return;
 
-    const { autoTasks, gatedTasks } = await intelligenceEngine.materializeTasks(caseId, recs);
+    const { autoTasks, gatedTasks } = await intelligenceEngine.materializeTasks(caseId, recs, operationMode);
 
-    // Auto-run enumeration tasks
+    // Auto-run all tasks (in full-auto, gatedTasks will be empty)
     for (const tid of autoTasks) {
       setImmediate(() => executeTask(tid, caseId));
     }
 
-    // If new gated tasks, emit gate event
+    // If new gated tasks (only in semi-auto), emit gate event
     if (gatedTasks.length > 0) {
       emitCaseGateReached({ caseId, pendingTasks: gatedTasks.length, phase: 'EXPLOITATION' });
     }
@@ -443,14 +445,15 @@ casesRouter.post('/', async (req, res, next) => {
 
         if (recs.length === 0) return;
 
-        const { autoTasks, gatedTasks } = await intelligenceEngine.materializeTasks(exploitCase.id, recs);
+        const opMode = await getConfigValue<string>('operation_mode', 'full-auto');
+        const { autoTasks, gatedTasks } = await intelligenceEngine.materializeTasks(exploitCase.id, recs, opMode);
 
-        // Auto-run enumeration tasks immediately
+        // Auto-run tasks immediately (in full-auto, all tasks are auto)
         for (const tid of autoTasks) {
           setImmediate(() => executeTask(tid, exploitCase.id));
         }
 
-        // Emit gate event if exploitation tasks are queued
+        // Emit gate event if exploitation tasks are queued (semi-auto only)
         if (gatedTasks.length > 0) {
           emitCaseGateReached({
             caseId: exploitCase.id,
@@ -703,7 +706,8 @@ casesRouter.post('/:id/analyze', async (req, res, next) => {
     if (!exploitCase) throw new AppError(404, 'Case not found');
 
     const recs = await intelligenceEngine.analyzeFindings(exploitCase.id, exploitCase.targetId);
-    const { autoTasks, gatedTasks } = await intelligenceEngine.materializeTasks(exploitCase.id, recs);
+    const opMode = await getConfigValue<string>('operation_mode', 'full-auto');
+    const { autoTasks, gatedTasks } = await intelligenceEngine.materializeTasks(exploitCase.id, recs, opMode);
 
     // Auto-run new enumeration tasks
     for (const tid of autoTasks) {
