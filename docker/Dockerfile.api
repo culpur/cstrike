@@ -61,10 +61,33 @@ RUN DOCKER_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64"
 
 # Feroxbuster (Rust-based content discovery scanner)
 RUN FEROX_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64";; esac) && \
-    FEROX_VERSION=2.11.0 && \
-    curl -fsSL "https://github.com/epi052/feroxbuster/releases/download/v${FEROX_VERSION}/${FEROX_ARCH}-linux-feroxbuster.tar.gz" | \
-    tar xz -C /tmp/tools && \
+    FEROX_VERSION=2.13.1 && \
+    curl -fsSL "https://github.com/epi052/feroxbuster/releases/download/v${FEROX_VERSION}/${FEROX_ARCH}-linux-feroxbuster.zip" -o /tmp/ferox.zip && \
+    unzip -o /tmp/ferox.zip -d /tmp/tools && \
     chmod +x /tmp/tools/feroxbuster 2>/dev/null || touch /tmp/tools/feroxbuster
+
+# amass (OWASP subdomain enumeration)
+RUN AMASS_VERSION=5.0.1 && \
+    curl -fsSL "https://github.com/owasp-amass/amass/releases/download/v${AMASS_VERSION}/amass_linux_${TARGETARCH}.tar.gz" | \
+    tar xz -C /tmp && find /tmp -name amass -type f -not -path '/tmp/tools/*' -exec cp {} /tmp/tools/amass \; && \
+    chmod +x /tmp/tools/amass 2>/dev/null || touch /tmp/tools/amass
+
+# gau (Get All URLs — historical URL discovery)
+RUN GAU_VERSION=2.2.4 && \
+    curl -fsSL "https://github.com/lc/gau/releases/download/v${GAU_VERSION}/gau_${GAU_VERSION}_linux_${TARGETARCH}.tar.gz" | \
+    tar xz -C /tmp/tools && \
+    chmod +x /tmp/tools/gau 2>/dev/null || touch /tmp/tools/gau
+
+# RustScan (fast port scanner)
+RUN RUSTSCAN_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64";; esac) && \
+    RUSTSCAN_VERSION=2.4.1 && \
+    curl -fsSL "https://github.com/bee-san/RustScan/releases/download/${RUSTSCAN_VERSION}/${RUSTSCAN_ARCH}-linux-rustscan.zip" -o /tmp/rustscan.zip && \
+    unzip -o /tmp/rustscan.zip -d /tmp/tools && \
+    chmod +x /tmp/tools/rustscan 2>/dev/null || touch /tmp/tools/rustscan
+
+# ── Stage 2b: Go builder for tools without prebuilt ARM64 binaries ──
+FROM golang:1.22-bookworm AS gobuilder
+RUN CGO_ENABLED=0 go install github.com/tomnomnom/waybackurls@latest
 
 # ── Stage 3: Runtime ─────────────────────────────────────────
 FROM node:22-bookworm-slim
@@ -76,8 +99,9 @@ RUN apt-get update -qq && \
       curl git dnsutils net-tools procps postgresql-client \
       nmap hydra sqlmap sslscan masscan whatweb \
       nbtscan snmp smbclient \
-      john hashcat \
+      john hashcat dirb \
       perl libnet-ssleay-perl libwhisker2-perl \
+      libnet-dns-perl libnet-ip-perl libstring-random-perl \
       && rm -rf /var/lib/apt/lists/*
 
 # Install nikto from source (not in Debian repos)
@@ -105,6 +129,11 @@ RUN git clone --depth 1 https://gitlab.com/exploit-database/exploitdb.git /opt/e
 RUN curl -fsSL https://raw.githubusercontent.com/drwetter/testssl.sh/3.2/testssl.sh -o /usr/local/bin/testssl.sh && \
     chmod +x /usr/local/bin/testssl.sh || true
 
+# Install dnsenum (DNS enumeration — Perl script)
+RUN git clone --depth 1 https://github.com/fwaeytens/dnsenum.git /opt/dnsenum && \
+    ln -sf /opt/dnsenum/dnsenum.pl /usr/local/bin/dnsenum && \
+    chmod +x /opt/dnsenum/dnsenum.pl || true
+
 # Install XSStrike (XSS detection)
 RUN git clone --depth 1 https://github.com/s0md3v/XSStrike.git /opt/XSStrike && \
     cd /opt/XSStrike && pip3 install --break-system-packages -r requirements.txt 2>/dev/null || true && \
@@ -125,6 +154,10 @@ COPY --from=tools /tmp/tools/ffuf /usr/local/bin/ffuf
 COPY --from=tools /tmp/tools/gobuster /usr/local/bin/gobuster
 COPY --from=tools /tmp/tools/docker /usr/local/bin/docker
 COPY --from=tools /tmp/tools/feroxbuster /usr/local/bin/feroxbuster
+COPY --from=tools /tmp/tools/amass /usr/local/bin/amass
+COPY --from=tools /tmp/tools/gau /usr/local/bin/gau
+COPY --from=tools /tmp/tools/rustscan /usr/local/bin/rustscan
+COPY --from=gobuilder /go/bin/waybackurls /usr/local/bin/waybackurls
 
 # Download SecLists wordlists to /opt/wordlists (staging dir — not shadowed by volume mount)
 RUN mkdir -p /opt/wordlists && \
