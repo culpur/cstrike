@@ -102,7 +102,11 @@ RUN apt-get update -qq && \
       john hashcat dirb \
       perl libnet-ssleay-perl libwhisker2-perl \
       libnet-dns-perl libnet-ip-perl libstring-random-perl \
+      ruby ruby-dev build-essential zlib1g-dev \
       && rm -rf /var/lib/apt/lists/*
+
+# Install wpscan (Ruby-based WordPress vulnerability scanner)
+RUN gem install wpscan --no-document 2>/dev/null || true
 
 # Install nikto from source (not in Debian repos)
 RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto && \
