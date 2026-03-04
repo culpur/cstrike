@@ -42,6 +42,7 @@ const RECON_TOOLS = new Set([
   'nikto', 'nuclei', 'wpscan',
   'waybackurls', 'gau', 'katana', 'gowitness',
   'enum4linux', 'smbclient', 'nbtscan', 'snmpwalk',
+  'searchsploit',
 ]);
 
 const EXPLOIT_TOOLS = new Set([
@@ -404,14 +405,22 @@ class ScanOrchestrator {
     }
 
     // ── Phase 2: AI-driven loop ─────────────────────────────────────────
+    let currentPhase: 'recon' | 'exploitation' = 'recon';
     while (iteration < MAX_AI_ITERATIONS && !state?.cancelled && !gateHit) {
       // Check for pause at top of loop
       if (state?.paused) {
         await this.handlePause(scanId, targetId, target, toolHistory, iteration, consecutiveSkips, gateHit, operationMode);
         return;
       }
-      // Check if there are any tools left to run
+      // Check if there are any tools left to run (include exploit track manager tools)
       const executedSet = new Set(toolHistory.map((h) => h.tool));
+      try {
+        const etmTasks = await prisma.exploitTask.findMany({
+          where: { case: { targetId }, status: { in: ['COMPLETED', 'RUNNING', 'QUEUED', 'FAILED'] } },
+          select: { tool: true },
+        });
+        for (const et of etmTasks) executedSet.add(et.tool);
+      } catch { /* best effort */ }
       const remainingCount = ALL_AVAILABLE_TOOLS.filter((t) => !executedSet.has(t)).length;
       if (remainingCount === 0) {
         emitLogEntry({
@@ -428,7 +437,7 @@ class ScanOrchestrator {
       }
 
       // Build context for AI analysis
-      const analysisPrompt = await this.buildAIPrompt(target, targetId, toolHistory, operationMode);
+      const analysisPrompt = await this.buildAIPrompt(target, targetId, toolHistory, operationMode, currentPhase);
 
       emitLogEntry({
         level: 'INFO',
@@ -466,9 +475,38 @@ class ScanOrchestrator {
       const recommendation = this.parseAIRecommendation(aiResult.content);
 
       if (recommendation.done) {
-        // AI says we're done
+        // Check if we should transition from recon to exploitation phase
+        if (currentPhase === 'recon' && operationMode !== 'manual') {
+          // Transition to exploitation planning phase
+          currentPhase = 'exploitation';
+
+          await aiService.recordDecision({
+            decision: 'Reconnaissance complete — transitioning to exploitation planning',
+            rationale: recommendation.reasoning,
+            scanId,
+          });
+
+          emitLogEntry({
+            level: 'INFO',
+            source: 'ai',
+            message: `Recon phase complete — entering exploitation planning phase`,
+          });
+
+          emitPhaseChange({ phase: 'exploit', target, status: 'running' });
+
+          await prisma.scan.update({
+            where: { id: scanId },
+            data: { phase: 'EXPLOITATION' },
+          });
+
+          // Reset skip counter and re-enter the loop with exploitation-focused prompt
+          consecutiveSkips = 0;
+          continue;
+        }
+
+        // Exploitation phase done — truly complete
         await aiService.recordDecision({
-          decision: 'Scan complete — all valuable reconnaissance paths explored',
+          decision: 'Exploitation planning complete — all attack vectors explored',
           rationale: recommendation.reasoning,
           scanId,
         });
@@ -476,7 +514,7 @@ class ScanOrchestrator {
         emitLogEntry({
           level: 'INFO',
           source: 'ai',
-          message: `AI recommends stopping: ${recommendation.reasoning}`,
+          message: `AI exploitation planning complete: ${recommendation.reasoning}`,
         });
         break;
       }
@@ -987,11 +1025,22 @@ class ScanOrchestrator {
     targetId: string,
     toolHistory: ToolRunSummary[],
     operationMode: OperationMode,
+    phase: 'recon' | 'exploitation' = 'recon',
   ): Promise<string> {
+    // Build executed set including exploit track manager tools
     const executedSet = new Set(toolHistory.map((h) => h.tool));
+    try {
+      const etmTasks = await prisma.exploitTask.findMany({
+        where: { case: { targetId }, status: { in: ['COMPLETED', 'RUNNING', 'QUEUED', 'FAILED'] } },
+        select: { tool: true },
+      });
+      for (const et of etmTasks) executedSet.add(et.tool);
+    } catch { /* best effort */ }
+
+    const allExecuted = [...executedSet];
     const remainingTools = ALL_AVAILABLE_TOOLS.filter((t) => !executedSet.has(t));
     const toolList = remainingTools.length > 0 ? remainingTools.join(', ') : 'NONE';
-    const alreadyRan = toolHistory.map((h) => h.tool).join(', ');
+    const alreadyRan = allExecuted.join(', ');
 
     const resultsSummary = toolHistory
       .map((h) => {
@@ -1000,17 +1049,11 @@ class ScanOrchestrator {
       })
       .join('\n\n');
 
-    const gateNote = operationMode === 'semi-auto'
-      ? '\nIMPORTANT: Exploitation tools (sqlmap, xsstrike, commix, hydra, john, hashcat) require operator approval in semi-auto mode. Only recommend them if you believe exploitation is warranted based on findings.'
-      : operationMode === 'full-auto'
-        ? '\nFull-auto mode: you may recommend exploitation tools without restriction.'
-        : '';
-
     // Add concurrent exploitation context if available
     let exploitSection = '';
     const exploitCtx = await exploitTrackManager.getExploitContext(targetId);
     if (exploitCtx) {
-      exploitSection = `\n\n## CONCURRENT EXPLOITATION FINDINGS\n${exploitCtx}\n`;
+      exploitSection = `\n\n## EXPLOITATION TRACK MANAGER RESULTS\n${exploitCtx}\n`;
     }
 
     // Add historical context from previous scans
@@ -1020,18 +1063,76 @@ class ScanOrchestrator {
       historicalSection = `\n\n## HISTORICAL CONTEXT (from previous scans)\n${historicalCtx}\n`;
     }
 
-    // Exploitation tools are handled concurrently by the exploit track manager,
-    // so the AI should focus on what additional recon/scanning is valuable.
-    const exploitNote = operationMode === 'full-auto'
-      ? `\nNOTE: Exploitation (sqlmap, hydra, etc.) is running CONCURRENTLY in the background via the exploit track manager. You do NOT need to recommend exploitation tools — they are spawned automatically when vulnerabilities are discovered. Focus on which remaining reconnaissance/scanning tools would reveal NEW attack surface.`
-      : operationMode === 'semi-auto'
-        ? `\nNOTE: When you recommend exploitation tools (sqlmap, hydra, etc.), they are queued for operator approval on the Exploitation page. The exploit track manager also creates exploitation tasks automatically from findings. Do NOT keep recommending the same exploitation tool — once recommended, it is queued. Focus on which remaining reconnaissance tools would reveal NEW attack surface.`
+    // ── Exploitation planning phase prompt ──────────────────────────────
+    if (phase === 'exploitation') {
+      const remainingExploitTools = [...EXPLOIT_TOOLS].filter((t) => !executedSet.has(t));
+      const exploitToolList = remainingExploitTools.length > 0
+        ? remainingExploitTools.join(', ')
+        : 'NONE (all exploitation tools have been executed)';
+
+      const gateNote = operationMode === 'semi-auto'
+        ? '\nIMPORTANT: Exploitation tools require operator approval in semi-auto mode. Recommend them — they will be queued for the operator.'
+        : '';
+
+      return `You are the AI orchestrator for CStrike, an offensive security automation platform.
+You have completed reconnaissance of target: ${target} and are now in the EXPLOITATION PLANNING phase.
+
+OPERATION MODE: ${operationMode.toUpperCase()}${gateNote}
+
+## PHASE: EXPLOITATION PLANNING
+
+Reconnaissance is complete. Your job now is to ANALYZE the findings and plan TARGETED EXPLOITATION.
+
+EXPLOITATION TOOLS AVAILABLE: ${exploitToolList}
+ALL TOOLS NOT YET EXECUTED: ${toolList}
+ALREADY EXECUTED (do NOT recommend these again): ${alreadyRan || 'none'}
+
+## RECONNAISSANCE FINDINGS
+
+${resultsSummary || 'No results available.'}
+${exploitSection}${historicalSection}
+## YOUR TASK
+
+You are in the EXPLOITATION PLANNING phase. Analyze ALL reconnaissance findings above and plan targeted attacks.
+
+Step 1 — ANALYZE: What specific vulnerabilities, misconfigurations, exposed services, or weak credentials were discovered?
+Step 2 — PLAN: Which exploitation tool targets the most critical weakness found?
+Step 3 — RECOMMEND: Pick the most impactful tool from the available list.
+
+Attack vector analysis:
+- Web application vulnerabilities (SQL injection, XSS, command injection) → sqlmap, xsstrike, commix
+- Weak/default credentials on exposed services (SSH, FTP, SMB, HTTP auth) → hydra
+- Password hashes discovered → john, hashcat
+- Known CVEs found by nuclei/nmap → searchsploit for exploit research
+- Directory/file discovery gaps → remaining fuzzing tools (ffuf, feroxbuster, dirb)
+
+IMPORTANT: Do NOT say DONE unless ALL exploitation tools have been run or would provide no value against the discovered attack surface. If there are untried exploitation tools that could target discovered weaknesses, recommend one.
+
+## RESPONSE FORMAT
+
+Respond with EXACTLY this format:
+
+NEXT_TOOL: <tool_name from available list, or DONE if exploitation is exhausted>
+REASONING: <which specific vulnerability/weakness is being targeted and why this tool is appropriate>
+OBSERVATIONS: <summary of attack vectors identified from recon, exploitation progress so far>`;
+    }
+
+    // ── Reconnaissance phase prompt ─────────────────────────────────────
+    const gateNote = operationMode === 'semi-auto'
+      ? '\nIMPORTANT: Exploitation tools (sqlmap, xsstrike, commix, hydra, john, hashcat) require operator approval in semi-auto mode.'
+      : operationMode === 'full-auto'
+        ? '\nFull-auto mode: you may recommend any tool without restriction.'
         : '';
 
     return `You are the AI orchestrator for CStrike, an offensive security automation platform.
 You are conducting a security assessment of target: ${target}
 
-OPERATION MODE: ${operationMode.toUpperCase()}${gateNote}${exploitNote}
+OPERATION MODE: ${operationMode.toUpperCase()}${gateNote}
+
+## PHASE: RECONNAISSANCE
+
+Your goal is to discover as much attack surface as possible before transitioning to exploitation.
+The exploit track manager is running some exploitation tools concurrently in the background — tools it has run are listed in ALREADY EXECUTED.
 
 TOOLS NOT YET EXECUTED (choose from these ONLY): ${toolList}
 ALREADY EXECUTED (do NOT recommend these again): ${alreadyRan || 'none'}
@@ -1042,13 +1143,13 @@ ${resultsSummary || 'No tools have been executed yet.'}
 ${exploitSection}${historicalSection}
 ## YOUR TASK
 
-Analyze the scan results above and decide what to do next.
+Analyze the scan results above and decide what RECONNAISSANCE tool to run next.
 IMPORTANT: You must ONLY recommend a tool from the "TOOLS NOT YET EXECUTED" list above. Do NOT recommend any tool from the "ALREADY EXECUTED" list.
 Consider:
-1. What attack surface has been revealed?
+1. What attack surface has been revealed so far?
 2. What services, technologies, and potential vulnerabilities have been identified?
-3. What tool from the NOT YET EXECUTED list would provide the most value next?
-4. Are we done with reconnaissance? If all remaining tools would not reveal significant new attack surface, say DONE. Exploitation tasks will continue to run after recon completes.
+3. What tool from the NOT YET EXECUTED list would reveal the most NEW attack surface?
+4. Say DONE only when additional reconnaissance tools would not reveal significant new information. After recon, the system will automatically transition to exploitation planning.
 
 ## RESPONSE FORMAT
 

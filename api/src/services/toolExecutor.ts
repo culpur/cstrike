@@ -172,6 +172,11 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
   wpscan: (target) => ['wpscan', '--url', target, '--no-banner'],
   commix: (target) => ['commix', '--url', target, '--batch'],
   gowitness: (target) => ['gowitness', 'single', target],
+  searchsploit: (target) => {
+    // Search ExploitDB for known exploits matching the target's services
+    const host = extractHost(target);
+    return ['searchsploit', host, '--json'];
+  },
 };
 
 class ToolExecutor {
