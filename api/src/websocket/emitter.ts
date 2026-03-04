@@ -53,6 +53,10 @@ export function emitReconOutput(data: {
   event?: string;
   progress?: string;
   scan_id?: string;
+  rawOutput?: string;
+  exitCode?: number;
+  duration?: number;
+  targetId?: string;
 }) {
   io?.emit('recon_output', data);
 }

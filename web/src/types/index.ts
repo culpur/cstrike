@@ -508,3 +508,29 @@ export interface FeatureStatus {
   available: boolean;
   detail?: string;
 }
+
+// ============================================================================
+// Evidence / Case Folder Types
+// ============================================================================
+
+export interface EvidenceRecord {
+  id: string;
+  tool: string;
+  type: 'scan' | 'exploit';
+  phase: string;
+  rawOutput: string;
+  exitCode: number | null;
+  duration: number | null;
+  status: string;
+  createdAt: number;
+  scanId: string | null;
+}
+
+export interface EvidenceTarget {
+  targetId: string;
+  hostname: string;
+  url: string;
+  scanResultCount: number;
+  exploitTaskCount: number;
+  lastActivity: number;
+}

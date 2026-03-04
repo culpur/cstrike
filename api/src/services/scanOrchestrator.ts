@@ -788,6 +788,10 @@ class ScanOrchestrator {
       event: result.error ? 'tool_error' : 'tool_complete',
       progress,
       scan_id: scanId,
+      rawOutput: result.output?.substring(0, 50_000),
+      exitCode: result.exitCode,
+      duration: result.duration,
+      targetId,
     });
 
     return result;

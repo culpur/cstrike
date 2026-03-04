@@ -18,6 +18,8 @@ import type {
   VulnAPIScanResult,
   VpnConnection,
   VpnProvider,
+  EvidenceRecord,
+  EvidenceTarget,
 } from '@/types';
 
 class ApiService {
@@ -686,6 +688,18 @@ class ApiService {
   async getTargetContext(targetId: string): Promise<any> {
     const { data } = await this.client.get(`/recon/context/${targetId}`);
     return data.data || data;
+  }
+
+  // ── Evidence / Case Folders ────────────────────────────────────────────
+
+  async getEvidenceTargets(): Promise<EvidenceTarget[]> {
+    const { data } = await this.client.get('/evidence/targets');
+    return data.data?.targets || [];
+  }
+
+  async getEvidence(targetId: string): Promise<{ targetId: string; hostname: string; url: string; evidence: EvidenceRecord[]; totalCount: number }> {
+    const { data } = await this.client.get(`/evidence/${targetId}`);
+    return data.data || { targetId, hostname: '', url: '', evidence: [], totalCount: 0 };
   }
 }
 
