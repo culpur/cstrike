@@ -422,7 +422,7 @@ class AIService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120_000), // 2 min timeout
+      signal: AbortSignal.timeout(180_000), // 3 min timeout
     });
 
     if (!response.ok) {

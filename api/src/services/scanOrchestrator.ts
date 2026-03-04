@@ -1244,8 +1244,8 @@ class ScanOrchestrator {
    * Summarize a tool result for inclusion in AI prompts.
    */
   private summarizeResult(result: { tool: string; output: string; exitCode: number; duration: number; error?: string }): ToolRunSummary {
-    // Truncate output to ~2000 chars for the AI prompt
-    const maxLen = 2000;
+    // Truncate output to ~1000 chars for the AI prompt (keep prompts manageable for local models)
+    const maxLen = 1000;
     const snippet = result.output.length > maxLen
       ? result.output.slice(0, maxLen) + '\n... [output truncated]'
       : result.output;
