@@ -85,6 +85,8 @@ services:
       - /usr/sbin:/host/usr/sbin:ro
       - /usr/local/bin:/host/usr/local/bin:ro
       - /opt:/host/opt:ro
+      # Docker socket — allows API to manage sibling containers (ZAP, MSF)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       # Shared data
       - /usr/share/wordlists:/usr/share/wordlists:ro
       - apidata:/opt/cstrike/data

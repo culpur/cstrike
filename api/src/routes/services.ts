@@ -9,7 +9,7 @@ import { Router } from 'express';
 import { prisma } from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { emitServiceAutoStart } from '../websocket/emitter.js';
-import { serviceManager } from '../services/serviceManager.js';
+import { serviceManager, isDockerManaged } from '../services/serviceManager.js';
 import { resetServiceRetry } from '../services/serviceMonitor.js';
 
 export const servicesRouter = Router();
@@ -53,8 +53,11 @@ servicesRouter.post('/:name', async (req, res, next) => {
     // Execute the action
     const result = await serviceManager.execute(name, action);
 
-    // Update final status
-    const finalStatus = action === 'start' ? 'RUNNING' : 'STOPPED';
+    // Determine final status
+    const finalStatus = result.error
+      ? 'ERROR'
+      : action === 'start' ? 'RUNNING' : 'STOPPED';
+
     await prisma.service.update({
       where: { name },
       data: {
@@ -64,11 +67,22 @@ servicesRouter.post('/:name', async (req, res, next) => {
       },
     });
 
-    res.json({
-      success: true,
-      data: { service: name, action, status: finalStatus.toLowerCase() },
-      timestamp: Date.now(),
-    });
+    emitServiceAutoStart({ service: name, status: finalStatus.toLowerCase() });
+
+    if (result.error) {
+      res.json({
+        success: false,
+        error: result.error,
+        data: { service: name, action, status: 'error' },
+        timestamp: Date.now(),
+      });
+    } else {
+      res.json({
+        success: true,
+        data: { service: name, action, status: finalStatus.toLowerCase() },
+        timestamp: Date.now(),
+      });
+    }
   } catch (err) {
     next(err);
   }

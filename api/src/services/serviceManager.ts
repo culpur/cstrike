@@ -1,29 +1,41 @@
 /**
  * Service lifecycle manager — start/stop/restart Metasploit, ZAP, Burp.
+ *
+ * Docker-managed services (metasploit, zap) use the Docker Engine API
+ * via the mounted socket at /var/run/docker.sock.
+ * Local services (burp) fall back to spawn-based management.
  */
 
 import { spawn } from 'node:child_process';
+import http from 'node:http';
 import { env } from '../config/env.js';
 import { getConfigValue } from '../middleware/guardrails.js';
 
-interface ServiceResult {
+export interface ServiceResult {
   pid?: number;
   error?: string;
 }
 
-// Map service names to their start/stop commands
-const SERVICE_COMMANDS: Record<string, {
+/** Docker-managed services — run as sibling containers */
+const DOCKER_SERVICES: Record<string, {
+  containerName: string;
+  healthUrl: string;
+}> = {
+  metasploit: {
+    containerName: 'cstrike-msf',
+    healthUrl: `http://127.0.0.1:${env.MSF_PORT}/api/v1/health`,
+  },
+  zap: {
+    containerName: 'cstrike-zap',
+    healthUrl: `http://127.0.0.1:${env.ZAP_PORT}/JSON/core/view/version/`,
+  },
+};
+
+/** Locally-spawned services (not containerised) */
+const LOCAL_SERVICE_COMMANDS: Record<string, {
   start: string[];
   stop: string[];
 }> = {
-  metasploit: {
-    start: ['msfrpcd', '-P', 'msf', '-S', '-a', '127.0.0.1', '-p', '55553'],
-    stop: ['pkill', '-f', 'msfrpcd'],
-  },
-  zap: {
-    start: ['zap.sh', '-daemon', '-port', '8090', '-host', '127.0.0.1', '-config', 'api.disablekey=true'],
-    stop: ['pkill', '-f', 'zap'],
-  },
   burp: {
     start: ['java', '-jar', '/opt/BurpSuitePro/burpsuite_pro.jar', '--unpause-spider-and-scanner'],
     stop: ['pkill', '-f', 'burpsuite'],
@@ -31,7 +43,6 @@ const SERVICE_COMMANDS: Record<string, {
 };
 
 function resolveCommand(cmd: string): string {
-  // Check host-mounted paths first, then local
   const paths = [
     env.HOST_LOCAL_BIN_PATH,
     env.HOST_BIN_PATH,
@@ -49,35 +60,128 @@ function resolveCommand(cmd: string): string {
       continue;
     }
   }
-  return cmd; // Fall back to PATH
+  return cmd;
+}
+
+/**
+ * Call the Docker Engine API via the unix socket.
+ * Returns the HTTP status code (204 = success, 304 = already in that state).
+ */
+function dockerApiPost(containerName: string, action: string): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        socketPath: '/var/run/docker.sock',
+        path: `/v1.41/containers/${containerName}/${action}`,
+        method: 'POST',
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          resolve({ statusCode: res.statusCode ?? 500, body });
+        });
+      },
+    );
+    req.on('error', (err) => reject(err));
+    req.setTimeout(30_000, () => {
+      req.destroy(new Error('Docker API timeout'));
+    });
+    req.end();
+  });
+}
+
+/**
+ * Probe a health endpoint with a timeout.
+ */
+export async function probeHealth(url: string, timeoutMs = 5000): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a Docker-managed service is healthy.
+ */
+export async function isDockerServiceHealthy(name: string): Promise<boolean> {
+  const dSvc = DOCKER_SERVICES[name];
+  if (!dSvc) return false;
+  return probeHealth(dSvc.healthUrl);
+}
+
+/**
+ * Returns true if the given service name is managed by Docker Compose.
+ */
+export function isDockerManaged(name: string): boolean {
+  return name in DOCKER_SERVICES;
 }
 
 class ServiceManager {
   async execute(name: string, action: 'start' | 'stop' | 'restart'): Promise<ServiceResult> {
-    const cmds = SERVICE_COMMANDS[name];
+    // Docker-managed services
+    if (name in DOCKER_SERVICES) {
+      return this.executeDocker(name, action);
+    }
+
+    // Local services
+    return this.executeLocal(name, action);
+  }
+
+  private async executeDocker(name: string, action: 'start' | 'stop' | 'restart'): Promise<ServiceResult> {
+    const dSvc = DOCKER_SERVICES[name];
+
+    try {
+      const result = await dockerApiPost(dSvc.containerName, action);
+
+      // 204 = success, 304 = already in that state (both OK)
+      if (result.statusCode === 204 || result.statusCode === 304) {
+        // For start/restart, wait a moment then check health
+        if (action === 'start' || action === 'restart') {
+          await new Promise((r) => setTimeout(r, 3000));
+          const healthy = await probeHealth(dSvc.healthUrl);
+          if (!healthy) {
+            return { error: `${name} container started but health check failed` };
+          }
+        }
+        return {};
+      }
+
+      // 404 = container not found
+      if (result.statusCode === 404) {
+        return { error: `Container ${dSvc.containerName} not found — is Docker Compose running?` };
+      }
+
+      return { error: `Docker API returned ${result.statusCode}: ${result.body}` };
+    } catch (err: any) {
+      // Docker socket not available
+      if (err.code === 'ENOENT' || err.code === 'ECONNREFUSED') {
+        return { error: `Docker socket unavailable — cannot manage ${name} container` };
+      }
+      return { error: `Docker API error: ${err.message}` };
+    }
+  }
+
+  private async executeLocal(name: string, action: 'start' | 'stop' | 'restart'): Promise<ServiceResult> {
+    const cmds = LOCAL_SERVICE_COMMANDS[name];
     if (!cmds) {
       return { error: `Unknown service: ${name}` };
     }
 
     if (action === 'restart') {
-      await this.execute(name, 'stop');
+      await this.executeLocal(name, 'stop');
       await new Promise((r) => setTimeout(r, 2000));
-      return this.execute(name, 'start');
+      return this.executeLocal(name, 'start');
     }
 
     const cmdArgs = action === 'start' ? cmds.start : cmds.stop;
     const executable = resolveCommand(cmdArgs[0]);
     const args = cmdArgs.slice(1);
-
-    // Update Metasploit args with config values
-    if (name === 'metasploit' && action === 'start') {
-      const password = await getConfigValue('msf_password', 'msf');
-      const port = await getConfigValue('msf_port', 55553);
-      const host = await getConfigValue('msf_host', '127.0.0.1');
-      args[1] = String(password);
-      args[5] = String(host);
-      args[7] = String(port);
-    }
 
     return new Promise((resolve) => {
       try {
@@ -86,7 +190,6 @@ class ServiceManager {
           stdio: 'ignore',
         });
 
-        // Handle async ENOENT / permission errors from spawn
         child.on('error', (err: any) => {
           resolve({ error: `${executable}: ${err.message}` });
         });
@@ -94,7 +197,6 @@ class ServiceManager {
         child.unref();
 
         if (action === 'start') {
-          // Give the service a moment to start (or fail)
           setTimeout(() => {
             resolve({ pid: child.pid });
           }, 1500);
