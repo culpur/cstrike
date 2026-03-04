@@ -752,6 +752,20 @@ export function ConfigurationView() {
         badge={`${enabledModes}/${SCAN_MODES.length}`}
       >
         <div className="space-y-4">
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => setConfig((prev) => ({ ...prev, scan_modes: SCAN_MODES.map((m) => m.id) }))}
+              className="text-[10px] font-mono px-2 py-1 rounded border border-[var(--grok-border)] text-[var(--grok-text-muted)] hover:text-[var(--grok-recon-blue)] hover:border-[var(--grok-recon-blue)]/40 transition-colors"
+            >
+              Enable All
+            </button>
+            <button
+              onClick={() => setConfig((prev) => ({ ...prev, scan_modes: [] }))}
+              className="text-[10px] font-mono px-2 py-1 rounded border border-[var(--grok-border)] text-[var(--grok-text-muted)] hover:text-[var(--grok-error)] hover:border-[var(--grok-error)]/40 transition-colors"
+            >
+              Disable All
+            </button>
+          </div>
           {SCAN_MODE_CATEGORIES.map((cat) => {
             const modes = SCAN_MODES.filter((m) => m.category === cat.key);
             return (
@@ -803,6 +817,20 @@ export function ConfigurationView() {
         badge={`${enabledTools}/${totalTools}`}
       >
         <div className="space-y-1">
+          <div className="flex gap-2 justify-end mb-2">
+            <button
+              onClick={() => setConfig((prev) => ({ ...prev, allowed_tools: TOOL_CATEGORIES.flatMap((c) => c.tools.map((t) => t.id)) }))}
+              className="text-[10px] font-mono px-2 py-1 rounded border border-[var(--grok-border)] text-[var(--grok-text-muted)] hover:text-[var(--grok-loot-green)] hover:border-[var(--grok-loot-green)]/40 transition-colors"
+            >
+              Enable All
+            </button>
+            <button
+              onClick={() => setConfig((prev) => ({ ...prev, allowed_tools: [] }))}
+              className="text-[10px] font-mono px-2 py-1 rounded border border-[var(--grok-border)] text-[var(--grok-text-muted)] hover:text-[var(--grok-error)] hover:border-[var(--grok-error)]/40 transition-colors"
+            >
+              Disable All
+            </button>
+          </div>
           {TOOL_CATEGORIES.map((cat) => {
             const expanded = expandedCategories.has(cat.key);
             const catToolIds = cat.tools.map((t) => t.id);
