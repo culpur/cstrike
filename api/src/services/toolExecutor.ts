@@ -164,16 +164,28 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
     args.push((opts.service ?? 'ssh').toLowerCase());
     return args;
   },
-  john: (target) => ['john', target],
-  hashcat: (target) => ['hashcat', '-m', '0', target, '/usr/share/wordlists/rockyou.txt'],
-  enum4linux: (target) => ['enum4linux', '-a', extractHost(target)],
+  john: (target) => {
+    const wl = findWordlist([
+      '/opt/cstrike/data/wordlists/passwords-10k.txt',
+      '/opt/cstrike/data/wordlists/passwords.txt',
+      '/usr/share/wordlists/rockyou.txt',
+    ]);
+    return ['john', `--wordlist=${wl}`, target];
+  },
+  hashcat: (target) => {
+    const wl = findWordlist([
+      '/opt/cstrike/data/wordlists/passwords-10k.txt',
+      '/opt/cstrike/data/wordlists/passwords.txt',
+      '/usr/share/wordlists/rockyou.txt',
+    ]);
+    return ['hashcat', '-m', '0', target, wl, '--force'];
+  },
+  enum4linux: (target) => ['enum4linux-ng', '-A', extractHost(target)],
   smbclient: (target) => ['smbclient', '-L', extractHost(target), '-N'],
   nbtscan: (target) => ['nbtscan', extractHost(target)],
   snmpwalk: (target) => ['snmpwalk', '-v2c', '-c', 'public', extractHost(target)],
   dnsrecon: (target) => ['dnsrecon', '-d', extractHost(target)],
-  wpscan: (target) => ['wpscan', '--url', target, '--no-banner'],
   commix: (target) => ['commix', '--url', target, '--batch'],
-  gowitness: (target) => ['gowitness', 'single', target],
   searchsploit: (target, opts) => {
     // Search ExploitDB for known exploits — use query if provided, else target host
     const query = opts.args?.[0] || extractHost(target);
@@ -201,7 +213,8 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
       `use auxiliary/scanner/http/http_header; set RHOSTS ${host}; set RPORT ${port || 80}; run`,
     ];
     const fullCommand = modules.join('; ') + '; exit';
-    return ['msfconsole', '-q', '-n', '-x', fullCommand];
+    // Execute inside the MSF container via docker exec
+    return ['docker', 'exec', 'cstrike-msf', 'msfconsole', '-q', '-n', '-x', fullCommand];
   },
 };
 
