@@ -19,11 +19,12 @@ export interface ServiceResult {
 /** Docker-managed services — run as sibling containers */
 const DOCKER_SERVICES: Record<string, {
   containerName: string;
-  healthUrl: string;
+  healthUrl?: string;   // HTTP health endpoint (ZAP)
+  healthPort?: number;  // TCP port probe (MSF — msfrpcd has no REST API)
 }> = {
   metasploit: {
     containerName: 'cstrike-msf',
-    healthUrl: `http://127.0.0.1:${env.MSF_PORT}/api/v1/health`,
+    healthPort: env.MSF_PORT,
   },
   zap: {
     containerName: 'cstrike-zap',
@@ -92,7 +93,7 @@ function dockerApiPost(containerName: string, action: string): Promise<{ statusC
 }
 
 /**
- * Probe a health endpoint with a timeout.
+ * Probe an HTTP health endpoint with a timeout.
  */
 export async function probeHealth(url: string, timeoutMs = 5000): Promise<boolean> {
   try {
@@ -107,12 +108,44 @@ export async function probeHealth(url: string, timeoutMs = 5000): Promise<boolea
 }
 
 /**
+ * Probe a TCP port — returns true if the port accepts connections.
+ * Used for services like msfrpcd that don't have a REST health endpoint.
+ */
+export function probeTcpPort(port: number, host = '127.0.0.1', timeoutMs = 3000): Promise<boolean> {
+  const net = require('node:net') as typeof import('node:net');
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once('error', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.connect(port, host);
+  });
+}
+
+/**
  * Check if a Docker-managed service is healthy.
  */
 export async function isDockerServiceHealthy(name: string): Promise<boolean> {
   const dSvc = DOCKER_SERVICES[name];
   if (!dSvc) return false;
-  return probeHealth(dSvc.healthUrl);
+
+  if (dSvc.healthUrl) {
+    return probeHealth(dSvc.healthUrl);
+  }
+  if (dSvc.healthPort) {
+    return probeTcpPort(dSvc.healthPort);
+  }
+  return false;
 }
 
 /**
@@ -144,7 +177,7 @@ class ServiceManager {
         // For start/restart, wait a moment then check health
         if (action === 'start' || action === 'restart') {
           await new Promise((r) => setTimeout(r, 3000));
-          const healthy = await probeHealth(dSvc.healthUrl);
+          const healthy = await isDockerServiceHealthy(name);
           if (!healthy) {
             return { error: `${name} container started but health check failed` };
           }
