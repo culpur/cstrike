@@ -113,7 +113,7 @@ const THOUGHT_META: Record<
 // ============================================================================
 
 export function AIStreamView() {
-  const { thoughts, decisions, isThinking, addThought, addDecision } = useAIStore();
+  const { thoughts, isThinking, addThought } = useAIStore();
   const thoughtsEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new thoughts
@@ -150,25 +150,13 @@ export function AIStreamView() {
             command: thought.command || undefined,
             metadata: thought.metadata || undefined,
           });
-
-          // Populate Recent Decisions from ai_decision thoughts
-          if (mappedType === 'ai_decision') {
-            const meta = thought.metadata as Record<string, unknown> | null;
-            addDecision({
-              phase: 'recon' as any,
-              decision: content,
-              reasoning: meta?.rationale ? String(meta.rationale) : '',
-              confidence: 0.85,
-              executedCommand: thought.command || undefined,
-            });
-          }
         });
       } catch (error) {
         console.error('Failed to load AI thoughts:', error);
       }
     };
     loadThoughts();
-  }, [addThought, addDecision]);
+  }, [addThought]);
 
   // No duplicate WebSocket listener here — useWebSocketHandlers handles it
 
@@ -192,47 +180,6 @@ export function AIStreamView() {
           </div>
         )}
       </div>
-
-      {/* Recent Decisions */}
-      {decisions.length > 0 && (
-        <Panel title="Recent Decisions">
-          <div className="space-y-2">
-            {decisions.slice(-5).reverse().map((decision) => (
-              <div
-                key={decision.id}
-                className="flex gap-3 p-3 rounded-lg border-l-3"
-                style={{
-                  borderLeftWidth: '3px',
-                  borderLeftColor: 'var(--grok-ai-purple)',
-                  background: 'var(--grok-surface-2)',
-                }}
-              >
-                <Zap className="w-4 h-4 text-[var(--grok-ai-purple)] flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-mono text-[var(--grok-text-muted)]">
-                      {formatTime(decision.timestamp)}
-                    </span>
-                    {decision.executedCommand && (
-                      <span className="text-[10px] font-mono px-1.5 py-px rounded bg-[var(--grok-recon-blue)]/15 text-[var(--grok-recon-blue)]">
-                        {decision.executedCommand}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs font-semibold text-[var(--grok-text-heading)]">
-                    {decision.decision}
-                  </p>
-                  {decision.reasoning && (
-                    <p className="text-xs text-[var(--grok-text-muted)] mt-0.5">
-                      {decision.reasoning}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
 
       {/* Thought Stream */}
       <Panel title="Live Thought Stream" noPadding>

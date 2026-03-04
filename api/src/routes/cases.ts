@@ -476,12 +476,20 @@ casesRouter.post('/:id/approve', async (req, res, next) => {
     });
 
     if (!exploitCase) throw new AppError(404, 'Case not found');
-    if (exploitCase.gateStatus !== 'PENDING_APPROVAL') {
-      throw new AppError(400, 'No pending gate to approve');
+
+    // Find all queued tasks in gated phases (exploitation or persistence)
+    const gatedTasks = exploitCase.tasks.filter(
+      (t) => t.status === 'QUEUED' && (t.phase === 'EXPLOITATION' || t.phase === 'PERSISTENCE'),
+    );
+
+    if (gatedTasks.length === 0) {
+      throw new AppError(400, 'No queued tasks to approve');
     }
 
-    // Update gate status
-    const nextPhase = exploitCase.currentPhase === 'ENUMERATION' ? 'EXPLOITATION' : 'PERSISTENCE';
+    // Determine next phase from the queued tasks
+    const nextPhase = gatedTasks.some((t) => t.phase === 'EXPLOITATION') ? 'EXPLOITATION' : 'PERSISTENCE';
+
+    // Update gate status and phase
     await prisma.exploitCase.update({
       where: { id: req.params.id },
       data: {
@@ -491,11 +499,6 @@ casesRouter.post('/:id/approve', async (req, res, next) => {
     });
 
     emitCasePhaseChanged({ caseId: exploitCase.id, phase: nextPhase });
-
-    // Get gated tasks (exploitation or persistence phase)
-    const gatedTasks = exploitCase.tasks.filter(
-      (t) => t.phase === nextPhase && t.status === 'QUEUED',
-    );
 
     console.log(`[Case:${exploitCase.id}] Gate approved — launching ${gatedTasks.length} ${nextPhase} tasks`);
 
