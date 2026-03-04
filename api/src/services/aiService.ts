@@ -403,10 +403,13 @@ class AIService {
   private async callOllama(config: AIProviderConfig, input: AIAnalyzeInput): Promise<string> {
     const baseUrl = config.ollamaUrl.replace(/\/$/, '');
 
+    // Use /api/chat (supports both local and cloud/remote models)
     const body = {
       model: config.model,
-      system: this.buildSystemPrompt(input.target),
-      prompt: input.prompt,
+      messages: [
+        { role: 'system', content: this.buildSystemPrompt(input.target) },
+        { role: 'user', content: input.prompt },
+      ],
       stream: false,
       options: {
         temperature: config.temperature,
@@ -414,7 +417,7 @@ class AIService {
       },
     };
 
-    const response = await fetch(`${baseUrl}/api/generate`, {
+    const response = await fetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -427,7 +430,7 @@ class AIService {
     }
 
     const data = await response.json() as any;
-    return data.response ?? '';
+    return data.message?.content ?? '';
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
