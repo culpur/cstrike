@@ -824,23 +824,30 @@ class ScanOrchestrator {
         exploitIteration++;
 
         const exploitPrompt = await this.buildAIPrompt(target, targetId, toolHistory, operationMode, 'exploitation');
-        const recommendation = await aiService.getRecommendation(exploitPrompt, target);
+        const aiResult = await aiService.analyze({
+          prompt: exploitPrompt,
+          target,
+          scanId,
+          mode: 'tools',
+        });
 
-        if (!recommendation) {
-          emitLogEntry({ level: 'WARN', source: 'orchestrator', message: 'AI returned no recommendation for exploitation' });
+        if (aiResult.status === 'error') {
+          emitLogEntry({ level: 'WARN', source: 'orchestrator', message: `AI exploitation analysis failed: ${aiResult.error}` });
           break;
         }
 
+        const recommendation = this.parseAIRecommendation(aiResult.content);
+
         await aiService.recordDecision({
-          decision: recommendation.tool === 'DONE'
+          decision: recommendation.done
             ? 'Exploitation planning complete'
             : `Run ${recommendation.tool} for exploitation`,
           rationale: recommendation.reasoning,
-          selectedTool: recommendation.tool === 'DONE' ? undefined : recommendation.tool,
+          selectedTool: recommendation.done ? undefined : recommendation.tool ?? undefined,
           scanId,
         });
 
-        if (recommendation.tool === 'DONE') {
+        if (recommendation.done) {
           emitLogEntry({
             level: 'INFO',
             source: 'orchestrator',
@@ -850,8 +857,9 @@ class ScanOrchestrator {
         }
 
         // Execute the recommended exploitation tool
+        const exploitTool = recommendation.tool!;
         iteration++;
-        const result = await this.executeTool(scanId, targetId, target, recommendation.tool, `${iteration}/?`);
+        const result = await this.executeTool(scanId, targetId, target, exploitTool, `${iteration}/?`);
 
         const summary = this.summarizeResult(result);
         toolHistory.push(summary);
@@ -860,29 +868,29 @@ class ScanOrchestrator {
         await prisma.scanResult.create({
           data: {
             scanId,
-            source: recommendation.tool,
-            severity: 'info',
+            resultType: this.toolToResultType(exploitTool),
+            source: exploitTool,
             data: {
-              tool: recommendation.tool,
+              tool: exploitTool,
               output: result.output,
               exitCode: result.exitCode,
               duration: result.duration,
               error: result.error,
               phase: 'exploitation',
-            },
+            } as any,
           },
         });
 
         // Parse and store loot
-        await lootService.parseAndStore(result.output, recommendation.tool, targetId, target);
+        await lootService.extractFromOutput(result.output, exploitTool, targetId);
 
         emitReconOutput({
           target,
-          tool: recommendation.tool,
+          tool: exploitTool,
           output: result.output,
+          complete: true,
           exitCode: result.exitCode,
           duration: result.duration,
-          phase: 'exploitation',
         });
       }
     }
