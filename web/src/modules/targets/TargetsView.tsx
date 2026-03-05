@@ -140,13 +140,13 @@ export function TargetsView() {
     }
   };
 
-  const handleRemoveTarget = async (targetUrl: string) => {
+  const handleRemoveTarget = async (targetId: string) => {
     try {
-      const target = targets.find((t) => t.url === targetUrl);
+      const target = targets.find((t) => t.id === targetId);
       if (!target) return;
 
-      await apiService.removeTarget(targetUrl);
-      removeTarget(target.id);
+      await apiService.removeTarget(targetId);
+      removeTarget(targetId);
       addToast({
         type: 'success',
         message: 'Target removed',
@@ -323,7 +323,7 @@ export function TargetsView() {
                     )}
                     <button
                       className="cs-btn flex items-center gap-1.5 text-[10px] py-1 px-2"
-                      onClick={() => handleRemoveTarget(target.url)}
+                      onClick={() => handleRemoveTarget(target.id)}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

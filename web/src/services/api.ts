@@ -147,10 +147,8 @@ class ApiService {
     throw new Error(data.error || 'Failed to add target');
   }
 
-  async removeTarget(targetUrl: string): Promise<void> {
-    // Backend expects DELETE /targets/<path:target_id>
-    // Can accept either integer index or URL string
-    await this.client.delete(`/targets/${encodeURIComponent(targetUrl)}`);
+  async removeTarget(targetId: string): Promise<void> {
+    await this.client.delete(`/targets/${encodeURIComponent(targetId)}`);
   }
 
   async startRecon(target: string, tools: string[]): Promise<{scan_id: string; status: string}> {
