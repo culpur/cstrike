@@ -817,6 +817,32 @@ class ScanOrchestrator {
         data: { phase: 'EXPLOITATION' },
       });
 
+      // ── Inject completed ETM results into toolHistory to prevent Phase 4 re-running them ──
+      const etmCompletedTasks = await prisma.exploitTask.findMany({
+        where: { case: { targetId }, status: 'COMPLETED' },
+        select: { tool: true, exitCode: true, duration: true, output: true, findings: true },
+      });
+      const etmCompletedTools = new Set<string>();
+      for (const etmTask of etmCompletedTasks) {
+        etmCompletedTools.add(etmTask.tool);
+        // Only inject if not already in toolHistory (avoid duplicates from prior phases)
+        if (!toolHistory.some((h) => h.tool === etmTask.tool)) {
+          toolHistory.push({
+            tool: etmTask.tool,
+            exitCode: etmTask.exitCode ?? 0,
+            duration: etmTask.duration ?? 0,
+            outputSnippet: (etmTask.output || '').slice(0, 1000),
+          });
+        }
+      }
+      if (etmCompletedTools.size > 0) {
+        emitLogEntry({
+          level: 'INFO',
+          source: 'orchestrator',
+          message: `Phase 4: Injected ${etmCompletedTools.size} completed ETM results into history — ${[...etmCompletedTools].join(', ')}`,
+        });
+      }
+
       const MAX_EXPLOIT_ITERATIONS = 10;
       let exploitIteration = 0;
 
@@ -857,14 +883,15 @@ class ScanOrchestrator {
           break;
         }
 
-        // Dedup: skip tools already executed in the exploitation phase
+        // Dedup: skip tools already executed in the exploitation phase OR completed by ETM
         const exploitTool = recommendation.tool!;
         const alreadyRan = toolHistory.filter((h) => h.tool === exploitTool);
-        if (alreadyRan.length > 0) {
+        const ranByEtm = etmCompletedTools.has(exploitTool);
+        if (alreadyRan.length > 0 || ranByEtm) {
           emitLogEntry({
             level: 'WARN',
             source: 'orchestrator',
-            message: `AI recommended already-executed tool "${exploitTool}" — skipping (ran ${alreadyRan.length}x)`,
+            message: `AI recommended already-executed tool "${exploitTool}" — skipping (history: ${alreadyRan.length}x${ranByEtm ? ', ETM: completed' : ''})`,
           });
           // Count as a wasted iteration so the loop still terminates
           continue;
@@ -1284,10 +1311,9 @@ class ScanOrchestrator {
     // Filter out pseudo-entries (like __prior_exploit_findings__) from the executed set
     const executedSet = new Set(toolHistory.map((h) => h.tool).filter((t) => !t.startsWith('__')));
     try {
-      // Only count CURRENTLY active ETM tasks (running/queued) as executed —
-      // completed tasks from prior scans should not block re-execution
+      // Include active + completed ETM tasks as executed to prevent AI from recommending them
       const etmTasks = await prisma.exploitTask.findMany({
-        where: { case: { targetId }, status: { in: ['RUNNING', 'QUEUED'] } },
+        where: { case: { targetId }, status: { in: ['RUNNING', 'QUEUED', 'COMPLETED'] } },
         select: { tool: true },
       });
       for (const et of etmTasks) executedSet.add(et.tool);

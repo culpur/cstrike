@@ -40,6 +40,8 @@ import {
   Hash,
   RotateCcw,
   Key,
+  CalendarClock,
+  Network,
 } from 'lucide-react';
 import {
   PieChart,
@@ -244,6 +246,10 @@ export function DashboardView() {
     { key: 'msf', label: 'MSF', status: services.metasploitRpc },
     { key: 'zap', label: 'ZAP', status: services.zap },
     { key: 'burp', label: 'BURP', status: services.burp },
+    { key: 'psql', label: 'PSQL', status: services.postgresql ?? 'stopped' },
+    { key: 'redis', label: 'REDIS', status: services.redis ?? 'stopped' },
+    { key: 'ollama', label: 'OLLAMA', status: services.ollama ?? 'stopped' },
+    { key: 'docker', label: 'DOCKER', status: services.docker ?? 'stopped' },
   ];
 
   return (
@@ -285,33 +291,60 @@ export function DashboardView() {
       </div>
 
       {/* ── Telemetry strip ────────────────────────────────────── */}
-      <div className="grid grid-cols-5 gap-3">
-        <TelemetryCard
-          icon={<Cpu className="w-4 h-4" />}
-          label="CPU"
-          value={formatPercent(metrics.cpu)}
-          color={metrics.cpu > 80 ? 'var(--grok-error)' : 'var(--grok-scan-cyan)'}
-          percent={metrics.cpu}
-        />
-        <TelemetryCard
-          icon={<HardDrive className="w-4 h-4" />}
-          label="RAM"
-          value={formatPercent(metrics.memory)}
-          color={metrics.memory > 80 ? 'var(--grok-warning)' : 'var(--grok-ai-purple)'}
-          percent={metrics.memory}
-        />
-        <TelemetryCard
-          icon={metrics.vpnIp ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
-          label="VPN"
-          value={metrics.vpnIp || 'OFF'}
-          color={metrics.vpnIp ? 'var(--grok-success)' : 'var(--grok-text-muted)'}
-        />
-        <TelemetryCard
-          icon={<Clock className="w-4 h-4" />}
-          label="Uptime"
-          value={formatUptime(metrics.uptime)}
-          color="var(--grok-text-body)"
-        />
+      <div className="grid grid-cols-3 gap-3">
+        {/* Combined CPU / RAM / Uptime / Date-Time */}
+        <div className="cs-panel p-3 relative overflow-hidden">
+          <div className="flex items-center gap-3 text-xs font-mono flex-wrap">
+            <span className="flex items-center gap-1" style={{ color: metrics.cpu > 80 ? 'var(--grok-error)' : 'var(--grok-scan-cyan)' }}>
+              <Cpu className="w-3.5 h-3.5" /> {formatPercent(metrics.cpu)}
+            </span>
+            <span className="text-[var(--grok-border)]">/</span>
+            <span className="flex items-center gap-1" style={{ color: metrics.memory > 80 ? 'var(--grok-warning)' : 'var(--grok-ai-purple)' }}>
+              <HardDrive className="w-3.5 h-3.5" /> {formatPercent(metrics.memory)}
+            </span>
+            <span className="text-[var(--grok-border)]">/</span>
+            <span className="flex items-center gap-1 text-[var(--grok-text-body)]">
+              <Clock className="w-3.5 h-3.5" /> {formatUptime(metrics.uptime)}
+            </span>
+            <span className="text-[var(--grok-border)]">/</span>
+            <span className="flex items-center gap-1 text-[var(--grok-text-muted)]">
+              <CalendarClock className="w-3.5 h-3.5" /> {new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          {/* CPU usage bar */}
+          <div
+            className="absolute bottom-0 left-0 h-0.5 transition-all duration-1000"
+            style={{ width: `${metrics.cpu}%`, backgroundColor: metrics.cpu > 80 ? 'var(--grok-error)' : 'var(--grok-scan-cyan)' }}
+          />
+        </div>
+
+        {/* VPN + Network interfaces */}
+        <div className="cs-panel p-3">
+          <div className="flex items-center gap-3 text-xs font-mono flex-wrap">
+            <span className="flex items-center gap-1" style={{ color: metrics.vpnIp ? 'var(--grok-success)' : 'var(--grok-text-muted)' }}>
+              {metrics.vpnIp ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+              VPN: {metrics.vpnIp || 'OFF'}
+            </span>
+            <span className="text-[var(--grok-border)]">|</span>
+            <span className="flex items-center gap-1 text-[var(--grok-text-body)]">
+              <Network className="w-3.5 h-3.5 text-[var(--grok-scan-cyan)]" />
+              MGMT: {metrics.mgmtIpInternal || '---'}
+              <span className="text-[var(--grok-text-muted)]">INT</span>
+              / {metrics.mgmtIpPublic || '---'}
+              <span className="text-[var(--grok-text-muted)]">PUB</span>
+            </span>
+          </div>
+          {metrics.opsIpInternal && (
+            <div className="flex items-center gap-1 text-xs font-mono mt-1 text-[var(--grok-text-body)]">
+              <span className="ml-5">OPS: {metrics.opsIpInternal}</span>
+              <span className="text-[var(--grok-text-muted)]">INT</span>
+              / {metrics.opsIpPublic || '---'}
+              <span className="text-[var(--grok-text-muted)]">PUB</span>
+            </div>
+          )}
+        </div>
+
+        {/* Targets */}
         <TelemetryCard
           icon={<Target className="w-4 h-4" />}
           label="Targets"
@@ -320,81 +353,36 @@ export function DashboardView() {
         />
       </div>
 
-      {/* ── Service health + Pipeline ──────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* Service health */}
-        <div className="cs-panel p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)]">
-              Services
-            </span>
-            <button
-              onClick={() => setActiveView('services')}
-              className="text-[10px] text-[var(--grok-recon-blue)] hover:underline flex items-center gap-0.5"
-            >
-              Manage <ChevronRight className="w-3 h-3" />
-            </button>
-          </div>
-          <div className="flex items-center gap-4">
-            {serviceList.map((svc) => (
-              <div key={svc.key} className="flex items-center gap-1.5">
-                <div
-                  className={`status-dot ${
-                    svc.status === 'running'
-                      ? 'status-dot-running'
-                      : svc.status === 'error'
-                      ? 'status-dot-error'
-                      : 'status-dot-stopped'
-                  }`}
-                />
-                <span className="text-xs font-mono text-[var(--grok-text-body)]">
-                  {svc.label}
-                </span>
-              </div>
-            ))}
-          </div>
+      {/* ── Service health (full width) ─────────────────────────── */}
+      <div className="cs-panel p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)]">
+            Services
+          </span>
+          <button
+            onClick={() => setActiveView('services')}
+            className="text-[10px] text-[var(--grok-recon-blue)] hover:underline flex items-center gap-0.5"
+          >
+            Manage <ChevronRight className="w-3 h-3" />
+          </button>
         </div>
-
-        {/* Pipeline progress */}
-        <div className="cs-panel p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)]">
-              Pipeline
-            </span>
-            <span className="text-xs font-mono text-[var(--grok-text-heading)]">
-              {phasePercent}%
-            </span>
-          </div>
-          <div className="w-full h-1.5 bg-[var(--grok-surface-3)] rounded-full overflow-hidden mb-2">
-            <div
-              className="h-full bg-gradient-to-r from-[var(--grok-recon-blue)] to-[var(--grok-scan-cyan)] rounded-full transition-all duration-500"
-              style={{ width: `${phasePercent}%` }}
-            />
-          </div>
-          <div className="flex justify-between">
-            {(['recon', 'ai', 'zap', 'metasploit', 'exploit'] as const).map((phase) => {
-              const isComplete = getPhaseComplete(phaseProgress, phase);
-              const isActive = phaseProgress.currentPhase === phase;
-              return (
-                <div key={phase} className="flex flex-col items-center gap-0.5">
-                  <div
-                    className={`w-5 h-5 rounded-full border flex items-center justify-center text-[7px] font-bold transition-all ${
-                      isComplete
-                        ? 'bg-[var(--grok-success)] border-[var(--grok-success)] text-black'
-                        : isActive
-                        ? 'border-[var(--grok-recon-blue)] text-[var(--grok-recon-blue)] animate-pulse'
-                        : 'border-[var(--grok-border)] text-[var(--grok-text-muted)]'
-                    }`}
-                  >
-                    {isComplete ? '\u2713' : ''}
-                  </div>
-                  <span className="text-[8px] text-[var(--grok-text-muted)]">
-                    {getPhaseDisplayName(phase)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+        <div className="flex items-center gap-4 flex-wrap">
+          {serviceList.map((svc) => (
+            <div key={svc.key} className="flex items-center gap-1.5">
+              <div
+                className={`status-dot ${
+                  svc.status === 'running'
+                    ? 'status-dot-running'
+                    : svc.status === 'error'
+                    ? 'status-dot-error'
+                    : 'status-dot-stopped'
+                }`}
+              />
+              <span className="text-xs font-mono text-[var(--grok-text-body)]">
+                {svc.label}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 

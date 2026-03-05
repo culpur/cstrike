@@ -21,7 +21,7 @@ import {
   GitCompareArrows,
   FileCheck,
   Terminal,
-  Globe,
+
   User,
   ShieldCheck,
   Zap,
@@ -43,7 +43,7 @@ const navigationItems = [
     id: 'services',
     label: 'Services',
     icon: Server,
-    section: 'ops',
+    section: 'system',
   },
   {
     id: 'targets',
@@ -77,7 +77,7 @@ const navigationItems = [
   },
   {
     id: 'attack-map',
-    label: 'Attack Map',
+    label: 'Battle Map',
     icon: Map,
     section: 'intel',
   },
@@ -91,12 +91,6 @@ const navigationItems = [
     id: 'scan-diff',
     label: 'Scan Diff',
     icon: GitCompareArrows,
-    section: 'intel',
-  },
-  {
-    id: 'geo-map',
-    label: 'Geo Map',
-    icon: Globe,
     section: 'intel',
   },
   {
@@ -203,14 +197,14 @@ export function Sidebar() {
       <div className="h-14 flex items-center justify-between px-3 border-b border-[var(--grok-border)]">
         {!sidebarCollapsed && (
           <div className="flex items-center gap-2">
-            <img src={cstrikeIcon} alt="CStrike" className="w-8 h-8 rounded" />
+            <img src={cstrikeIcon} alt="CStrike" className="w-10 h-10 rounded ml-1" />
             <span className="font-bold text-sm text-[var(--grok-text-heading)] tracking-wide">
               CSTRIKE<span className="text-[var(--grok-exploit-red)]">v2</span>
             </span>
           </div>
         )}
         {sidebarCollapsed && (
-          <img src={cstrikeIcon} alt="CStrike" className="w-8 h-8 rounded mx-auto" />
+          <img src={cstrikeIcon} alt="CStrike" className="w-10 h-10 rounded mx-auto" />
         )}
         {!sidebarCollapsed && (
           <button

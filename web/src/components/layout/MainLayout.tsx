@@ -17,6 +17,7 @@ import { Sidebar } from './Sidebar';
 import { ToastContainer } from './ToastContainer';
 import { NotificationCenter } from './NotificationCenter';
 import { WorkflowDrawer } from './WorkflowDrawer';
+import { TaskMapFooter } from './TaskMapFooter';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -31,7 +32,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header bar */}
         <header
-          className="h-14 flex items-center justify-end px-4 flex-shrink-0 border-b border-[var(--grok-border)]"
+          className="h-14 flex items-center justify-end pr-8 pl-4 flex-shrink-0 border-b border-[var(--grok-border)]"
           style={{ background: 'var(--grok-surface-1)' }}
         >
           <NotificationCenter />
@@ -39,6 +40,9 @@ export function MainLayout({ children }: MainLayoutProps) {
 
         {/* Page content */}
         <main className="flex-1 overflow-hidden">{children}</main>
+
+        {/* Live task pipeline footer */}
+        <TaskMapFooter />
       </div>
 
       <ToastContainer />

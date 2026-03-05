@@ -14,14 +14,14 @@ import { LogsView } from '@modules/logs/LogsView';
 import { ConfigurationView } from '@modules/configuration/ConfigurationView';
 import { ExploitationView } from '@modules/exploitation/ExploitationView';
 import { LootView } from '@modules/loot/LootView';
-import { AttackMapView } from '@modules/attack-map/AttackMapView';
+import { BattleMapView } from '@modules/attack-map/BattleMapView';
 import { ReportGeneratorView } from '@modules/reports/ReportGeneratorView';
 import { CampaignsView } from '@modules/campaigns/CampaignsView';
 import { ThreatIntelView } from '@modules/threat-intel/ThreatIntelView';
 import { ScanDiffView } from '@modules/scan-diff/ScanDiffView';
 import { EvidenceView } from '@modules/evidence/EvidenceView';
 import { TerminalView } from '@modules/terminal/TerminalView';
-import { GeoMapView } from '@modules/geo-map/GeoMapView';
+
 import { useUIStore } from '@stores/uiStore';
 import { useWebSocketHandlers } from '@/hooks/useWebSocketHandlers';
 import { apiService } from '@services/api';
@@ -71,7 +71,7 @@ function App() {
       case 'loot':
         return <LootView />;
       case 'attack-map':
-        return <AttackMapView />;
+        return <BattleMapView />;
       case 'reports':
         return <ReportGeneratorView />;
       case 'campaigns':
@@ -84,8 +84,6 @@ function App() {
         return <EvidenceView />;
       case 'terminal':
         return <TerminalView />;
-      case 'geo-map':
-        return <GeoMapView />;
       default:
         return <DashboardView />;
     }

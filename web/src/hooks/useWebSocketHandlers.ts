@@ -17,6 +17,7 @@ import { useUIStore } from '@stores/uiStore';
 import { useNotificationStore } from '@stores/notificationStore';
 import { useExploitTrackStore } from '@stores/exploitTrackStore';
 import { useTerminalStore } from '@stores/terminalStore';
+import { useTaskMapStore } from '@stores/taskMapStore';
 import { apiService } from '@services/api';
 import type { SystemMetrics, ServiceStatus } from '@/types';
 
@@ -39,8 +40,14 @@ export function useWebSocketHandlers() {
     wsService.connect();
 
     // ── System metrics (every 2s from backend) ─────────────────
-    const unsubMetrics = wsService.on<SystemMetrics>('system_metrics', (data) => {
+    const unsubMetrics = wsService.on<SystemMetrics & { serviceHealth?: Record<string, string> }>('system_metrics', (data) => {
       updateMetrics(data);
+      // Update infrastructure service health from metrics payload
+      if (data.serviceHealth) {
+        for (const [svc, status] of Object.entries(data.serviceHealth)) {
+          updateServiceStatus(svc as any, status as ServiceStatus);
+        }
+      }
       setConnected(true);
     });
 
@@ -468,6 +475,241 @@ export function useWebSocketHandlers() {
       });
     });
 
+    // ── Task Map wiring ────────────────────────────────────────────
+    const taskMap = useTaskMapStore.getState();
+
+    // scan_started → BEGIN node
+    const unsubTaskMapScanStarted = wsService.on<any>('scan_started', (data) => {
+      const tm = useTaskMapStore.getState();
+      tm.clearMap();
+      const nodeId = `begin-${data.scan_id || Date.now()}`;
+      tm.setActiveScan(data.scan_id || null);
+      tm.addNode({
+        id: nodeId,
+        type: 'begin',
+        label: 'SCAN',
+        status: 'running',
+        target: data.target,
+        hasFindings: false,
+        startedAt: Date.now(),
+      });
+    });
+
+    // phase_change → DECISION node
+    const unsubTaskMapPhase = wsService.on<any>('phase_change', (data) => {
+      const tm = useTaskMapStore.getState();
+      if (tm.nodes.length === 0) return;
+      const nodeId = `phase-${data.phase}-${Date.now()}`;
+      const lastNode = tm.getLastNode();
+      tm.addNode({
+        id: nodeId,
+        type: 'decision',
+        label: (data.phase || 'PHASE').toUpperCase(),
+        status: data.status === 'complete' || data.status === 'done' ? 'completed' : 'running',
+        hasFindings: false,
+      });
+      if (lastNode) tm.addEdge({ from: lastNode.id, to: nodeId });
+    });
+
+    // recon_output → TASK nodes (tool_start creates pending, tool_complete updates)
+    const unsubTaskMapRecon = wsService.on<any>('recon_output', (data) => {
+      const tm = useTaskMapStore.getState();
+      if (tm.nodes.length === 0) return;
+      const tool = data.tool || 'unknown';
+      const nodeId = `task-${tool}-${data.scan_id || ''}`;
+
+      if (data.event === 'tool_start') {
+        const existing = tm.nodes.find((n) => n.id === nodeId);
+        if (!existing) {
+          const lastNode = tm.getLastNode();
+          tm.addNode({
+            id: nodeId,
+            type: 'task',
+            label: tool.toUpperCase(),
+            tool,
+            target: data.target,
+            status: 'running',
+            hasFindings: false,
+            startedAt: Date.now(),
+          });
+          if (lastNode) tm.addEdge({ from: lastNode.id, to: nodeId });
+        }
+      } else if (data.complete && (data.event === 'tool_complete' || data.event === 'tool_error')) {
+        const existing = tm.nodes.find((n) => n.id === nodeId);
+        if (existing) {
+          tm.updateNode(nodeId, {
+            status: data.event === 'tool_error' ? 'failed' : 'completed',
+            completedAt: Date.now(),
+            rawOutput: (data.output || '').slice(0, 2000),
+            hasFindings: (data.output || '').length > 200,
+          });
+        }
+      }
+    });
+
+    // exploit_track_spawned → branch + TASK nodes
+    const unsubTaskMapETM = wsService.on<any>('exploit_track_spawned', (data) => {
+      const tm = useTaskMapStore.getState();
+      if (tm.nodes.length === 0) return;
+
+      // Find the trigger node (the recon task that caused spawning)
+      const triggerNodeId = `task-${data.trigger}-${data.scanId || ''}`;
+      const triggerNode = tm.nodes.find((n) => n.id === triggerNodeId);
+      const parentId = triggerNode?.id || tm.getLastNode()?.id;
+
+      for (const task of (data.tasks || [])) {
+        const taskNodeId = `etm-${task.tool}-${data.caseId}-${Date.now()}`;
+        tm.addNode({
+          id: taskNodeId,
+          type: 'task',
+          label: task.tool.toUpperCase(),
+          tool: task.tool,
+          target: task.target,
+          status: 'running',
+          hasFindings: false,
+          parentId,
+          startedAt: Date.now(),
+        });
+        if (parentId) tm.addEdge({ from: parentId, to: taskNodeId });
+      }
+    });
+
+    // task_completed/failed → update ETM task nodes
+    const unsubTaskMapTaskComplete = wsService.on<any>('task_completed', (data) => {
+      const tm = useTaskMapStore.getState();
+      // Find matching ETM node by tool + target
+      const match = tm.nodes.find(
+        (n) => n.id.startsWith('etm-') && n.tool === data.tool && n.status === 'running',
+      );
+      if (match) {
+        tm.updateNode(match.id, {
+          status: 'completed',
+          completedAt: Date.now(),
+          hasFindings: (data.findingsCount || 0) > 0,
+          findingsCount: data.findingsCount,
+          credentialsCount: data.credentialsCount,
+        });
+      }
+    });
+
+    const unsubTaskMapTaskFailed = wsService.on<any>('task_failed', (data) => {
+      const tm = useTaskMapStore.getState();
+      const match = tm.nodes.find(
+        (n) => n.id.startsWith('etm-') && n.tool === data.tool && n.status === 'running',
+      );
+      if (match) {
+        tm.updateNode(match.id, {
+          status: 'failed',
+          completedAt: Date.now(),
+          rawOutput: data.error,
+        });
+      }
+    });
+
+    // shell_obtained → SHELL node
+    const unsubTaskMapShell = wsService.on<any>('shell_obtained', (data) => {
+      const tm = useTaskMapStore.getState();
+      if (tm.nodes.length === 0) return;
+      const nodeId = `shell-${data.host || 'target'}-${Date.now()}`;
+      const lastNode = tm.getLastNode();
+      tm.addNode({
+        id: nodeId,
+        type: 'shell',
+        label: 'SHELL',
+        target: data.host || data.target,
+        status: 'completed',
+        hasFindings: true,
+        completedAt: Date.now(),
+        rawOutput: `${(data.type || 'shell').toUpperCase()} → ${data.user || '?'}@${data.host || '?'}:${data.port || '?'}`,
+      });
+      if (lastNode) tm.addEdge({ from: lastNode.id, to: nodeId });
+    });
+
+    // early_exploit_result → update branch nodes
+    const unsubTaskMapEarlyExploit = wsService.on<any>('early_exploit_result', (data) => {
+      const tm = useTaskMapStore.getState();
+      const match = tm.nodes.find(
+        (n) => n.id.startsWith('etm-') && n.tool === data.tool && n.status === 'running',
+      );
+      if (match) {
+        tm.updateNode(match.id, {
+          status: data.status === 'completed' ? 'completed' : 'failed',
+          completedAt: Date.now(),
+          hasFindings: (data.findingsCount || 0) > 0,
+          findingsCount: data.findingsCount,
+          credentialsCount: data.credentialsCount,
+        });
+      }
+    });
+
+    // scan_complete → COMPLETE node
+    const unsubTaskMapScanComplete = wsService.on<any>('scan_complete', (data) => {
+      const tm = useTaskMapStore.getState();
+      if (tm.nodes.length === 0) return;
+      const nodeId = `complete-${Date.now()}`;
+      const lastNode = tm.getLastNode();
+      // Mark BEGIN as completed
+      const beginNode = tm.nodes.find((n) => n.type === 'begin');
+      if (beginNode) tm.updateNode(beginNode.id, { status: 'completed', completedAt: Date.now() });
+      tm.addNode({
+        id: nodeId,
+        type: 'complete',
+        label: 'DONE',
+        status: 'completed',
+        hasFindings: false,
+        completedAt: Date.now(),
+      });
+      if (lastNode) tm.addEdge({ from: lastNode.id, to: nodeId });
+    });
+
+    // ── Persistence deployed ──────────────────────────────────────
+    const unsubPersistence = wsService.on<any>('persistence_deployed', (data) => {
+      const host = data.host || 'target';
+      const methods = (data.methods || []).join(', ') || 'none';
+      if (data.status === 'active') {
+        addNotification({
+          type: 'shell_obtained',
+          title: 'Persistence Active',
+          message: `Hidden persistence on ${data.user || '?'}@${host}:${data.port || '?'} — ${methods}`,
+          severity: 'critical',
+        });
+        addToast({
+          type: 'warning',
+          message: `Persistence deployed: ${methods} on ${host}`,
+          duration: 8000,
+        });
+      } else if (data.status === 'failed') {
+        addNotification({
+          type: 'task_failed',
+          title: 'Persistence Failed',
+          message: `Failed to deploy persistence on ${host}`,
+          severity: 'high',
+        });
+      } else {
+        addToast({
+          type: 'info',
+          message: `Deploying persistence on ${host}...`,
+          duration: 4000,
+        });
+      }
+    });
+
+    // ── Early exploit results (ETM tasks completed during recon) ──
+    const unsubEarlyExploit = wsService.on<any>('early_exploit_result', (data) => {
+      const status = data.status === 'completed' ? 'success' : 'error';
+      addNotification({
+        type: status === 'success' ? 'task_completed' : 'task_failed',
+        title: 'Early Exploit Result',
+        message: `${data.tool || 'tool'} ${data.status} on ${data.target || 'target'}${data.findingsCount ? ` — ${data.findingsCount} findings` : ''}`,
+        severity: data.findingsCount > 0 ? 'high' : 'info',
+      });
+      addToast({
+        type: status === 'success' ? (data.findingsCount > 0 ? 'warning' : 'success') : 'error',
+        message: `ETM: ${data.tool} ${data.status}${data.findingsCount ? ` (${data.findingsCount} findings)` : ''}`,
+        duration: 5000,
+      });
+    });
+
     // ── Scan paused / resumed ───────────────────────────────────
     const unsubScanPaused = wsService.on<any>('scan_paused', (data) => {
       addNotification({
@@ -571,6 +813,17 @@ export function useWebSocketHandlers() {
       unsubGateReached();
       unsubPhaseChanged();
       unsubTrackSpawned();
+      unsubTaskMapScanStarted();
+      unsubTaskMapPhase();
+      unsubTaskMapRecon();
+      unsubTaskMapETM();
+      unsubTaskMapTaskComplete();
+      unsubTaskMapTaskFailed();
+      unsubTaskMapShell();
+      unsubTaskMapEarlyExploit();
+      unsubTaskMapScanComplete();
+      unsubPersistence();
+      unsubEarlyExploit();
       unsubScanPaused();
       unsubScanResumed();
       unsubTerminalOutput();

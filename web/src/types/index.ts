@@ -19,6 +19,10 @@ export interface SystemMetrics {
   vpnIp: string | null;
   uptime: number;
   timestamp: number;
+  mgmtIpInternal?: string | null;
+  mgmtIpPublic?: string | null;
+  opsIpInternal?: string | null;
+  opsIpPublic?: string | null;
 }
 
 export interface ServiceInfo {
@@ -36,6 +40,10 @@ export interface ServiceState {
   burp: ServiceStatus;
   api_server?: ServiceStatus;
   frontend?: ServiceStatus;
+  postgresql?: ServiceStatus;
+  redis?: ServiceStatus;
+  ollama?: ServiceStatus;
+  docker?: ServiceStatus;
 }
 
 export interface PhaseProgress {

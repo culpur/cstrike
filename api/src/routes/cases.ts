@@ -29,6 +29,7 @@ import {
   emitTaskFailed,
   emitCaseGateReached,
   emitCasePhaseChanged,
+  emitEarlyExploitResult,
 } from '../websocket/emitter.js';
 
 export const casesRouter = Router();
@@ -113,6 +114,29 @@ export async function executeTask(taskId: string, caseId: string) {
       findingsCount: findings.length,
       credentialsCount: result.credentials?.length ?? 0,
     });
+
+    // Emit early exploit result for ETM-triggered tasks (auto/intel triggers)
+    if (task.trigger && !task.trigger.startsWith('operator:')) {
+      // Find scanId from the associated scan
+      const scan = caseRecord?.targetId
+        ? await prisma.scan.findFirst({
+            where: { targetId: caseRecord.targetId, status: { not: 'COMPLETED' } },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true },
+          })
+        : null;
+      emitEarlyExploitResult({
+        scanId: scan?.id ?? '',
+        caseId,
+        taskId,
+        tool: task.tool,
+        target: task.target,
+        status: (result.exitCode === 0 || (result.output?.length ?? 0) > 0) ? 'completed' : 'failed',
+        findingsCount: findings.length,
+        credentialsCount: result.credentials?.length ?? 0,
+        duration: result.duration ?? 0,
+      });
+    }
 
     console.log(`[Case:${caseId}] ${task.tool} completed — exit=${result.exitCode}, findings=${findings.length}, output=${(result.output?.length ?? 0)} chars`);
 

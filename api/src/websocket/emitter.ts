@@ -24,6 +24,11 @@ export function emitSystemMetrics(data: {
   vpnIp: string | null;
   uptime: number;
   timestamp: number;
+  mgmtIpInternal?: string | null;
+  mgmtIpPublic?: string | null;
+  opsIpInternal?: string | null;
+  opsIpPublic?: string | null;
+  serviceHealth?: Record<string, string>;
 }) {
   io?.emit('system_metrics', data);
 }
@@ -243,6 +248,35 @@ export function emitExploitTrackSpawned(data: {
   tasks: Array<{ tool: string; target: string; phase: string }>;
 }) {
   io?.emit('exploit_track_spawned', data);
+}
+
+// ── Persistence payload events ───────────────────────────────────────────────
+
+export function emitPersistenceDeployed(data: {
+  host: string;
+  port: number;
+  user: string;
+  methods: string[];
+  status: 'deploying' | 'active' | 'failed';
+  verificationOutput?: string;
+}) {
+  io?.emit('persistence_deployed', data);
+}
+
+// ── Early exploitation result (ETM task completed during recon) ──────────────
+
+export function emitEarlyExploitResult(data: {
+  scanId: string;
+  caseId: string;
+  taskId: string;
+  tool: string;
+  target: string;
+  status: 'completed' | 'failed';
+  findingsCount: number;
+  credentialsCount: number;
+  duration: number;
+}) {
+  io?.emit('early_exploit_result', data);
 }
 
 // ── Scan pause / resume events ───────────────────────────────────────────────
