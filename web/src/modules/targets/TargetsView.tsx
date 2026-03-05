@@ -61,7 +61,10 @@ export function TargetsView() {
     const pollActiveScans = async () => {
       try {
         const response = await apiService.getActiveScans();
-        setActiveScans(response.active_scans);
+        // Only show truly active scans (not recently cancelled/completed/failed)
+        setActiveScans(response.active_scans.filter(
+          (s) => !s.status || s.status === 'queued' || s.status === 'running'
+        ));
       } catch (error) {
         console.error('Failed to fetch active scans:', error);
       }
@@ -176,7 +179,9 @@ export function TargetsView() {
       });
       // Refresh active scans and target statuses
       const response = await apiService.getActiveScans();
-      setActiveScans(response.active_scans);
+      setActiveScans(response.active_scans.filter(
+        (s) => !s.status || s.status === 'queued' || s.status === 'running'
+      ));
       await loadTargets();
     } catch (error) {
       addToast({
