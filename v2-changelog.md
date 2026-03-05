@@ -234,3 +234,47 @@ Plus: Metasploit Framework (msfrpcd on port 55552), subfinder, amass, katana, ga
 | Network setup | `cstrike-netsetup` — interactive interface configuration on first login |
 | Cloud-init | `cloud-init-generic.yml` — deploy on AWS, GCP, Azure, DigitalOcean |
 | Documentation | README, DISTRIBUTION.md, and deployment guides updated for v2.0 release |
+
+---
+
+## v2.5.0 (March 2026)
+
+### New Features
+
+| Feature | Details |
+|---------|---------|
+| AI Thinking Mode | Toggle for all providers — Ollama native `think` parameter, OpenAI/Anthropic/Grok via CoT system prompt injection |
+| Service Host Indicators | REDIS and OLLAMA indicators on Command Center display configured host:port from env/config |
+| AI Feed Dynamic Layout | Fills remaining viewport height on dashboard, scrollable, auto-resizes with window |
+| Exploitation Tracks Growth | Fills available dashboard space matching AI Feed behavior with flex layout |
+| AI Feed Expanded | 50 thought entries (up from 5), content truncation threshold 300 chars (up from 100) |
+| TaskMapFooter Error Boundary | React error boundary wrapping task pipeline footer for crash recovery |
+| VulnBox Container | Deliberately vulnerable target with 30+ vulnerabilities across 12 services (SSH, Apache, FTP, MySQL, SNMP, Flask API, Samba, Redis, BIND9, LDAP, Postfix, HTTPS) |
+| Metasploit RPC Container | `metasploitframework/metasploit-framework` with msfrpcd daemon and dedicated PostgreSQL database |
+| OWASP ZAP Daemon | `zaproxy/zap-stable` running in daemon mode for automated web scanning |
+| 9-Container Stack | Up from 6 — added ZAP, Metasploit, VulnBox to Docker Compose |
+| ARM64 Support | `docker-compose.arm64.yml` override (linuxserver/chromium instead of Kasm), native aarch64 VM images |
+| Enable/Disable All | Bulk toggle buttons for Scan Modes and Allowed Tools in Configuration |
+| Early Exploitation | Task materialization during recon, persistence payloads, task map footer |
+| Full-Auto Mode | Exploitation gate bypass for automated attack chains |
+
+### Bug Fixes
+
+| Fix | Details |
+|-----|---------|
+| Strict TypeScript Build | Resolved all strict-mode errors for Docker `tsc -b` builds |
+| Target Deletion | URL vs ID parsing fix for target removal |
+| Scan Stop/Target Status | Proper sync of scan cancellation and target status updates |
+| AI Timeout | Increased to 3 minutes, reduced prompt size to prevent timeouts |
+| Credential Validation | Phase 5 re-validation dedup, Hydra `-I` flag for validation skip |
+| startRecon Parsing | Correct response field extraction from recon start API |
+
+### Infrastructure
+
+| Change | Details |
+|--------|---------|
+| Dual Architecture | amd64 + aarch64 pre-built VM images (QCOW2, OVA, VDI) |
+| Per-Format Torrents | Individual webseed torrents per image format per architecture |
+| Host Hardening | `harden-host.sh` additions for SSH, PAM, auditd |
+| Registry Distribution | Dual-arch downloads at `registry.culpur.net/dist/` |
+| VulnBox Standalone | Separate GitHub release at `culpur/vulnbox` with git bundle for offline distribution |

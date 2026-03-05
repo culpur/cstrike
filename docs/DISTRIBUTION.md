@@ -1,4 +1,4 @@
-# CStrike v2 — Distribution Guide
+# CStrike v2.5 — Distribution Guide
 
 CStrike v2 can be deployed in seven formats depending on your environment and requirements.
 
@@ -22,30 +22,47 @@ CStrike v2 can be deployed in seven formats depending on your environment and re
 
 Pre-built VM images are available for direct download and via BitTorrent from `registry.culpur.net`.
 
-### Direct Download
+### Direct Download — amd64 (x86_64)
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | Proxmox / KVM / libvirt | ~14 GB | [cstrike-v2.qcow2](https://registry.culpur.net/dist/cstrike-v2.qcow2) |
-| **OVA** | VirtualBox / VMware (OVF + VMDK bundled) | ~14 GB | [cstrike-v2.ova](https://registry.culpur.net/dist/cstrike-v2.ova) |
-| **VDI** | VirtualBox (native) | ~31 GB | [cstrike-v2.vdi](https://registry.culpur.net/dist/cstrike-v2.vdi) |
-| **VMDK** | VMware ESXi / Workstation | ~14 GB | [cstrike-v2.vmdk](https://registry.culpur.net/dist/cstrike-v2.vmdk) |
+| **QCOW2** | Proxmox / KVM / libvirt | ~14 GB | [cstrikev2.5_amd64.qcow2](https://registry.culpur.net/dist/cstrikev2.5_amd64.qcow2) |
+| **OVA** | VirtualBox / VMware (OVF + VMDK bundled) | ~14 GB | [cstrikev2.5_amd64.ova](https://registry.culpur.net/dist/cstrikev2.5_amd64.ova) |
+| **VDI** | VirtualBox (native) | ~31 GB | [cstrikev2.5_amd64.vdi](https://registry.culpur.net/dist/cstrikev2.5_amd64.vdi) |
+
+### Direct Download — aarch64 (ARM64)
+
+| Format | Use Case | Size | Download |
+|--------|----------|------|----------|
+| **QCOW2** | QEMU / UTM / Parallels | ~14 GB | [cstrikev2.5_aarch64.qcow2](https://registry.culpur.net/dist/cstrikev2.5_aarch64.qcow2) |
+| **OVA** | VMware Fusion / UTM | ~14 GB | [cstrikev2.5_aarch64.ova](https://registry.culpur.net/dist/cstrikev2.5_aarch64.ova) |
+| **VDI** | VirtualBox (native) | ~31 GB | [cstrikev2.5_aarch64.vdi](https://registry.culpur.net/dist/cstrikev2.5_aarch64.vdi) |
+
 | **Checksums** | Integrity verification | — | [checksums.sha256](https://registry.culpur.net/dist/checksums.sha256) |
 
 ### BitTorrent (recommended for large files)
 
 Torrents include [webseed](https://www.bittorrent.org/beps/bep_0019.html) — downloads work immediately even with zero peers via HTTP fallback.
 
+#### amd64
+
 | Format | Torrent |
 |--------|---------|
-| QCOW2 | [cstrike-v2.qcow2.torrent](https://registry.culpur.net/dist/torrents/cstrike-v2.qcow2.torrent) |
-| OVA | [cstrike-v2.ova.torrent](https://registry.culpur.net/dist/torrents/cstrike-v2.ova.torrent) |
-| VDI | [cstrike-v2.vdi.torrent](https://registry.culpur.net/dist/torrents/cstrike-v2.vdi.torrent) |
-| VMDK | [cstrike-v2.vmdk.torrent](https://registry.culpur.net/dist/torrents/cstrike-v2.vmdk.torrent) |
+| QCOW2 | [cstrikev2.5_amd64.qcow2.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_amd64.qcow2.torrent) |
+| OVA | [cstrikev2.5_amd64.ova.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_amd64.ova.torrent) |
+| VDI | [cstrikev2.5_amd64.vdi.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_amd64.vdi.torrent) |
+
+#### aarch64
+
+| Format | Torrent |
+|--------|---------|
+| QCOW2 | [cstrikev2.5_aarch64.qcow2.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_aarch64.qcow2.torrent) |
+| OVA | [cstrikev2.5_aarch64.ova.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_aarch64.ova.torrent) |
+| VDI | [cstrikev2.5_aarch64.vdi.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_aarch64.vdi.torrent) |
 
 ```bash
 # Download with any BitTorrent client, or use aria2:
-aria2c https://registry.culpur.net/dist/torrents/cstrike-v2.qcow2.torrent
+aria2c https://registry.culpur.net/dist/torrents/cstrikev2.5_amd64.qcow2.torrent
 ```
 
 ### Verify Integrity
@@ -67,9 +84,9 @@ Every CStrike deployment consists of three layers:
 │  .env passwords, TLS certs, nftables kill switch,     │
 │  SSH hardening, auditd, fail2ban, systemd services    │
 ├──────────────────────────────────────────────────────┤
-│  Layer 2 — Docker Stack (6 containers)                │
+│  Layer 2 — Docker Stack (9 containers)                │
 │  PostgreSQL 16, Redis 7, Express API, React frontend, │
-│  Traefik v3.3 reverse proxy, KasmVNC remote browser   │
+│  Traefik v3.3, KasmVNC, OWASP ZAP, Metasploit, VulnBox│
 ├──────────────────────────────────────────────────────┤
 │  Layer 1 — Host Tools & Runtime                       │
 │  Debian 12, Kali tools (35+), Go/Rust binaries,       │
@@ -182,7 +199,7 @@ On import, the first-boot service automatically expands the partition to fill wh
 
 ## VirtualBox OVA
 
-Download the pre-built OVA: [cstrike-v2.ova](https://registry.culpur.net/dist/cstrike-v2.ova) (~14 GB)
+Download the pre-built OVA: [cstrikev2.5_amd64.ova](https://registry.culpur.net/dist/cstrikev2.5_amd64.ova) (~14 GB)
 
 ### Export from an existing VirtualBox VM
 
@@ -217,7 +234,7 @@ The import helper configures host-only networking for lab access and prints conn
 
 ## Proxmox / KVM / QEMU Import
 
-Download the pre-built QCOW2: [cstrike-v2.qcow2](https://registry.culpur.net/dist/cstrike-v2.qcow2) (~14 GB)
+Download the pre-built QCOW2: [cstrikev2.5_amd64.qcow2](https://registry.culpur.net/dist/cstrikev2.5_amd64.qcow2) (~14 GB)
 
 Import from the `.tar.gz` distribution package or standalone disk images.
 
@@ -251,7 +268,7 @@ Import from the `.tar.gz` distribution package or standalone disk images.
 The distribution package supports fully offline deployment:
 
 1. **Docker images pre-saved**: `package-vm.sh` saves all 6 container images into `cstrike-docker-images.tar.gz` before export
-2. **First-boot auto-loads**: The first-boot service detects the archive and runs `docker load` — no internet required
+2. **First-boot auto-loads**: The first-boot service detects the archive and runs `docker load` — no internet required (9 containers)
 3. **Cloud-init support**: `cloud-init-generic.yml` checks for the pre-saved archive and loads images if present, falling back to `docker compose build` if not
 
 To deploy offline:
@@ -357,6 +374,6 @@ Verify with: `cat /opt/cstrike/.firstboot-complete`
 
 ## Legal
 
-CStrike v2 is intended exclusively for authorized penetration testing and red team operations. You must have explicit written authorization before scanning any target.
+CStrike v2.5 is intended exclusively for authorized penetration testing and red team operations. You must have explicit written authorization before scanning any target.
 
 MIT License (c) 2025-2026 Culpur Defense Inc.

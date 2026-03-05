@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Autonomous Offensive Security Platform</strong><br>
-  <sub>6-container Docker stack | 35+ integrated tools | AI-driven 9-phase attack pipeline</sub>
+  <sub>9-container Docker stack | 35+ integrated tools | AI-driven 9-phase attack pipeline</sub>
 </p>
 
 <p align="center">
@@ -68,12 +68,21 @@ docker exec cstrike-api npx prisma db seed
 
 Pre-built VM images — boot and go, no building required.
 
+#### amd64 (x86_64)
+
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | Proxmox / KVM / libvirt | ~14 GB | [Download](https://registry.culpur.net/dist/cstrike-v2.qcow2) |
-| **OVA** | VirtualBox / VMware | ~14 GB | [Download](https://registry.culpur.net/dist/cstrike-v2.ova) |
-| **VDI** | VirtualBox (native) | ~31 GB | [Download](https://registry.culpur.net/dist/cstrike-v2.vdi) |
-| **VMDK** | VMware ESXi / Workstation | ~14 GB | [Download](https://registry.culpur.net/dist/cstrike-v2.vmdk) |
+| **QCOW2** | Proxmox / KVM / libvirt | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_amd64.qcow2) |
+| **OVA** | VirtualBox / VMware | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_amd64.ova) |
+| **VDI** | VirtualBox (native) | ~31 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_amd64.vdi) |
+
+#### aarch64 (ARM64)
+
+| Format | Use Case | Size | Download |
+|--------|----------|------|----------|
+| **QCOW2** | QEMU / UTM / Parallels | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.qcow2) |
+| **OVA** | VMware Fusion / UTM | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.ova) |
+| **VDI** | VirtualBox (native) | ~31 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.vdi) |
 
 [BitTorrent downloads](docs/DISTRIBUTION.md#bittorrent-recommended-for-large-files) | [Checksums](https://registry.culpur.net/dist/checksums.sha256) | [All formats](docs/DISTRIBUTION.md)
 
@@ -107,6 +116,11 @@ Pre-built VM images — boot and go, no building required.
           │  Host bind mounts (read-only)
           │  /usr/bin, /usr/local/bin, /opt → 35+ security tools
           │  nmap, nuclei, ffuf, hydra, sqlmap, impacket, ...
+          │
+          │  ┌────────────┐  ┌────────────┐  ┌────────────┐
+          │  │ ZAP :8080  │  │ MSF :55553 │  │VulnBox:8888│
+          │  │ OWASP DAST │  │ Metasploit │  │ 30+ vulns  │
+          │  └────────────┘  └────────────┘  └────────────┘
 ```
 
 All containers use `network_mode: host` for direct access to host tools and VPN interfaces, except Kasm which uses bridge networking with port mapping.
@@ -137,8 +151,11 @@ All containers use `network_mode: host` for direct access to host tools and VPN 
 | `cstrike-frontend` | Custom (Node 22 Alpine) | 3000 | React web dashboard (served by `serve@14`) |
 | `cstrike-traefik` | `traefik:v3.3` | 80, 443 | TLS reverse proxy, security headers, rate limiting |
 | `cstrike-kasm` | `kasmweb/chrome:1.16.0` | 6901 | Remote browser session (KasmVNC) |
+| `cstrike-zap` | `zaproxy/zap-stable` | 8080 | OWASP ZAP daemon (web scanning) |
+| `cstrike-metasploit` | `metasploitframework/metasploit-framework` | 55553 | Metasploit RPC (exploit framework) |
+| `cstrike-vulnbox` | Custom (Debian Bookworm) | 8888 | Deliberately vulnerable target (30+ vulns) |
 
-Named volumes: `pgdata`, `redisdata`, `apidata`.
+Named volumes: `pgdata`, `redisdata`, `apidata`, `vulnbox-db`.
 
 ---
 
@@ -367,7 +384,8 @@ cstrike/
 │   ├── cloud-init.yml             # Proxmox cloud-init
 │   └── cloud-init-generic.yml     # Generic cloud-init (AWS/GCP/Azure/DO)
 │
-├── docker-compose.yml              # 6-container Docker stack
+├── docker-compose.yml              # 9-container Docker stack
+├── docker-compose.arm64.yml        # ARM64 overrides (chromium instead of Kasm)
 ├── install.sh                      # Master bare-metal installer
 ├── .env.example                    # Infrastructure secrets template
 ├── results/                        # Per-target scan output (JSON)
@@ -437,7 +455,8 @@ CStrike v2 ships in 7 formats. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) 
 | [Docker Deployment](docs/DOCKER_DEPLOYMENT.md) | Docker-only deployment guide |
 | [Bare Metal Install](docs/BARE_METAL_INSTALL.md) | Full Debian 12 → CStrike walkthrough |
 | [Web UI README](web/README.md) | Frontend architecture and development |
-| [v2 Changelog](v2-changelog.md) | Full change history from v1 to v2 |
+| [v2 Changelog](v2-changelog.md) | Full change history from v1 to v2.5 |
+| [VulnBox](https://github.com/culpur/vulnbox) | Deliberately vulnerable target container (standalone repo) |
 
 ---
 

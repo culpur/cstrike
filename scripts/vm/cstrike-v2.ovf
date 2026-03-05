@@ -31,14 +31,14 @@
       <Info>CStrike v2 product information</Info>
       <Product>CStrike v2</Product>
       <Vendor>Culpur Defense Inc.</Vendor>
-      <Version>2.0.0</Version>
-      <FullVersion>2.0.0-20260228</FullVersion>
+      <Version>2.5.0</Version>
+      <FullVersion>2.5.0-20260305</FullVersion>
       <ProductUrl>https://github.com/culpur/cstrike</ProductUrl>
       <VendorUrl>https://culpur.net</VendorUrl>
     </ProductSection>
     <AnnotationSection>
       <Info>CStrike v2 virtual machine</Info>
-      <Annotation>CStrike v2 — Offensive Security Platform. Debian 12 with 35+ security tools, 6-container Docker stack (PostgreSQL 16, Redis 7, Express API, React frontend, Traefik v3.3, KasmVNC). First boot auto-expands disk, regenerates SSH keys, randomizes passwords, and prompts for network configuration. Dashboard: https://&lt;vm-ip&gt;/ | Kasm VNC: https://&lt;vm-ip&gt;:6901/ | Credentials: /opt/cstrike/.env</Annotation>
+      <Annotation>CStrike v2.5 — Offensive Security Platform. Debian 12 with 35+ security tools, 9-container Docker stack (PostgreSQL 16, Redis 7, Express API, React frontend, Traefik v3.3, KasmVNC, OWASP ZAP, Metasploit, VulnBox). First boot auto-expands disk, regenerates SSH keys, randomizes passwords, and prompts for network configuration. Dashboard: https://&lt;vm-ip&gt;/ | Kasm VNC: https://&lt;vm-ip&gt;:6901/ | Credentials: /opt/cstrike/.env</Annotation>
     </AnnotationSection>
     <OperatingSystemSection ovf:id="96">
       <Info>The kind of installed guest operating system</Info>

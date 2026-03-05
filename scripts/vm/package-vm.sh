@@ -28,7 +28,7 @@ SKIP_DOCKER_SAVE=false
 SSH_USER="soulofall"
 SSH_KEY=""
 NODE="${PVE_NODE:-proxmox}"
-VERSION="2.0.0"
+VERSION="2.5.0"
 PRODUCT="CStrike v2"
 INSTALL_DIR="/opt/cstrike"
 
