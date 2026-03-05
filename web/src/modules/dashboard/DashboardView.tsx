@@ -251,7 +251,7 @@ export function DashboardView() {
   ];
 
   return (
-    <div className="h-full overflow-auto p-5 space-y-5">
+    <div className="h-full overflow-hidden p-5 flex flex-col gap-5">
       {/* ── Header with scan launcher ──────────────────────────── */}
       <div className="flex items-center justify-between gap-4">
         <div>
@@ -417,9 +417,9 @@ export function DashboardView() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
         {/* ── Left column: Charts ──────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-3">
+        <div className="lg:col-span-2 space-y-3 overflow-y-auto min-h-0">
           <div className="grid grid-cols-2 gap-3">
             {/* Vulnerability Severity Distribution */}
             <div className="cs-panel p-4">
@@ -587,7 +587,7 @@ export function DashboardView() {
         </div>
 
         {/* ── Right column: Loot + AI + Findings ───────────────── */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 min-h-0">
           {/* Loot Breakdown */}
           <div className="cs-panel p-4 space-y-3">
             <div className="flex items-center justify-between">
