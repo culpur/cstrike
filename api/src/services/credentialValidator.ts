@@ -88,6 +88,7 @@ class CredentialValidator {
 
   private async validateSSH(input: ValidateInput): Promise<boolean> {
     return this.runCommand('hydra', [
+      '-I',  // Skip restore file wait
       '-l', input.username,
       '-p', input.password,
       '-s', String(input.port ?? 22),
@@ -100,6 +101,7 @@ class CredentialValidator {
 
   private async validateFTP(input: ValidateInput): Promise<boolean> {
     return this.runCommand('hydra', [
+      '-I',  // Skip restore file wait
       '-l', input.username,
       '-p', input.password,
       '-s', String(input.port ?? 21),
@@ -112,6 +114,7 @@ class CredentialValidator {
 
   private async validateHTTP(input: ValidateInput): Promise<boolean> {
     return this.runCommand('hydra', [
+      '-I',  // Skip restore file wait
       '-l', input.username,
       '-p', input.password,
       '-s', String(input.port ?? 80),
@@ -124,6 +127,7 @@ class CredentialValidator {
 
   private async validateSMB(input: ValidateInput): Promise<boolean> {
     return this.runCommand('hydra', [
+      '-I',  // Skip restore file wait
       '-l', input.username,
       '-p', input.password,
       '-s', String(input.port ?? 445),
