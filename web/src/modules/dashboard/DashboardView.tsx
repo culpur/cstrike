@@ -64,8 +64,8 @@ import { useUIStore } from '@stores/uiStore';
 import { useExploitTrackStore } from '@stores/exploitTrackStore';
 import { ExploitTrackPanel } from '@modules/exploitation/components/ExploitTrackPanel';
 import { apiService } from '@services/api';
-import { formatPercent, formatUptime, getPhaseDisplayName, formatNumber } from '@utils/index';
-import type { PhaseProgress, ServiceStatus } from '@/types';
+import { formatPercent, formatUptime, formatNumber } from '@utils/index';
+import type { ServiceStatus } from '@/types';
 
 interface ActiveScan {
   scan_id: string;
@@ -95,7 +95,7 @@ const SEVERITY_COLORS: Record<string, string> = {
 const PORT_COLORS = ['#2266ff', '#00ccdd', '#8844ff', '#00cc66', '#ffaa00', '#ff2040'];
 
 export function DashboardView() {
-  const { metrics, services, phaseProgress, connected } = useSystemStore();
+  const { metrics, services, connected } = useSystemStore();
   const { targets, loadTargets } = useReconStore();
   const { stats: lootStats, items: lootItems, addLootItem } = useLootStore();
   const { thoughts, loadThoughts } = useAIStore();
@@ -239,8 +239,6 @@ export function DashboardView() {
   const openPorts = resultsData.ports.filter((p) => p.state === 'open').length;
   const totalVulns = resultsData.vulns.length;
   const recentThoughts = thoughts.slice(-5);
-  const phasePercent = calculatePhaseProgress(phaseProgress);
-
   const serviceList: Array<{ key: string; label: string; status: ServiceStatus }> = [
     { key: 'api', label: 'API', status: connected ? 'running' : 'stopped' },
     { key: 'msf', label: 'MSF', status: services.metasploitRpc },
@@ -1005,24 +1003,4 @@ function ScanCard({
   );
 }
 
-function calculatePhaseProgress(progress: PhaseProgress): number {
-  const phases = [
-    progress.reconComplete,
-    progress.aiAnalysisComplete,
-    progress.zapScanComplete,
-    progress.metasploitScanComplete,
-    progress.exploitationComplete,
-  ];
-  return Math.round((phases.filter(Boolean).length / phases.length) * 100);
-}
 
-function getPhaseComplete(progress: PhaseProgress, phase: string): boolean {
-  const map: Record<string, boolean> = {
-    recon: progress.reconComplete,
-    ai: progress.aiAnalysisComplete,
-    zap: progress.zapScanComplete,
-    metasploit: progress.metasploitScanComplete,
-    exploit: progress.exploitationComplete,
-  };
-  return map[phase] || false;
-}

@@ -413,7 +413,9 @@ export type WSMessageType =
   | 'scan_resumed'
   | 'terminal_output'
   | 'terminal_session_created'
-  | 'terminal_session_closed';
+  | 'terminal_session_closed'
+  | 'early_exploit_result'
+  | 'persistence_deployed';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

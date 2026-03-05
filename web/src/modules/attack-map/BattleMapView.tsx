@@ -12,7 +12,6 @@ import {
   Map,
   Globe,
   Shield,
-  Network,
   Crosshair,
   Target,
   Server,
@@ -27,7 +26,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@utils/index';
 import { apiService } from '@services/api';
-import { useLootStore } from '@stores/lootStore';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -301,7 +299,6 @@ const GEO_LOCATIONS = [
 // ── Main Component ──────────────────────────────────────────────────
 
 export function BattleMapView() {
-  const lootItems = useLootStore((s) => s.items);
   const [activeTab, setActiveTab] = useState<ViewTab>('battlemap');
   const [targets, setTargets] = useState<GeoTarget[]>([]);
   const [lootCreds, setLootCreds] = useState(0);

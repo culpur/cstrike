@@ -476,7 +476,6 @@ export function useWebSocketHandlers() {
     });
 
     // ── Task Map wiring ────────────────────────────────────────────
-    const taskMap = useTaskMapStore.getState();
 
     // scan_started → BEGIN node
     const unsubTaskMapScanStarted = wsService.on<any>('scan_started', (data) => {
@@ -643,7 +642,7 @@ export function useWebSocketHandlers() {
     });
 
     // scan_complete → COMPLETE node
-    const unsubTaskMapScanComplete = wsService.on<any>('scan_complete', (data) => {
+    const unsubTaskMapScanComplete = wsService.on<any>('scan_complete', (_data) => {
       const tm = useTaskMapStore.getState();
       if (tm.nodes.length === 0) return;
       const nodeId = `complete-${Date.now()}`;

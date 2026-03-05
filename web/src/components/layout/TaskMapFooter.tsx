@@ -23,7 +23,7 @@ import {
   Target,
   X,
 } from 'lucide-react';
-import { useTaskMapStore, type TaskNode, type TaskNodeStatus } from '@stores/taskMapStore';
+import { useTaskMapStore, type TaskNode } from '@stores/taskMapStore';
 import { cn } from '@utils/index';
 
 // ── Node dimensions & layout constants ─────────────────────────────────────
