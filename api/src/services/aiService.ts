@@ -58,6 +58,7 @@ export interface AIProviderConfig {
   temperature: number;
   maxTokens: number;
   ollamaUrl: string;
+  thinking: boolean;
 }
 
 // ── Core class ────────────────────────────────────────────────────────────────
@@ -159,7 +160,7 @@ class AIService {
   async analyze(input: AIAnalyzeInput): Promise<AIAnalyzeResult> {
     const config = await this.getProviderConfig();
 
-    const systemPrompt = this.buildSystemPrompt(input.target);
+    const systemPrompt = this.buildSystemPrompt(input.target, config.thinking, config.provider);
 
     // Record the prompt — include full prompt details for the AI Stream UI
     const promptThought = await this.recordThought({
@@ -310,7 +311,7 @@ class AIService {
     const body = {
       model: config.model,
       messages: [
-        { role: 'system', content: this.buildSystemPrompt(input.target) },
+        { role: 'system', content: this.buildSystemPrompt(input.target, config.thinking, config.provider) },
         { role: 'user', content: input.prompt },
       ],
       temperature: config.temperature,
@@ -341,7 +342,7 @@ class AIService {
 
     const body = {
       model: config.model,
-      system: this.buildSystemPrompt(input.target),
+      system: this.buildSystemPrompt(input.target, config.thinking, config.provider),
       messages: [{ role: 'user', content: input.prompt }],
       temperature: config.temperature,
       max_tokens: config.maxTokens,
@@ -374,7 +375,7 @@ class AIService {
     const body = {
       model: config.model,
       messages: [
-        { role: 'system', content: this.buildSystemPrompt(input.target) },
+        { role: 'system', content: this.buildSystemPrompt(input.target, config.thinking, config.provider) },
         { role: 'user', content: input.prompt },
       ],
       temperature: config.temperature,
@@ -407,11 +408,11 @@ class AIService {
     const body = {
       model: config.model,
       messages: [
-        { role: 'system', content: this.buildSystemPrompt(input.target) },
+        { role: 'system', content: this.buildSystemPrompt(input.target, config.thinking, config.provider) },
         { role: 'user', content: input.prompt },
       ],
       stream: false,
-      think: false, // Disable CoT reasoning for speed (qwen3, etc.)
+      think: config.thinking, // CoT reasoning toggle (qwen3, etc.)
       options: {
         temperature: config.temperature,
         num_predict: config.maxTokens,
@@ -442,11 +443,13 @@ class AIService {
       temperature,
       maxTokens,
       ollamaUrl,
+      thinking,
     ] = await Promise.all([
       getConfigValue('ai_provider', 'openai'),
       getConfigValue('ai_temperature', 0.7),
       getConfigValue('ai_max_tokens', 4096),
       getConfigValue('ollama_url', 'http://localhost:11434'),
+      getConfigValue('ai_thinking', false),
     ]);
 
     const providerStr = String(provider);
@@ -464,6 +467,7 @@ class AIService {
       temperature: Number(temperature),
       maxTokens: Number(maxTokens),
       ollamaUrl: String(ollamaUrl),
+      thinking: Boolean(thinking),
     };
   }
 
@@ -477,14 +481,22 @@ class AIService {
     return defaults[provider] ?? 'gpt-4o';
   }
 
-  private buildSystemPrompt(target?: string): string {
+  private buildSystemPrompt(target?: string, thinking?: boolean, provider?: string): string {
     const base = `You are an expert offensive security analyst and red team operator.
 Your role is to analyze scan results, identify vulnerabilities, and suggest next steps.
 Always prioritize critical and high severity findings.
 When recommending commands, use standard security tool syntax.
 Format any commands on their own line prefixed with "$ ".`;
 
-    return target ? `${base}\nCurrent target: ${target}` : base;
+    let prompt = target ? `${base}\nCurrent target: ${target}` : base;
+
+    // For non-Ollama providers, prepend CoT instruction when thinking is enabled
+    // (Ollama uses native `think` parameter instead)
+    if (thinking && provider !== 'ollama') {
+      prompt = `Think step by step. Analyze each finding carefully before recommending actions.\n\n${prompt}`;
+    }
+
+    return prompt;
   }
 
   /**

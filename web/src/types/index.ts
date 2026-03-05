@@ -23,6 +23,7 @@ export interface SystemMetrics {
   mgmtIpPublic?: string | null;
   opsIpInternal?: string | null;
   opsIpPublic?: string | null;
+  serviceHosts?: Record<string, string>;
 }
 
 export interface ServiceInfo {
@@ -485,6 +486,7 @@ export interface Config {
   ai_max_tokens?: number;
   ai_temperature?: number;
   mcp_enabled?: boolean;
+  ai_thinking?: boolean;
   msf_username: string;
   msf_password: string;
   msf_host: string;

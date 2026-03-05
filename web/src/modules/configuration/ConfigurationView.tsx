@@ -706,6 +706,14 @@ export function ConfigurationView() {
             checked={config.mcp_enabled ?? true}
             onChange={(v) => setConfig({ ...config, mcp_enabled: v })}
           />
+
+          {/* AI Thinking toggle */}
+          <ToggleRow
+            label="AI Thinking Mode"
+            description="Enable chain-of-thought reasoning (slower but more thorough analysis)"
+            checked={config.ai_thinking ?? false}
+            onChange={(v) => setConfig({ ...config, ai_thinking: v })}
+          />
         </div>
       </SectionPanel>
 

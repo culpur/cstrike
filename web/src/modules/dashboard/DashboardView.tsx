@@ -245,8 +245,8 @@ export function DashboardView() {
     { key: 'zap', label: 'ZAP', status: services.zap },
     { key: 'burp', label: 'BURP', status: services.burp },
     { key: 'psql', label: 'PSQL', status: services.postgresql ?? 'stopped' },
-    { key: 'redis', label: 'REDIS', status: services.redis ?? 'stopped' },
-    { key: 'ollama', label: 'OLLAMA', status: services.ollama ?? 'stopped' },
+    { key: 'redis', label: `REDIS${metrics.serviceHosts?.redis ? ` (${metrics.serviceHosts.redis})` : ''}`, status: services.redis ?? 'stopped' },
+    { key: 'ollama', label: `OLLAMA${metrics.serviceHosts?.ollama ? ` (${metrics.serviceHosts.ollama})` : ''}`, status: services.ollama ?? 'stopped' },
     { key: 'docker', label: 'DOCKER', status: services.docker ?? 'stopped' },
   ];
 
@@ -587,7 +587,7 @@ export function DashboardView() {
         </div>
 
         {/* ── Right column: Loot + AI + Findings ───────────────── */}
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           {/* Loot Breakdown */}
           <div className="cs-panel p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -706,8 +706,8 @@ export function DashboardView() {
           </div>
 
           {/* AI Activity Feed */}
-          <div className="cs-panel">
-            <div className="cs-panel-header flex items-center justify-between">
+          <div className="cs-panel flex-1 min-h-0 flex flex-col">
+            <div className="cs-panel-header flex items-center justify-between flex-shrink-0">
               <span className="flex items-center gap-1.5">
                 <Brain className="w-3 h-3 text-[var(--grok-ai-purple)]" />
                 AI Feed
@@ -719,7 +719,7 @@ export function DashboardView() {
                 View All
               </button>
             </div>
-            <div className="p-2 space-y-1.5 max-h-48 overflow-y-auto">
+            <div className="p-2 space-y-1.5 flex-1 overflow-y-auto">
               {recentThoughts.length === 0 ? (
                 <p className="text-xs text-[var(--grok-text-muted)] text-center py-4">
                   No AI activity yet

@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { env } from '../config/env.js';
+import { getConfigValue } from '../middleware/guardrails.js';
 import { emitSystemMetrics } from '../websocket/emitter.js';
 
 const startTime = Date.now();
@@ -81,6 +82,41 @@ let networkCache = {
   lastPoll: 0,
 };
 
+// Parse Redis host:port from REDIS_URL (e.g. redis://:password@host:port)
+function parseRedisHostPort(): { host: string; port: string } {
+  try {
+    const url = new URL(env.REDIS_URL);
+    return { host: url.hostname || 'localhost', port: url.port || '6379' };
+  } catch {
+    return { host: 'localhost', port: '6379' };
+  }
+}
+
+const redisConn = parseRedisHostPort();
+
+// Cached Ollama URL (re-read from config every 5 min)
+let ollamaUrlCache = 'http://localhost:11434';
+let ollamaUrlLastFetch = 0;
+
+async function refreshOllamaUrl() {
+  const now = Date.now();
+  if (now - ollamaUrlLastFetch < 300_000) return; // 5 min cache
+  ollamaUrlLastFetch = now;
+  try {
+    const val = await getConfigValue('ollama_url', 'http://localhost:11434');
+    ollamaUrlCache = String(val).replace(/\/$/, '');
+  } catch { /* config DB not ready yet — keep default */ }
+}
+
+function parseHostPort(urlStr: string): string {
+  try {
+    const url = new URL(urlStr);
+    return `${url.hostname}:${url.port || '11434'}`;
+  } catch {
+    return urlStr;
+  }
+}
+
 // Service health cache (polled every 30 seconds)
 let serviceHealthCache = {
   postgresql: 'stopped' as string,
@@ -130,14 +166,16 @@ function checkServiceCmd(cmd: string): string {
   }
 }
 
-function pollServiceHealth() {
+async function pollServiceHealth() {
   const now = Date.now();
   if (now - serviceHealthCache.lastPoll < 30_000) return; // 30s cache
   serviceHealthCache.lastPoll = now;
 
+  await refreshOllamaUrl();
+
   serviceHealthCache.postgresql = checkServiceCmd('pg_isready -h localhost -p 5432 2>/dev/null');
-  serviceHealthCache.redis = checkServiceCmd('redis-cli ping 2>/dev/null');
-  serviceHealthCache.ollama = checkServiceCmd('curl -s --max-time 2 http://localhost:11434/api/version 2>/dev/null');
+  serviceHealthCache.redis = checkServiceCmd(`redis-cli -h ${redisConn.host} -p ${redisConn.port} ping 2>/dev/null`);
+  serviceHealthCache.ollama = checkServiceCmd(`curl -s --max-time 2 ${ollamaUrlCache}/api/version 2>/dev/null`);
   serviceHealthCache.docker = checkServiceCmd('docker info --format "{{.ServerVersion}}" 2>/dev/null');
 }
 
@@ -147,6 +185,7 @@ let latestMetrics: {
   mgmtIpInternal?: string | null; mgmtIpPublic?: string | null;
   opsIpInternal?: string | null; opsIpPublic?: string | null;
   serviceHealth?: Record<string, string>;
+  serviceHosts?: Record<string, string>;
 } = { cpu: 0, memory: 0, vpnIp: null, uptime: 0, timestamp: 0 };
 
 export function getLatestMetrics() {
@@ -180,6 +219,10 @@ export function startMetricsCollector() {
         redis: serviceHealthCache.redis,
         ollama: serviceHealthCache.ollama,
         docker: serviceHealthCache.docker,
+      },
+      serviceHosts: {
+        redis: `${redisConn.host}:${redisConn.port}`,
+        ollama: parseHostPort(ollamaUrlCache),
       },
     };
     emitSystemMetrics(latestMetrics);
