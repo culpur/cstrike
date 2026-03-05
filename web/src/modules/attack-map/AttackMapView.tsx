@@ -140,8 +140,8 @@ export function AttackMapView() {
       try {
         const targets = await apiService.getTargets();
         if (targets.length > 0) {
-          setTargetName(targets[0]);
-          const results = await apiService.getTargetResults(targets[0]);
+          setTargetName(targets[0].url);
+          const results = await apiService.getTargetResults(targets[0].url);
           setResultsData({
             ports: results.ports || [],
             vulns: results.vulnerabilities || [],

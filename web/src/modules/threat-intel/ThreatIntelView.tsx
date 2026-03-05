@@ -689,7 +689,7 @@ export function ThreatIntelView() {
   useEffect(() => {
     apiService
       .getTargets()
-      .then((targets) => setCstrikeTargets(targets))
+      .then((targets) => setCstrikeTargets(targets.map((t) => t.url)))
       .catch(() => {/* targets unavailable */});
   }, []);
 

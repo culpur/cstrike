@@ -41,7 +41,6 @@ export function TargetsView() {
     subdomainResults,
     reconOutputs,
     loadTargets,
-    addTarget,
     removeTarget,
     addPortScanResult,
     addSubdomainResult,

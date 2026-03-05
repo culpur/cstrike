@@ -132,7 +132,7 @@ export function DashboardView() {
         const targetsData = await apiService.getTargets();
         if (targetsData.length > 0) {
           // Get results from first target for dashboard charts
-          const results = await apiService.getTargetResults(targetsData[0]);
+          const results = await apiService.getTargetResults(targetsData[0].url);
           setResultsData({
             ports: results.ports || [],
             vulns: results.vulnerabilities || [],
@@ -161,7 +161,7 @@ export function DashboardView() {
   // Get targets for quick-launch
   useEffect(() => {
     apiService.getTargets().then((t) => {
-      if (t.length > 0 && !scanTarget) setScanTarget(t[0]);
+      if (t.length > 0 && !scanTarget) setScanTarget(t[0].url);
     }).catch(() => {});
   }, []); // eslint-disable-line
 

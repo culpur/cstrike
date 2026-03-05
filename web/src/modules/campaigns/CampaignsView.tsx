@@ -1362,7 +1362,7 @@ export function CampaignsView() {
     const load = async () => {
       try {
         const targets = await apiService.getTargets();
-        setApiTargets(targets);
+        setApiTargets(targets.map((t) => t.url));
       } catch {
         // Non-fatal — campaigns work without live targets
       } finally {

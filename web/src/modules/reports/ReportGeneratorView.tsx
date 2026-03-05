@@ -571,7 +571,7 @@ export function ReportGeneratorView() {
 
   // Load API targets on mount
   useEffect(() => {
-    apiService.getTargets().then((t) => setApiTargets(t)).catch(() => void 0);
+    apiService.getTargets().then((t) => setApiTargets(t.map((x) => x.url))).catch(() => void 0);
   }, []);
 
   // Select all targets when list loads (if none selected yet)
