@@ -71,20 +71,23 @@ export const useReconStore = create<ReconStore>((set, get) => ({
   // Actions
   loadTargets: async () => {
     try {
-      const urls = await apiService.getTargets();
-      set((state) => {
-        // Collect URLs already in the store to avoid duplicates.
-        const existingUrls = new Set(state.targets.map((t) => t.url));
-        const newTargets: Target[] = urls
-          .filter((url) => !existingUrls.has(url))
-          .map((url) => ({
-            id: generateId(),
-            url,
-            addedAt: Date.now(),
-            status: 'pending' as const,
-          }));
-        if (newTargets.length === 0) return state;
-        return { targets: [...state.targets, ...newTargets] };
+      const backendTargets = await apiService.getTargets();
+      set(() => {
+        // Map backend status to frontend status
+        const statusMap: Record<string, Target['status']> = {
+          PENDING: 'pending',
+          SCANNING: 'scanning',
+          COMPLETE: 'complete',
+          FAILED: 'failed',
+        };
+        const targets: Target[] = backendTargets.map((t) => ({
+          id: t.id,
+          url: t.url,
+          ip: t.ip,
+          addedAt: t.createdAt ? new Date(t.createdAt).getTime() : Date.now(),
+          status: statusMap[t.status] || 'pending',
+        }));
+        return { targets };
       });
     } catch {
       // API unreachable — store stays with whatever is already in memory.

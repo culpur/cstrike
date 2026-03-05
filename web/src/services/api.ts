@@ -153,11 +153,13 @@ class ApiService {
 
   async startRecon(target: string, tools: string[]): Promise<{scan_id: string; status: string}> {
     // Backend expects POST /recon/start with {target, tools}
+    // Response: { success, data: { scan_id, target, status, tools, mode } }
     const { data } = await this.client.post('/recon/start', { target, tools });
-    if (!data.scan_id) {
+    const result = data.data || data;
+    if (!result.scan_id) {
       throw new Error('Failed to start reconnaissance');
     }
-    return data;
+    return result;
   }
 
   async stopRecon(scanId: string): Promise<void> {
@@ -233,11 +235,11 @@ class ApiService {
     return data;
   }
 
-  async getTargets(): Promise<string[]> {
+  async getTargets(): Promise<Array<{ id: string; url: string; status: string; ip?: string; hostname?: string; createdAt?: string }>> {
     // Backend: GET /targets — returns { success, data: [...targets], timestamp }
     const { data } = await this.client.get('/targets');
     const targets = data.data || data.targets || [];
-    return Array.isArray(targets) ? targets.map((t: any) => t.url || t.hostname || t) : [];
+    return Array.isArray(targets) ? targets : [];
   }
 
   // ============================================================================

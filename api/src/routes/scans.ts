@@ -249,7 +249,7 @@ scansRouter.delete('/scans/:scanId', async (req, res, next) => {
     const scan = await prisma.scan.findUnique({ where: { id: scanId } });
     if (!scan) throw new AppError(404, 'Scan not found');
 
-    if (scan.status === 'RUNNING') {
+    if (scan.status === 'RUNNING' || scan.status === 'QUEUED') {
       scanOrchestrator.cancelScan(scanId);
     }
 
@@ -257,6 +257,21 @@ scansRouter.delete('/scans/:scanId', async (req, res, next) => {
       where: { id: scanId },
       data: { status: 'CANCELLED', endedAt: new Date() },
     });
+
+    // Also update target status back to PENDING (if no other active scans exist)
+    const otherActiveScans = await prisma.scan.count({
+      where: {
+        targetId: scan.targetId,
+        id: { not: scanId },
+        status: { in: ['QUEUED', 'RUNNING'] },
+      },
+    });
+    if (otherActiveScans === 0) {
+      await prisma.target.update({
+        where: { id: scan.targetId },
+        data: { status: 'PENDING' },
+      }).catch(() => {});
+    }
 
     res.json({
       success: true,

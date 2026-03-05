@@ -40,6 +40,7 @@ export function TargetsView() {
     portScanResults,
     subdomainResults,
     reconOutputs,
+    loadTargets,
     addTarget,
     removeTarget,
     addPortScanResult,
@@ -50,20 +51,8 @@ export function TargetsView() {
 
   const { addToast } = useUIStore();
 
-  // Load existing targets on mount
+  // Load existing targets from backend on mount (with real IDs and status)
   useEffect(() => {
-    const loadTargets = async () => {
-      try {
-        const existingTargets = await apiService.getTargets();
-        existingTargets.forEach((url) => {
-          if (!targets.some((t) => t.url === url)) {
-            addTarget(url);
-          }
-        });
-      } catch (error) {
-        console.error('Failed to load targets:', error);
-      }
-    };
     loadTargets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -124,7 +113,8 @@ export function TargetsView() {
     setIsAdding(true);
     try {
       await apiService.addTarget(targetUrl);
-      addTarget(targetUrl);
+      // Reload targets from backend to get the real database ID and status
+      await loadTargets();
       setTargetUrl('');
       addToast({
         type: 'success',
@@ -159,10 +149,10 @@ export function TargetsView() {
     }
   };
 
-  const handleStartScan = async (targetId: string) => {
+  const handleStartScan = async (targetId: string, targetUrl: string) => {
     try {
-      // Start AI-driven scan (AI will decide which tools to run)
-      const response = await apiService.startRecon(targetId, []);
+      // Start AI-driven scan — backend expects the URL, not the ID
+      const response = await apiService.startRecon(targetUrl, []);
       const scanId = response?.scan_id || null;
 
       startScan(targetId);
@@ -185,8 +175,10 @@ export function TargetsView() {
         type: 'info',
         message: 'Scan cancellation requested',
       });
+      // Refresh active scans and target statuses
       const response = await apiService.getActiveScans();
       setActiveScans(response.active_scans);
+      await loadTargets();
     } catch (error) {
       addToast({
         type: 'error',
@@ -315,7 +307,7 @@ export function TargetsView() {
                     ) : (
                       <button
                         className="cs-btn cs-btn-primary flex items-center gap-1.5 text-[10px] py-1 px-2"
-                        onClick={() => handleStartScan(target.url)}
+                        onClick={() => handleStartScan(target.id, target.url)}
                       >
                         <Play className="w-3 h-3" />
                         Start Scan
