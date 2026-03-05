@@ -312,10 +312,10 @@ export function BattleMapView() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const targetUrls = await apiService.getTargets();
+        const targetObjs = await apiService.getTargets();
         const mapped: GeoTarget[] = [];
-        for (let i = 0; i < targetUrls.length; i++) {
-          const url = targetUrls[i];
+        for (let i = 0; i < targetObjs.length; i++) {
+          const url = targetObjs[i].url;
           const loc = GEO_LOCATIONS[i % GEO_LOCATIONS.length];
           try {
             const results = await apiService.getTargetResults(url);
@@ -337,6 +337,7 @@ export function BattleMapView() {
             mapped.push({
               id: `t-${i}`,
               label: url,
+              ip: url.replace(/https?:\/\//, '').split('/')[0],
               lat: loc.lat,
               lng: loc.lng,
               status: 'idle',
