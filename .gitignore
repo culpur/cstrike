@@ -15,6 +15,7 @@ web/node_modules/
 web/dist/
 dist/
 .env
+.env.*.bak
 !.env.example
 data/
 *.pid
