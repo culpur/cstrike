@@ -12,12 +12,45 @@
  * edge of the interface looks cohesive across the full width.
  */
 
-import { type ReactNode } from 'react';
+import { Component, type ReactNode, type ErrorInfo } from 'react';
 import { Sidebar } from './Sidebar';
 import { ToastContainer } from './ToastContainer';
 import { NotificationCenter } from './NotificationCenter';
 import { WorkflowDrawer } from './WorkflowDrawer';
 import { TaskMapFooter } from './TaskMapFooter';
+
+/** Error boundary that catches crashes in footer/panel components and recovers gracefully */
+class FooterErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[TaskMapFooter] Crash caught by error boundary:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-8 flex items-center justify-center text-[10px] text-[var(--grok-text-muted)] border-t border-[var(--grok-border)] bg-[var(--grok-surface-1)]">
+          Task pipeline recovered from error —
+          <button
+            className="ml-1 text-[var(--grok-recon-blue)] hover:underline"
+            onClick={() => this.setState({ hasError: false })}
+          >
+            retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -41,8 +74,10 @@ export function MainLayout({ children }: MainLayoutProps) {
         {/* Page content */}
         <main className="flex-1 overflow-hidden">{children}</main>
 
-        {/* Live task pipeline footer */}
-        <TaskMapFooter />
+        {/* Live task pipeline footer — wrapped in error boundary */}
+        <FooterErrorBoundary>
+          <TaskMapFooter />
+        </FooterErrorBoundary>
       </div>
 
       <ToastContainer />

@@ -238,7 +238,7 @@ export function DashboardView() {
 
   const openPorts = resultsData.ports.filter((p) => p.state === 'open').length;
   const totalVulns = resultsData.vulns.length;
-  const recentThoughts = thoughts.slice(-5);
+  const recentThoughts = thoughts.slice(-50);
   const serviceList: Array<{ key: string; label: string; status: ServiceStatus }> = [
     { key: 'api', label: 'API', status: connected ? 'running' : 'stopped' },
     { key: 'msf', label: 'MSF', status: services.metasploitRpc },
@@ -419,7 +419,7 @@ export function DashboardView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-1 gap-4 flex-1 min-h-0">
         {/* ── Left column: Charts ──────────────────────────────── */}
-        <div className="lg:col-span-2 space-y-3 overflow-y-auto min-h-0">
+        <div className="lg:col-span-2 flex flex-col gap-3 overflow-y-auto min-h-0">
           <div className="grid grid-cols-2 gap-3">
             {/* Vulnerability Severity Distribution */}
             <div className="cs-panel p-4">
@@ -583,7 +583,11 @@ export function DashboardView() {
           </div>
 
           {/* Exploitation Tracks (shown during active scans) */}
-          {exploitTracks.length > 0 && <ExploitTrackPanel tracks={exploitTracks} />}
+          {exploitTracks.length > 0 && (
+            <div className="flex-1 min-h-0 flex flex-col">
+              <ExploitTrackPanel tracks={exploitTracks} className="flex-1 min-h-0 overflow-y-auto" />
+            </div>
+          )}
         </div>
 
         {/* ── Right column: Loot + AI + Findings ───────────────── */}
@@ -730,7 +734,7 @@ export function DashboardView() {
                     key={t.id}
                     className="text-[11px] text-[var(--grok-text-body)] font-mono p-2 bg-[var(--grok-surface-2)] rounded border-l-2 border-[var(--grok-ai-purple)] animate-fade-in"
                   >
-                    {t.content.length > 100 ? t.content.slice(0, 100) + '...' : t.content}
+                    {t.content.length > 300 ? t.content.slice(0, 300) + '...' : t.content}
                   </div>
                 ))
               )}
