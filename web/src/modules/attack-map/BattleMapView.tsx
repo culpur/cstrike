@@ -7,7 +7,7 @@
  * - Kill Chain: Cyber kill chain progress (from AttackMapView)
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Map,
   Globe,
@@ -189,6 +189,10 @@ export function BattleMapView() {
   const [targets, setTargets] = useState<GeoTarget[]>([]);
   const [lootCreds, setLootCreds] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [expandedTargets, setExpandedTargets] = useState<Set<string>>(new Set());
   const [showGrid, setShowGrid] = useState(true);
@@ -272,10 +276,36 @@ export function BattleMapView() {
   }, [targets, lootCreds]);
 
   const viewBox = useMemo(() => {
-    const cx = 400, cy = 200;
+    const cx = 400 + pan.x, cy = 200 + pan.y;
     const w = 800 / zoom, h = 400 / zoom;
     return `${cx - w / 2} ${cy - h / 2} ${w} ${h}`;
-  }, [zoom]);
+  }, [zoom, pan]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setIsDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+  }, [pan]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging || !dragStart.current || !svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const scaleX = (800 / zoom) / rect.width;
+    const scaleY = (400 / zoom) / rect.height;
+    const dx = (e.clientX - dragStart.current.x) * scaleX;
+    const dy = (e.clientY - dragStart.current.y) * scaleY;
+    setPan({ x: dragStart.current.panX - dx, y: dragStart.current.panY - dy });
+  }, [isDragging, zoom]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    dragStart.current = null;
+  }, []);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    setZoom((z) => Math.min(Math.max(z + (e.deltaY < 0 ? 0.3 : -0.3), 0.5), 6));
+  }, []);
 
   const toggleExpanded = (id: string) => {
     setExpandedTargets((prev) => {
@@ -356,7 +386,17 @@ export function BattleMapView() {
               </button>
             </div>
 
-            <svg viewBox={viewBox} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+            <svg
+              ref={svgRef}
+              viewBox={viewBox}
+              className={cn('w-full h-full', isDragging ? 'cursor-grabbing' : 'cursor-grab')}
+              preserveAspectRatio="xMidYMid meet"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onWheel={handleWheel}
+            >
               {/* Ocean background */}
               <rect x="0" y="0" width="800" height="400" fill="var(--grok-void)" />
 
