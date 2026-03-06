@@ -686,6 +686,16 @@ class ApiService {
     return data.data || data;
   }
 
+  async runTraceroute(target: string): Promise<{
+    target: string;
+    hops: Array<{ hop: number; ip: string; rtt: number; lat: number; lng: number; city?: string; country?: string; asn?: string }>;
+    hopCount: number;
+    duration: number;
+  }> {
+    const { data } = await this.client.post('/recon/traceroute', { target }, { timeout: 60000 });
+    return data.data || data;
+  }
+
   async getTargetContext(targetId: string): Promise<any> {
     const { data } = await this.client.get(`/recon/context/${targetId}`);
     return data.data || data;

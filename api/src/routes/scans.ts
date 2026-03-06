@@ -12,6 +12,7 @@ import { prisma } from '../config/database.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { validateTargetScope } from '../middleware/guardrails.js';
 import { scanOrchestrator } from '../services/scanOrchestrator.js';
+import { tracerouteService } from '../services/tracerouteService.js';
 
 export const scansRouter = Router();
 
@@ -276,6 +277,30 @@ scansRouter.delete('/scans/:scanId', async (req, res, next) => {
     res.json({
       success: true,
       data: { scan_id: scanId, status: 'cancelled' },
+      timestamp: Date.now(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Run traceroute only (no scan) — for visual path mapping
+scansRouter.post('/traceroute', async (req, res, next) => {
+  try {
+    const { target } = req.body as { target: string };
+    if (!target) throw new AppError(400, 'target is required');
+
+    // Run traceroute asynchronously, return immediately
+    const result = await tracerouteService.runTraceroute(target);
+
+    res.json({
+      success: true,
+      data: {
+        target,
+        hops: result.hops,
+        hopCount: result.hops.length,
+        duration: result.duration,
+      },
       timestamp: Date.now(),
     });
   } catch (err) {
