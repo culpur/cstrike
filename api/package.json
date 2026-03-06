@@ -1,6 +1,6 @@
 {
   "name": "@cstrike/api",
-  "version": "2.6.1",
+  "version": "2.5.1",
   "description": "CStrike v2 — Node.js/Express/TypeScript API Server",
   "type": "module",
   "main": "dist/server.js",

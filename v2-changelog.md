@@ -237,7 +237,7 @@ Plus: Metasploit Framework (msfrpcd on port 55552), subfinder, amass, katana, ga
 
 ---
 
-## v2.6.1 (March 2026)
+## v2.5.1 (March 2026)
 
 ### New Features
 
