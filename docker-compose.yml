@@ -156,7 +156,7 @@ services:
         condition: service_healthy
     environment:
       VNC_PW: ${KASM_PASSWORD:-cstrike}
-      LAUNCH_URL: http://host.docker.internal:3000
+      LAUNCH_URL: https://host.docker.internal
     healthcheck:
       test: ["CMD-SHELL", "curl -sk -o /dev/null -w '' https://127.0.0.1:6901 || [ $? -eq 22 ]"]
       interval: 15s

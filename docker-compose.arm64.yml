@@ -30,7 +30,7 @@ services:
       PGID: 1000
       TZ: UTC
       CUSTOM_PORT: 3000
-      CHROME_CLI: http://host.docker.internal:3000
+      CHROME_CLI: https://host.docker.internal --ignore-certificate-errors
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/ || exit 1"]
       interval: 15s
