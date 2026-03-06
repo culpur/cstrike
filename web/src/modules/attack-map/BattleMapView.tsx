@@ -520,12 +520,6 @@ export function BattleMapView() {
 
                 const points = geoHops.map((h) => project(h.lat, h.lng));
                 const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-                const pathLength = points.reduce((acc, p, i) => {
-                  if (i === 0) return 0;
-                  const dx = p.x - points[i - 1].x;
-                  const dy = p.y - points[i - 1].y;
-                  return acc + Math.sqrt(dx * dx + dy * dy);
-                }, 0);
 
                 return (
                   <g key={`tr-${target}`}>
