@@ -212,8 +212,22 @@ export function BattleMapView() {
   const [showPaths, setShowPaths] = useState(true);
   const [showTraceroute, setShowTraceroute] = useState(true);
 
+  // Scanner origin location (fetched from API — mgmt IP or VPN IP geo)
+  const [scannerOrigin, setScannerOrigin] = useState<{ lat: number; lng: number; city?: string; country?: string }>({ lat: 0, lng: 0 });
+
   // Traceroute hops per target — key is target URL
   const [tracerouteHops, setTracerouteHops] = useState<Map<string, TracerouteHop[]>>(new Map());
+
+  // Fetch scanner origin location from API (uses mgmt IP or VPN egress IP)
+  useEffect(() => {
+    apiService.getScannerLocation()
+      .then((loc) => {
+        if (loc.lat !== 0 || loc.lng !== 0) {
+          setScannerOrigin({ lat: loc.lat, lng: loc.lng, city: loc.city, country: loc.country });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Listen for real-time traceroute hop events
   useEffect(() => {
@@ -313,12 +327,12 @@ export function BattleMapView() {
   // Attack paths from origin to each target
   const paths = useMemo<AttackPath[]>(() => {
     return targets.map((t) => ({
-      from: { lat: 38.9, lng: -77.0 },
+      from: { lat: scannerOrigin.lat, lng: scannerOrigin.lng },
       to: { lat: t.lat, lng: t.lng },
       type: t.vulns.length > 0 ? 'exploit' as const : 'recon' as const,
       active: t.status === 'scanning',
     }));
-  }, [targets]);
+  }, [targets, scannerOrigin]);
 
   // Global techniques (all targets combined)
   const allTechniques = useMemo(() => {
@@ -614,20 +628,22 @@ export function BattleMapView() {
                 );
               })}
 
-              {/* Origin */}
+              {/* Origin — scanner location (mgmt IP or VPN egress) */}
+              {(scannerOrigin.lat !== 0 || scannerOrigin.lng !== 0) && (
               <g>
-                <circle cx={project(38.9, -77.0).x} cy={project(38.9, -77.0).y} r={5} fill="var(--grok-exploit-red)" opacity={0.3}>
+                <circle cx={project(scannerOrigin.lat, scannerOrigin.lng).x} cy={project(scannerOrigin.lat, scannerOrigin.lng).y} r={5} fill="var(--grok-exploit-red)" opacity={0.3}>
                   <animate attributeName="r" from="4" to="10" dur="2s" repeatCount="indefinite" />
                   <animate attributeName="opacity" from="0.3" to="0" dur="2s" repeatCount="indefinite" />
                 </circle>
                 <polygon
-                  points={`${project(38.9, -77.0).x},${project(38.9, -77.0).y - 5} ${project(38.9, -77.0).x - 3},${project(38.9, -77.0).y + 2} ${project(38.9, -77.0).x + 3},${project(38.9, -77.0).y + 2}`}
+                  points={`${project(scannerOrigin.lat, scannerOrigin.lng).x},${project(scannerOrigin.lat, scannerOrigin.lng).y - 5} ${project(scannerOrigin.lat, scannerOrigin.lng).x - 3},${project(scannerOrigin.lat, scannerOrigin.lng).y + 2} ${project(scannerOrigin.lat, scannerOrigin.lng).x + 3},${project(scannerOrigin.lat, scannerOrigin.lng).y + 2}`}
                   fill="var(--grok-exploit-red)"
                 />
-                <text x={project(38.9, -77.0).x + 7} y={project(38.9, -77.0).y} fontSize={5} fill="var(--grok-exploit-red)" fontFamily="monospace">
-                  CSTRIKE
+                <text x={project(scannerOrigin.lat, scannerOrigin.lng).x + 7} y={project(scannerOrigin.lat, scannerOrigin.lng).y} fontSize={5} fill="var(--grok-exploit-red)" fontFamily="monospace">
+                  CSTRIKE{scannerOrigin.city ? ` (${scannerOrigin.city})` : ''}
                 </text>
               </g>
+              )}
             </svg>
 
             {/* Legend */}

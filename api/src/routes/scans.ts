@@ -284,6 +284,54 @@ scansRouter.delete('/scans/:scanId', async (req, res, next) => {
   }
 });
 
+// Get scanner geo-location (for map origin — uses mgmt IP or VPN IP)
+scansRouter.get('/scanner-location', async (_req, res, next) => {
+  try {
+    // Check for active VPN — if connected, use VPN public IP for geo
+    let ip: string | null = null;
+    try {
+      const vpnConn = await prisma.vpnConnection.findFirst({
+        where: { status: 'CONNECTED' },
+        orderBy: { connectedAt: 'desc' },
+      });
+      if (vpnConn?.publicIp) ip = vpnConn.publicIp;
+    } catch { /* VPN table may not exist */ }
+
+    // Fall back to management public IP
+    if (!ip) {
+      try {
+        const { execSync } = await import('node:child_process');
+        ip = execSync('curl -s --max-time 3 ifconfig.me 2>/dev/null', { timeout: 5000, encoding: 'utf-8' }).trim() || null;
+      } catch { /* ignore */ }
+    }
+
+    if (!ip) {
+      res.json({ success: true, data: { lat: 0, lng: 0, city: 'Unknown', country: 'Unknown', ip: null }, timestamp: Date.now() });
+      return;
+    }
+
+    // Resolve geo-IP
+    const geoResp = await fetch(`http://ip-api.com/json/${ip}?fields=query,lat,lon,city,country,as,isp,status`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (geoResp.ok) {
+      const geo = await geoResp.json() as { query: string; lat: number; lon: number; city: string; country: string; as: string; isp: string; status: string };
+      if (geo.status === 'success') {
+        res.json({
+          success: true,
+          data: { lat: geo.lat, lng: geo.lon, city: geo.city, country: geo.country, ip: geo.query, asn: geo.as, isp: geo.isp },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+    }
+
+    res.json({ success: true, data: { lat: 0, lng: 0, city: 'Unknown', country: 'Unknown', ip }, timestamp: Date.now() });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Run traceroute only (no scan) — for visual path mapping
 scansRouter.post('/traceroute', async (req, res, next) => {
   try {

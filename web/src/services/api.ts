@@ -686,6 +686,19 @@ class ApiService {
     return data.data || data;
   }
 
+  async getScannerLocation(): Promise<{
+    lat: number;
+    lng: number;
+    city?: string;
+    country?: string;
+    ip?: string;
+    asn?: string;
+    isp?: string;
+  }> {
+    const { data } = await this.client.get('/recon/scanner-location', { timeout: 10000 });
+    return data.data || data;
+  }
+
   async runTraceroute(target: string): Promise<{
     target: string;
     hops: Array<{ hop: number; ip: string; rtt: number; lat: number; lng: number; city?: string; country?: string; asn?: string }>;
