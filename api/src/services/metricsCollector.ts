@@ -62,7 +62,7 @@ function getVpnIp(): string | null {
     for (const iface of ['wg0', 'tun0', 'tailscale0', 'nordlynx']) {
       const output = execSync(
         `ip -4 addr show ${iface} 2>/dev/null | grep -oP '(?<=inet )\\S+' | cut -d/ -f1`,
-        { timeout: 2000, encoding: 'utf-8' },
+        { timeout: 2000, encoding: 'utf-8', env: hostEnv() },
       );
       const ip = output.trim();
       if (ip) return ip;
@@ -126,11 +126,19 @@ let serviceHealthCache = {
   lastPoll: 0,
 };
 
+/** Build env with host tool paths so `ip`, `curl`, etc. resolve inside container */
+function hostEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PATH: `${env.HOST_LOCAL_BIN_PATH}:${env.HOST_BIN_PATH}:${env.HOST_SBIN_PATH}:${process.env.PATH}`,
+  };
+}
+
 function getInterfaceIp(iface: string): string | null {
   try {
     const output = execSync(
       `ip -4 addr show ${iface} 2>/dev/null | grep -oP '(?<=inet )\\S+' | cut -d/ -f1`,
-      { timeout: 2000, encoding: 'utf-8' },
+      { timeout: 2000, encoding: 'utf-8', env: hostEnv() },
     );
     return output.trim() || null;
   } catch {
@@ -138,9 +146,22 @@ function getInterfaceIp(iface: string): string | null {
   }
 }
 
+/** Get the default-route interface name (e.g. enp0s1, eth0, ens18) */
+function getDefaultInterface(): string | null {
+  try {
+    const out = execSync(
+      "ip route show default 2>/dev/null | head -1 | grep -oP '(?<=dev )\\S+'",
+      { timeout: 2000, encoding: 'utf-8', env: hostEnv() },
+    );
+    return out.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 function getPublicIp(): string | null {
   try {
-    return execSync('curl -s --max-time 3 ifconfig.me 2>/dev/null', { timeout: 5000, encoding: 'utf-8' }).trim() || null;
+    return execSync('curl -s --max-time 3 ifconfig.me 2>/dev/null', { timeout: 5000, encoding: 'utf-8', env: hostEnv() }).trim() || null;
   } catch {
     return null;
   }
@@ -151,7 +172,15 @@ function pollNetworkInterfaces() {
   if (now - networkCache.lastPoll < 120_000) return; // 2 min cache
   networkCache.lastPoll = now;
 
-  networkCache.mgmtIpInternal = getInterfaceIp('eth0') ?? getInterfaceIp('ens18') ?? getInterfaceIp('ens3');
+  // Try common names first, then fall back to whatever carries the default route
+  networkCache.mgmtIpInternal =
+    getInterfaceIp('eth0') ??
+    getInterfaceIp('ens18') ??
+    getInterfaceIp('ens3') ??
+    getInterfaceIp('enp0s1') ??
+    getInterfaceIp('enp0s2') ??
+    getInterfaceIp('enp0s3') ??
+    (() => { const def = getDefaultInterface(); return def ? getInterfaceIp(def) : null; })();
   networkCache.mgmtIpPublic = getPublicIp();
   networkCache.opsIpInternal = getInterfaceIp('tun0') ?? getInterfaceIp('wg0');
   networkCache.opsIpPublic = null; // VPN public IP tracked via vpnIp
