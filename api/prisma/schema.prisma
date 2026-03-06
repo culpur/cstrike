@@ -146,6 +146,7 @@ enum ScanResultType {
   EXPLOIT_RESULT
   VULNAPI_FINDING
   RAW_OUTPUT
+  TRACEROUTE
 }
 
 enum Severity {

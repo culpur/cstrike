@@ -28,6 +28,7 @@ import {
 import { exploitTrackManager } from './exploitTrackManager.js';
 import { executeTask } from '../routes/cases.js';
 import { scanContextService, type ExecutionState } from './scanContextService.js';
+import { tracerouteService } from './tracerouteService.js';
 
 // Active scan tracking for cancellation and pause
 const activeScans = new Map<string, { cancelled: boolean; paused: boolean }>();
@@ -43,7 +44,7 @@ const RECON_TOOLS = new Set([
   'nikto', 'nuclei', 'wpscan',
   'waybackurls', 'gau', 'katana', 'gowitness',
   'enum4linux', 'smbclient', 'nbtscan', 'snmpwalk',
-  'searchsploit',
+  'searchsploit', 'traceroute',
 ]);
 
 const EXPLOIT_TOOLS = new Set([
@@ -222,6 +223,27 @@ class ScanOrchestrator {
 
       // Ensure ScanContext record exists
       await scanContextService.getOrCreate(targetId);
+
+      // ── Traceroute — run at scan start for visual path mapping ──────────
+      if (!resumeState && !state?.cancelled) {
+        tracerouteService.runTraceroute(target, scanId)
+          .then(async (result) => {
+            if (result.hops.length > 0) {
+              await prisma.scanResult.create({
+                data: {
+                  scanId,
+                  resultType: 'TRACEROUTE',
+                  data: { hops: result.hops, duration: result.duration } as any,
+                  source: 'traceroute',
+                },
+              }).catch(() => {});
+            }
+          })
+          .catch((err) => {
+            console.warn(`[Orchestrator] Traceroute failed (non-fatal): ${err.message}`);
+          });
+        // Don't await — traceroute runs concurrently with the scan pipeline
+      }
 
       if (operationMode === 'manual') {
         await this.runManualPipeline(scanId, target, targetId, requestedTools, mode, state);

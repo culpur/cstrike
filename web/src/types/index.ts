@@ -416,7 +416,8 @@ export type WSMessageType =
   | 'terminal_session_created'
   | 'terminal_session_closed'
   | 'early_exploit_result'
-  | 'persistence_deployed';
+  | 'persistence_deployed'
+  | 'traceroute_hop';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

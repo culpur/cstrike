@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@utils/index';
 import { apiService } from '@services/api';
+import { wsService } from '@services/websocket';
 import { useLootStore } from '@stores/lootStore';
 import { COUNTRY_PATHS } from '@data/world-map-paths';
 
@@ -47,6 +48,18 @@ interface MapEvent {
   type: 'scan' | 'vuln' | 'credential' | 'exploit';
   label: string;
   timestamp: number;
+}
+
+interface TracerouteHop {
+  hop: number;
+  ip: string;
+  rtt: number;
+  lat: number;
+  lng: number;
+  city?: string;
+  country?: string;
+  asn?: string;
+  totalHops: number;
 }
 
 /* World basemap data imported from pre-computed Natural Earth 110m paths */
@@ -136,6 +149,44 @@ export function GeoMapView() {
   const [showGrid, setShowGrid] = useState(true);
   const [showPaths, setShowPaths] = useState(true);
   const [showEvents, setShowEvents] = useState(true);
+  const [showTraceroute, setShowTraceroute] = useState(true);
+
+  // Traceroute hops per target
+  const [tracerouteHops, setTracerouteHops] = useState<Map<string, TracerouteHop[]>>(new Map());
+
+  useEffect(() => {
+    const unsub = wsService.on<{
+      target: string;
+      hop: number;
+      ip: string;
+      rtt: number;
+      lat: number;
+      lng: number;
+      city?: string;
+      country?: string;
+      asn?: string;
+      totalHops: number;
+    }>('traceroute_hop', (data) => {
+      setTracerouteHops((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(data.target) || [];
+        if (existing.some((h) => h.hop === data.hop)) return prev;
+        next.set(data.target, [...existing, {
+          hop: data.hop,
+          ip: data.ip,
+          rtt: data.rtt,
+          lat: data.lat,
+          lng: data.lng,
+          city: data.city,
+          country: data.country,
+          asn: data.asn,
+          totalHops: data.totalHops,
+        }].sort((a, b) => a.hop - b.hop));
+        return next;
+      });
+    });
+    return unsub;
+  }, []);
 
   // Fetch real targets
   useEffect(() => {
@@ -259,6 +310,15 @@ export function GeoMapView() {
             >
               Events
             </button>
+            <button
+              onClick={() => setShowTraceroute(!showTraceroute)}
+              className={cn(
+                'px-2 py-1 text-[10px] rounded border transition-colors',
+                showTraceroute ? 'border-[var(--grok-scan-cyan)]/40 text-[var(--grok-scan-cyan)]' : 'border-[var(--grok-border)] text-[var(--grok-text-muted)]'
+              )}
+            >
+              Route
+            </button>
           </div>
           {/* Zoom */}
           <button
@@ -358,6 +418,59 @@ export function GeoMapView() {
                   </g>
                 );
               })}
+
+            {/* Traceroute paths */}
+            {showTraceroute && Array.from(tracerouteHops.entries()).map(([target, hops]) => {
+              if (hops.length < 2) return null;
+              const geoHops = hops.filter((h) => h.lat !== 0 || h.lng !== 0);
+              if (geoHops.length < 2) return null;
+
+              const points = geoHops.map((h) => project(h.lat, h.lng));
+              const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+              return (
+                <g key={`tr-${target}`}>
+                  <path
+                    d={pathD}
+                    fill="none"
+                    stroke="var(--grok-scan-cyan)"
+                    strokeWidth={1}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity={0.6}
+                  />
+                  <circle r={2.5} fill="var(--grok-scan-cyan)" opacity={0.9}>
+                    <animateMotion
+                      dur={`${Math.max(2, geoHops.length * 0.5)}s`}
+                      repeatCount="indefinite"
+                      path={pathD}
+                    />
+                  </circle>
+                  <circle r={5} fill="var(--grok-scan-cyan)" opacity={0.2}>
+                    <animateMotion
+                      dur={`${Math.max(2, geoHops.length * 0.5)}s`}
+                      repeatCount="indefinite"
+                      path={pathD}
+                    />
+                  </circle>
+                  {geoHops.map((h, i) => {
+                    const p = points[i];
+                    return (
+                      <circle
+                        key={`hop-${target}-${h.hop}`}
+                        cx={p.x}
+                        cy={p.y}
+                        r={i === 0 || i === geoHops.length - 1 ? 3 : 1.5}
+                        fill={i === 0 ? 'var(--grok-exploit-red)' : i === geoHops.length - 1 ? 'var(--grok-ok-green)' : 'var(--grok-scan-cyan)'}
+                        stroke="var(--grok-void)"
+                        strokeWidth={0.5}
+                        opacity={0.8}
+                      />
+                    );
+                  })}
+                </g>
+              );
+            })}
 
             {/* Targets */}
             {targets.map((t) => {

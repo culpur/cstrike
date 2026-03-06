@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@utils/index';
 import { apiService } from '@services/api';
+import { wsService } from '@services/websocket';
 import { COUNTRY_PATHS } from '@data/world-map-paths';
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -50,6 +51,18 @@ interface AttackPath {
   to: { lat: number; lng: number };
   type: 'recon' | 'exploit' | 'exfil';
   active: boolean;
+}
+
+interface TracerouteHop {
+  hop: number;
+  ip: string;
+  rtt: number;
+  lat: number;
+  lng: number;
+  city?: string;
+  country?: string;
+  asn?: string;
+  totalHops: number;
 }
 
 interface TechniqueMapping {
@@ -197,6 +210,47 @@ export function BattleMapView() {
   const [expandedTargets, setExpandedTargets] = useState<Set<string>>(new Set());
   const [showGrid, setShowGrid] = useState(true);
   const [showPaths, setShowPaths] = useState(true);
+  const [showTraceroute, setShowTraceroute] = useState(true);
+
+  // Traceroute hops per target — key is target URL
+  const [tracerouteHops, setTracerouteHops] = useState<Map<string, TracerouteHop[]>>(new Map());
+
+  // Listen for real-time traceroute hop events
+  useEffect(() => {
+    const unsub = wsService.on<{
+      target: string;
+      scanId?: string;
+      hop: number;
+      ip: string;
+      rtt: number;
+      lat: number;
+      lng: number;
+      city?: string;
+      country?: string;
+      asn?: string;
+      totalHops: number;
+    }>('traceroute_hop', (data) => {
+      setTracerouteHops((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(data.target) || [];
+        // Avoid duplicates (same hop number for same target)
+        if (existing.some((h) => h.hop === data.hop)) return prev;
+        next.set(data.target, [...existing, {
+          hop: data.hop,
+          ip: data.ip,
+          rtt: data.rtt,
+          lat: data.lat,
+          lng: data.lng,
+          city: data.city,
+          country: data.country,
+          asn: data.asn,
+          totalHops: data.totalHops,
+        }].sort((a, b) => a.hop - b.hop));
+        return next;
+      });
+    });
+    return unsub;
+  }, []);
 
   // Fetch targets with their results
   useEffect(() => {
@@ -377,6 +431,15 @@ export function BattleMapView() {
               >
                 Paths
               </button>
+              <button
+                onClick={() => setShowTraceroute(!showTraceroute)}
+                className={cn(
+                  'px-2 py-1 text-[10px] rounded border transition-colors',
+                  showTraceroute ? 'border-[var(--grok-scan-cyan)]/40 text-[var(--grok-scan-cyan)]' : 'border-[var(--grok-border)] text-[var(--grok-text-muted)]'
+                )}
+              >
+                Route
+              </button>
               <button onClick={() => setZoom((z) => Math.min(z + 0.5, 4))} className="p-1 rounded text-[var(--grok-text-muted)] hover:bg-[var(--grok-surface-2)]">
                 <ZoomIn className="w-4 h-4" />
               </button>
@@ -448,6 +511,87 @@ export function BattleMapView() {
                 );
               })}
 
+              {/* Traceroute paths — multi-hop polylines with animated pulse */}
+              {showTraceroute && Array.from(tracerouteHops.entries()).map(([target, hops]) => {
+                if (hops.length < 2) return null;
+                // Filter out hops with no geo data (lat=0, lng=0)
+                const geoHops = hops.filter((h) => h.lat !== 0 || h.lng !== 0);
+                if (geoHops.length < 2) return null;
+
+                const points = geoHops.map((h) => project(h.lat, h.lng));
+                const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                const pathLength = points.reduce((acc, p, i) => {
+                  if (i === 0) return 0;
+                  const dx = p.x - points[i - 1].x;
+                  const dy = p.y - points[i - 1].y;
+                  return acc + Math.sqrt(dx * dx + dy * dy);
+                }, 0);
+
+                return (
+                  <g key={`tr-${target}`}>
+                    {/* Route line — glowing cyan polyline */}
+                    <path
+                      d={pathD}
+                      fill="none"
+                      stroke="var(--grok-scan-cyan)"
+                      strokeWidth={1}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      opacity={0.6}
+                    />
+                    {/* Animated pulse traveling along the route */}
+                    <circle r={2.5} fill="var(--grok-scan-cyan)" opacity={0.9}>
+                      <animateMotion
+                        dur={`${Math.max(2, geoHops.length * 0.5)}s`}
+                        repeatCount="indefinite"
+                        path={pathD}
+                      />
+                    </circle>
+                    {/* Glow trail */}
+                    <circle r={5} fill="var(--grok-scan-cyan)" opacity={0.2}>
+                      <animateMotion
+                        dur={`${Math.max(2, geoHops.length * 0.5)}s`}
+                        repeatCount="indefinite"
+                        path={pathD}
+                      />
+                    </circle>
+                    {/* Hop nodes */}
+                    {geoHops.map((h, i) => {
+                      const p = points[i];
+                      const isFirst = i === 0;
+                      const isLast = i === geoHops.length - 1;
+                      return (
+                        <g key={`hop-${target}-${h.hop}`}>
+                          <circle
+                            cx={p.x}
+                            cy={p.y}
+                            r={isFirst || isLast ? 3 : 1.5}
+                            fill={isFirst ? 'var(--grok-exploit-red)' : isLast ? 'var(--grok-ok-green)' : 'var(--grok-scan-cyan)'}
+                            stroke="var(--grok-void)"
+                            strokeWidth={0.5}
+                            opacity={0.8}
+                          />
+                          {/* Show city label on significant hops (every 3rd or first/last) */}
+                          {(isFirst || isLast || (h.city && i % 3 === 0)) && h.city && (
+                            <text
+                              x={p.x}
+                              y={p.y - 4}
+                              fontSize={3.5}
+                              fill="var(--grok-scan-cyan)"
+                              fontFamily="monospace"
+                              textAnchor="middle"
+                              opacity={0.7}
+                            >
+                              {h.city}
+                            </text>
+                          )}
+                        </g>
+                      );
+                    })}
+                  </g>
+                );
+              })}
+
               {/* Targets */}
               {targets.map((t) => {
                 const { x, y } = project(t.lat, t.lng);
@@ -497,6 +641,9 @@ export function BattleMapView() {
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[var(--grok-ok-green)]" /> Complete</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[var(--grok-recon-blue)]" /> Scanning</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 bg-[var(--grok-exploit-red)]" style={{ clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)' }} /> Origin</span>
+              {tracerouteHops.size > 0 && (
+                <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[var(--grok-scan-cyan)]" /> Route ({Array.from(tracerouteHops.values()).reduce((s, h) => s + h.length, 0)} hops)</span>
+              )}
             </div>
           </div>
 

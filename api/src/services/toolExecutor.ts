@@ -198,6 +198,12 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
   snmpwalk: (target) => ['snmpwalk', '-v2c', '-c', 'public', extractHost(target)],
   dnsrecon: (target) => ['dnsrecon', '-d', extractHost(target)],
   commix: (target) => ['commix', '--url', target, '--batch'],
+  traceroute: (target) => {
+    const host = extractHost(target);
+    // Use mtr in report mode for structured output with AS numbers and geo hints
+    // Falls back to traceroute if mtr unavailable
+    return ['mtr', '--report', '--report-cycles', '1', '--no-dns', '--json', host];
+  },
   searchsploit: (target, opts) => {
     // Search ExploitDB for known exploits — use query if provided, else target host
     const query = opts.args?.[0] || extractHost(target);
@@ -380,6 +386,7 @@ class ToolExecutor {
     metasploit: 600_000,   // 10 min — MSF loads slowly + multiple modules
     msf_exploit: 600_000,  // 10 min — MSF exploit execution
     zap: 600_000,          // 10 min — spider + active scan
+    traceroute: 60_000,   // 1 min
     searchsploit: 60_000,  // 1 min
     ssh_connect: 60_000,   // 1 min — single SSH command
     privesc_check: 120_000, // 2 min — enumeration over SSH

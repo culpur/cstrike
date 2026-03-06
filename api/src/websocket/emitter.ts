@@ -279,6 +279,24 @@ export function emitEarlyExploitResult(data: {
   io?.emit('early_exploit_result', data);
 }
 
+// ── Traceroute hop events ────────────────────────────────────────────────────
+
+export function emitTracerouteHop(data: {
+  target: string;
+  scanId?: string;
+  hop: number;
+  ip: string;
+  rtt: number;
+  lat: number;
+  lng: number;
+  city?: string;
+  country?: string;
+  asn?: string;
+  totalHops: number;
+}) {
+  io?.emit('traceroute_hop', data);
+}
+
 // ── Scan pause / resume events ───────────────────────────────────────────────
 
 export function emitScanPaused(data: {

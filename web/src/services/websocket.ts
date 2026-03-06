@@ -210,6 +210,11 @@ class WebSocketService {
       this.handleServerMessage('exploit_track_spawned', data);
     });
 
+    // Traceroute hop events (visual path mapping)
+    this.socket.on('traceroute_hop', (data) => {
+      this.handleServerMessage('traceroute_hop', data);
+    });
+
     // Scan pause / resume
     this.socket.on('scan_paused', (data) => {
       this.handleServerMessage('scan_paused', data);
