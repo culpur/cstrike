@@ -218,6 +218,16 @@ export function BattleMapView() {
   // Traceroute hops per target — key is target URL
   const [tracerouteHops, setTracerouteHops] = useState<Map<string, TracerouteHop[]>>(new Map());
 
+  // VPN rotation events — most recent shown as badge
+  const [vpnRotationEvent, setVpnRotationEvent] = useState<{
+    configFile: string;
+    provider: string;
+    newIp: string | null;
+    duration: number;
+    rotationIndex: number;
+    timestamp: number;
+  } | null>(null);
+
   // Fetch scanner origin location from API (uses mgmt IP or VPN egress IP)
   useEffect(() => {
     apiService.getScannerLocation()
@@ -262,6 +272,32 @@ export function BattleMapView() {
         }].sort((a, b) => a.hop - b.hop));
         return next;
       });
+    });
+    return unsub;
+  }, []);
+
+  // Listen for VPN rotation events
+  useEffect(() => {
+    const unsub = wsService.on<{
+      scanId: string;
+      configFile: string;
+      provider: string;
+      oldIp: string | null;
+      newIp: string | null;
+      duration: number;
+      rotationIndex: number;
+      success: boolean;
+    }>('vpn_rotation', (data) => {
+      if (data.success) {
+        setVpnRotationEvent({
+          configFile: data.configFile,
+          provider: data.provider,
+          newIp: data.newIp,
+          duration: data.duration,
+          rotationIndex: data.rotationIndex,
+          timestamp: Date.now(),
+        });
+      }
     });
     return unsub;
   }, []);
@@ -642,6 +678,12 @@ export function BattleMapView() {
                 <text x={project(scannerOrigin.lat, scannerOrigin.lng).x + 7} y={project(scannerOrigin.lat, scannerOrigin.lng).y} fontSize={5} fill="var(--grok-exploit-red)" fontFamily="monospace">
                   CSTRIKE{scannerOrigin.city ? ` (${scannerOrigin.city})` : ''}
                 </text>
+                {/* VPN Rotation IP badge */}
+                {vpnRotationEvent && Date.now() - vpnRotationEvent.timestamp < 60000 && (
+                  <text x={project(scannerOrigin.lat, scannerOrigin.lng).x + 7} y={project(scannerOrigin.lat, scannerOrigin.lng).y + 8} fontSize={4} fill="var(--grok-recon-blue)" fontFamily="monospace" opacity={0.8}>
+                    VPN: {vpnRotationEvent.newIp ?? '...'} ({vpnRotationEvent.provider} #{vpnRotationEvent.rotationIndex + 1})
+                  </text>
+                )}
               </g>
               )}
             </svg>

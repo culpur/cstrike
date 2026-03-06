@@ -20,6 +20,8 @@ export interface ExecutionState {
   mode: string;
   /** Tool names that have been run — authoritative copy rebuilt from ScanResult on resume */
   toolsRun: string[];
+  /** VPN rotation checkpoint data for pause/resume */
+  vpnRotation?: unknown;
 }
 
 interface FindingsSummary {

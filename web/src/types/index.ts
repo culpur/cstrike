@@ -417,7 +417,8 @@ export type WSMessageType =
   | 'terminal_session_closed'
   | 'early_exploit_result'
   | 'persistence_deployed'
-  | 'traceroute_hop';
+  | 'traceroute_hop'
+  | 'vpn_rotation';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;
@@ -516,6 +517,32 @@ export interface VpnConnection {
   configPath: string | null;
   hasAuthToken: boolean;
   options: Record<string, unknown> | null;
+}
+
+// ============================================================================
+// VPN Rotation Types
+// ============================================================================
+
+export type RotationStrategy = 'per-tool' | 'periodic' | 'phase-based';
+
+export interface VpnRotationConfig {
+  enabled: boolean;
+  strategy: RotationStrategy;
+  periodicInterval: number;
+  providers: ('nordvpn' | 'mullvad')[];
+  avoidRecentCount: number;
+}
+
+export interface VpnRotationEvent {
+  scanId: string;
+  configFile: string;
+  provider: string;
+  oldIp: string | null;
+  newIp: string | null;
+  duration: number;
+  rotationIndex: number;
+  success: boolean;
+  error?: string;
 }
 
 // ============================================================================

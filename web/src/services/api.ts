@@ -557,6 +557,44 @@ class ApiService {
     return data.data;
   }
 
+  // ── VPN Rotation ────────────────────────────────────────────────────────
+
+  async getVpnRotationConfig(): Promise<{
+    enabled: boolean;
+    strategy: string;
+    periodicInterval: number;
+    providers: string[];
+    avoidRecentCount: number;
+  }> {
+    const { data } = await this.client.get('/vpn/rotation/config');
+    return data.data;
+  }
+
+  async updateVpnRotationConfig(config: {
+    enabled?: boolean;
+    strategy?: string;
+    periodicInterval?: number;
+    providers?: string[];
+    avoidRecentCount?: number;
+  }): Promise<void> {
+    await this.client.put('/vpn/rotation/config', config);
+  }
+
+  async generateNordvpnConfigs(token: string): Promise<{ count: number; dir: string }> {
+    const { data } = await this.client.post('/vpn/rotation/generate/nordvpn', { token }, { timeout: 120000 });
+    return data.data;
+  }
+
+  async generateMullvadConfigs(address: string, privateKey: string): Promise<{ count: number; dir: string }> {
+    const { data } = await this.client.post('/vpn/rotation/generate/mullvad', { address, privateKey }, { timeout: 120000 });
+    return data.data;
+  }
+
+  async getVpnRotationPool(): Promise<{ nordvpn: string[]; mullvad: string[]; total: number }> {
+    const { data } = await this.client.get('/vpn/rotation/pool');
+    return data.data;
+  }
+
   // ============================================================================
   // Exploit Cases
   // ============================================================================

@@ -117,6 +117,10 @@ RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto && \
 RUN pip3 install --break-system-packages --no-cache-dir \
     wafw00f wfuzz sslyze dnsrecon 2>/dev/null || true
 
+# Install NordVPN WireGuard config generator (for VPN IP rotation)
+RUN pip3 install --break-system-packages --no-cache-dir \
+    nord-config-generator 2>/dev/null || true
+
 # Install enum4linux-ng (Python rewrite of enum4linux for SMB/LDAP enumeration)
 RUN pip3 install --break-system-packages --no-cache-dir \
     impacket ldap3 pyyaml 2>/dev/null || true && \

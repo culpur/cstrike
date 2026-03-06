@@ -29,6 +29,7 @@ import { exploitTrackManager } from './exploitTrackManager.js';
 import { executeTask } from '../routes/cases.js';
 import { scanContextService, type ExecutionState } from './scanContextService.js';
 import { tracerouteService } from './tracerouteService.js';
+import { vpnRotationService } from './vpnRotationService.js';
 
 // Active scan tracking for cancellation and pause
 const activeScans = new Map<string, { cancelled: boolean; paused: boolean }>();
@@ -224,6 +225,18 @@ class ScanOrchestrator {
       // Ensure ScanContext record exists
       await scanContextService.getOrCreate(targetId);
 
+      // ── VPN Rotation — initialize for scan if enabled ──────────────────
+      if (!resumeState) {
+        await vpnRotationService.initForScan(scanId);
+      } else {
+        // Restore rotation state from checkpoint if available
+        const savedExecState = await scanContextService.loadExecutionState(targetId);
+        const checkpoint = (savedExecState as any)?.vpnRotation;
+        if (checkpoint) {
+          vpnRotationService.restoreFromCheckpoint(scanId, checkpoint);
+        }
+      }
+
       // ── Traceroute — run at scan start for visual path mapping ──────────
       if (!resumeState && !state?.cancelled) {
         tracerouteService.runTraceroute(target, scanId)
@@ -307,6 +320,7 @@ class ScanOrchestrator {
       // Only clean up exploit tracking if the scan actually finished
       if (!wasPaused) {
         exploitTrackManager.cleanupScan(scanId);
+        vpnRotationService.cleanupScan(scanId);
       }
     }
   }
@@ -797,7 +811,8 @@ class ScanOrchestrator {
           gateHit,
           mode: operationMode,
           toolsRun: toolHistory.map((h) => h.tool),
-        }).catch(() => {});
+          vpnRotation: vpnRotationService.getCheckpointData(scanId),
+        } as ExecutionState).catch(() => {});
       }
 
       // Record AI's observations about the result
@@ -1199,6 +1214,11 @@ class ScanOrchestrator {
     tool: string,
     progress: string,
   ) {
+    // ── VPN Rotation — rotate IP before tool execution if strategy demands it
+    const toolIndex = parseInt(progress.split('/')[0], 10) || 0;
+    const scan = await prisma.scan.findUnique({ where: { id: scanId }, select: { phase: true } });
+    await vpnRotationService.shouldRotateAndExecute(scanId, toolIndex, scan?.phase ?? 'RECON');
+
     await prisma.scan.update({
       where: { id: scanId },
       data: { progress },

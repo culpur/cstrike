@@ -297,6 +297,22 @@ export function emitTracerouteHop(data: {
   io?.emit('traceroute_hop', data);
 }
 
+// ── VPN rotation events ─────────────────────────────────────────────────────
+
+export function emitVpnRotation(data: {
+  scanId: string;
+  configFile: string;
+  provider: string;
+  oldIp: string | null;
+  newIp: string | null;
+  duration: number;
+  rotationIndex: number;
+  success: boolean;
+  error?: string;
+}) {
+  io?.emit('vpn_rotation', data);
+}
+
 // ── Scan pause / resume events ───────────────────────────────────────────────
 
 export function emitScanPaused(data: {

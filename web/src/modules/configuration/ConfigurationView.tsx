@@ -337,6 +337,17 @@ export function ConfigurationView() {
   const [vpnExpanded, setVpnExpanded] = useState<Record<string, boolean>>({});
   const [vpnAuthInputs, setVpnAuthInputs] = useState<Record<string, Record<string, string>>>({});
   const [vpnAuthLoading, setVpnAuthLoading] = useState<Record<string, boolean>>({});
+  // VPN Rotation state
+  const [rotationConfig, setRotationConfig] = useState({
+    enabled: false,
+    strategy: 'periodic' as string,
+    periodicInterval: 3,
+    providers: ['nordvpn'] as string[],
+    avoidRecentCount: 5,
+  });
+  const [rotationPool, setRotationPool] = useState({ nordvpn: 0, mullvad: 0, total: 0 });
+  const [rotationGenLoading, setRotationGenLoading] = useState<Record<string, boolean>>({});
+  const [rotationGenInputs, setRotationGenInputs] = useState<Record<string, string>>({});
 
   // ── AI Provider test state ──────────────────────────────────────────────────
   const [aiTestResult, setAiTestResult] = useState<{
@@ -376,6 +387,7 @@ export function ConfigurationView() {
   useEffect(() => {
     loadConfig();
     loadVpnStatus();
+    loadRotationConfig();
   }, []); // eslint-disable-line
 
   const loadConfig = async () => {
@@ -484,6 +496,54 @@ export function ConfigurationView() {
       ...prev,
       [provider]: { ...(prev[provider] || {}), [key]: value },
     }));
+  };
+
+  // ── VPN Rotation handlers ──────────────────────────────────────────────────
+
+  const loadRotationConfig = async () => {
+    try {
+      const [cfg, pool] = await Promise.all([
+        apiService.getVpnRotationConfig(),
+        apiService.getVpnRotationPool(),
+      ]);
+      setRotationConfig(cfg);
+      setRotationPool({ nordvpn: pool.nordvpn.length, mullvad: pool.mullvad.length, total: pool.total });
+    } catch { /* ignore on load */ }
+  };
+
+  const handleRotationConfigChange = async (patch: Partial<typeof rotationConfig>) => {
+    const updated = { ...rotationConfig, ...patch };
+    setRotationConfig(updated);
+    try {
+      await apiService.updateVpnRotationConfig(patch);
+    } catch {
+      addToast({ type: 'error', message: 'Failed to save rotation config' });
+    }
+  };
+
+  const handleGenerateConfigs = async (provider: 'nordvpn' | 'mullvad') => {
+    setRotationGenLoading((prev) => ({ ...prev, [provider]: true }));
+    try {
+      if (provider === 'nordvpn') {
+        const token = rotationGenInputs.nordToken?.trim();
+        if (!token) { addToast({ type: 'error', message: 'NordVPN token required' }); return; }
+        const result = await apiService.generateNordvpnConfigs(token);
+        addToast({ type: 'success', message: `Generated ${result.count} NordVPN configs` });
+      } else {
+        const address = rotationGenInputs.mullAddress?.trim();
+        const privateKey = rotationGenInputs.mullKey?.trim();
+        if (!address || !privateKey) { addToast({ type: 'error', message: 'Mullvad address and private key required' }); return; }
+        const result = await apiService.generateMullvadConfigs(address, privateKey);
+        addToast({ type: 'success', message: `Generated ${result.count} Mullvad configs` });
+      }
+      // Refresh pool counts
+      const pool = await apiService.getVpnRotationPool();
+      setRotationPool({ nordvpn: pool.nordvpn.length, mullvad: pool.mullvad.length, total: pool.total });
+    } catch (err: any) {
+      addToast({ type: 'error', message: `Config generation failed: ${err.response?.data?.error || err.message}` });
+    } finally {
+      setRotationGenLoading((prev) => ({ ...prev, [provider]: false }));
+    }
   };
 
   // Build a quick-lookup map from the store connections
@@ -1024,6 +1084,167 @@ export function ConfigurationView() {
             checked={splitRouting}
             onChange={setSplitRouting}
           />
+
+          <div className="h-px bg-[var(--grok-border)]" />
+
+          {/* VPN IP Rotation */}
+          <div className="space-y-2">
+            <ToggleRow
+              label="IP Rotation During Scans"
+              description="Rotate VPN exit IP between tool executions to obfuscate scanning origin"
+              checked={rotationConfig.enabled}
+              onChange={(v) => handleRotationConfigChange({ enabled: v })}
+            />
+
+            {rotationConfig.enabled && (
+              <div className="ml-4 space-y-3 border-l-2 border-[var(--grok-border)] pl-3">
+                {/* Strategy */}
+                <div className="flex items-center gap-3">
+                  <label className="text-[10px] text-[var(--grok-text-muted)] w-20">Strategy</label>
+                  <select
+                    value={rotationConfig.strategy}
+                    onChange={(e) => handleRotationConfigChange({ strategy: e.target.value })}
+                    className="px-2 py-1 text-[10px] bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                  >
+                    <option value="per-tool">Per Tool</option>
+                    <option value="periodic">Periodic</option>
+                    <option value="phase-based">Phase Based</option>
+                  </select>
+                </div>
+
+                {rotationConfig.strategy === 'periodic' && (
+                  <div className="flex items-center gap-3">
+                    <label className="text-[10px] text-[var(--grok-text-muted)] w-20">Every N tools</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={rotationConfig.periodicInterval}
+                      onChange={(e) => handleRotationConfigChange({ periodicInterval: parseInt(e.target.value) || 3 })}
+                      className="w-16 px-2 py-1 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3">
+                  <label className="text-[10px] text-[var(--grok-text-muted)] w-20">Avoid last</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={rotationConfig.avoidRecentCount}
+                    onChange={(e) => handleRotationConfigChange({ avoidRecentCount: parseInt(e.target.value) || 5 })}
+                    className="w-16 px-2 py-1 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                  />
+                  <span className="text-[9px] text-[var(--grok-text-muted)]">servers</span>
+                </div>
+
+                {/* Config Pool Generation */}
+                <div className="space-y-2 pt-1">
+                  <span className="text-[10px] font-semibold text-[var(--grok-text-heading)]">Config Pool</span>
+
+                  {/* NordVPN */}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[10px]">
+                        <input
+                          type="checkbox"
+                          checked={rotationConfig.providers.includes('nordvpn')}
+                          onChange={(e) => {
+                            const providers = e.target.checked
+                              ? [...rotationConfig.providers, 'nordvpn']
+                              : rotationConfig.providers.filter((p) => p !== 'nordvpn');
+                            handleRotationConfigChange({ providers });
+                          }}
+                          className="accent-[var(--grok-recon-blue)]"
+                        />
+                        <span className="text-[var(--grok-text-body)]">NordVPN</span>
+                      </label>
+                      {rotationPool.nordvpn > 0 && (
+                        <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-[var(--grok-recon-blue)]/10 text-[var(--grok-recon-blue)]">
+                          {rotationPool.nordvpn} configs
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="password"
+                        value={rotationGenInputs.nordToken || ''}
+                        onChange={(e) => setRotationGenInputs((p) => ({ ...p, nordToken: e.target.value }))}
+                        placeholder="NordVPN access token"
+                        className="flex-1 max-w-xs px-2 py-1 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                      />
+                      <button
+                        onClick={() => handleGenerateConfigs('nordvpn')}
+                        disabled={rotationGenLoading.nordvpn || !rotationGenInputs.nordToken?.trim()}
+                        className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded border border-[var(--grok-recon-blue)]/50 text-[var(--grok-recon-blue)] hover:bg-[var(--grok-recon-blue)]/10 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      >
+                        {rotationGenLoading.nordvpn ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                        Generate
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Mullvad */}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[10px]">
+                        <input
+                          type="checkbox"
+                          checked={rotationConfig.providers.includes('mullvad')}
+                          onChange={(e) => {
+                            const providers = e.target.checked
+                              ? [...rotationConfig.providers, 'mullvad']
+                              : rotationConfig.providers.filter((p) => p !== 'mullvad');
+                            handleRotationConfigChange({ providers });
+                          }}
+                          className="accent-[var(--grok-recon-blue)]"
+                        />
+                        <span className="text-[var(--grok-text-body)]">Mullvad</span>
+                      </label>
+                      {rotationPool.mullvad > 0 && (
+                        <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-[var(--grok-recon-blue)]/10 text-[var(--grok-recon-blue)]">
+                          {rotationPool.mullvad} configs
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <input
+                        type="text"
+                        value={rotationGenInputs.mullAddress || ''}
+                        onChange={(e) => setRotationGenInputs((p) => ({ ...p, mullAddress: e.target.value }))}
+                        placeholder="10.x.x.x/32"
+                        className="w-32 px-2 py-1 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                      />
+                      <input
+                        type="password"
+                        value={rotationGenInputs.mullKey || ''}
+                        onChange={(e) => setRotationGenInputs((p) => ({ ...p, mullKey: e.target.value }))}
+                        placeholder="Private key"
+                        className="flex-1 max-w-xs px-2 py-1 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                      />
+                      <button
+                        onClick={() => handleGenerateConfigs('mullvad')}
+                        disabled={rotationGenLoading.mullvad || !rotationGenInputs.mullAddress?.trim() || !rotationGenInputs.mullKey?.trim()}
+                        className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded border border-[var(--grok-recon-blue)]/50 text-[var(--grok-recon-blue)] hover:bg-[var(--grok-recon-blue)]/10 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      >
+                        {rotationGenLoading.mullvad ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                        Generate
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Pool summary */}
+                  {rotationPool.total > 0 && (
+                    <div className="flex items-center gap-2 text-[9px] text-[var(--grok-text-muted)] pt-1">
+                      <Shield className="w-3 h-3 text-[var(--grok-recon-blue)]" />
+                      Total pool: {rotationPool.total} configs across {[rotationPool.nordvpn > 0 && 'NordVPN', rotationPool.mullvad > 0 && 'Mullvad'].filter(Boolean).join(', ')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="h-px bg-[var(--grok-border)]" />
 
