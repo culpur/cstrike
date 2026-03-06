@@ -6,13 +6,15 @@ Modern web interface for the CStrike offensive security automation framework. Bu
 
 ### Core Modules
 
-- **Dashboard**: Real-time system metrics, service status, and phase progress tracking
+- **Command Center**: Real-time system metrics (CPU, RAM, VPN IP, network IPs), service status, scan launcher, AI feed
 - **Reconnaissance**: Target management, tool selection, live scan output, and results display
 - **AI Thought Stream**: Real-time AI decision visualization and reasoning display
 - **Exploitation**: Web vulnerability exploitation and bruteforce attack controls
 - **Loot Tracker**: Comprehensive credential and discovery management with export capabilities
+- **Battle Map**: Attack visualization with scan progress, tool execution, VPN rotation IP tracking
 - **Live Logs**: Real-time log streaming with advanced filtering and syntax highlighting
 - **Service Control**: Metasploit RPC, OWASP ZAP, and Burp Suite management
+- **Configuration**: AI providers, scan modes, tool allowlist, VPN management, IP rotation settings
 
 ### Technical Highlights
 
@@ -132,13 +134,14 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete API documentation.
 
 ### WebSocket Events
 
-- `system_metrics`: System metric updates
+- `system_metrics`: System metric updates (CPU, RAM, VPN IP, network IPs, service health)
 - `service_status`: Service status changes
 - `recon_output`: Live reconnaissance output
 - `ai_thought`: AI decision stream
 - `loot_item`: New loot discovered
 - `log_entry`: New log entries
 - `tool_update`: Tool execution updates
+- `vpn_rotation`: VPN IP rotation events (provider, old/new IP, duration, success)
 
 ## Development
 

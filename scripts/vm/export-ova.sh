@@ -108,8 +108,8 @@ if [[ -n "$VM_NAME" ]]; then
         --producturl "https://github.com/culpur/cstrike" \
         --vendor "Culpur Defense Inc." \
         --vendorurl "https://culpur.net" \
-        --description "CStrike v2 — Autonomous Offensive Security Platform. Debian 12 with 35+ security tools, 6-container Docker stack, and AI-driven 9-phase attack pipeline." \
-        --version "2.5.0"
+        --description "CStrike v2 — Autonomous Offensive Security Platform. Debian 12 with 35+ security tools, 9-container Docker stack, AI-driven 9-phase attack pipeline, and VPN IP rotation." \
+        --version "2.6.1"
 
     ok "OVA exported to: ${OUTPUT}"
     ls -lh "$OUTPUT"
@@ -162,7 +162,7 @@ elif [[ -n "$DISK_PATH" ]]; then
         --vsys 0 \
         --product "CStrike v2" \
         --vendor "Culpur Defense Inc." \
-        --version "2.5.0"
+        --version "2.6.1"
 
     # Cleanup
     VBoxManage unregistervm "$TEMP_VM" --delete 2>/dev/null || true

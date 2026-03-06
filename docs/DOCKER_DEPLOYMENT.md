@@ -71,7 +71,7 @@ Edit `.env` and set strong passwords:
 | `LOG_LEVEL` | API log level (`debug`, `info`, `warn`, `error`) | `info` |
 | `METRICS_INTERVAL` | Metrics emission interval (ms) | `2000` |
 
-**Note:** AI provider API keys, target scope, scan modes, and tool allowlists are configured through the **web UI** (Configuration tab) or the `/api/v1/config` REST endpoints. These are stored in the PostgreSQL `ConfigEntry` table, not in `.env`.
+**Note:** AI provider API keys, target scope, scan modes, tool allowlists, and VPN rotation settings are configured through the **web UI** (Configuration tab) or the `/api/v1/config` and `/api/v1/vpn/rotation/` REST endpoints. These are stored in the PostgreSQL `ConfigEntry` table, not in `.env`.
 
 ---
 
@@ -165,7 +165,7 @@ This creates:
 | **Remote Browser** | `https://<ip>:6901/` | Password from `KASM_PASSWORD` in `.env` |
 | **TUI** | `docker exec -it cstrike-api python -m tui` | Terminal UI inside the API container |
 | **API Health** | `https://<ip>/health` | JSON health check |
-| **API Endpoints** | `https://<ip>/api/v1/...` | REST API (14 route groups) |
+| **API Endpoints** | `https://<ip>/api/v1/...` | REST API (14 route groups + VPN rotation) |
 
 ---
 
@@ -199,7 +199,7 @@ HTTP (:80) redirects to HTTPS (:443) automatically.
 |--------|-------|---------|
 | `pgdata` | PostgreSQL data | Targets, scans, results, config, credentials |
 | `redisdata` | Redis AOF | Cache, session data |
-| `apidata` | `/opt/cstrike/data` | Runtime data, agent registry |
+| `apidata` | `/opt/cstrike/data` | Runtime data, agent registry, VPN rotation configs, wordlists |
 
 Data persists across `docker compose down` / `up` cycles. To wipe everything:
 

@@ -28,7 +28,7 @@ SKIP_DOCKER_SAVE=false
 SSH_USER="soulofall"
 SSH_KEY=""
 NODE="${PVE_NODE:-proxmox}"
-VERSION="2.5.0"
+VERSION="2.6.1"
 PRODUCT="CStrike v2"
 INSTALL_DIR="/opt/cstrike"
 
@@ -484,7 +484,7 @@ if ! $SKIP_OVA; then
         --nic1 nat --nictype1 virtio \
         --nic2 hostonly --nictype2 virtio \
         --audio-enabled off \
-        --description "${PRODUCT} — Autonomous Offensive Security Platform. Debian 12 with 35+ security tools, 6-container Docker stack."
+        --description "${PRODUCT} — Autonomous Offensive Security Platform. Debian 12 with 35+ security tools, 9-container Docker stack, and VPN IP rotation."
 
     VBoxManage storagectl "$TEMP_VM" --name "SATA" --add sata --controller IntelAhci
     # Clone VDI so the export doesn't lock our output VDI
@@ -501,7 +501,7 @@ if ! $SKIP_OVA; then
         --producturl "https://github.com/culpur/cstrike" \
         --vendor "Culpur Defense Inc." \
         --vendorurl "https://culpur.net" \
-        --description "${PRODUCT} — Autonomous Offensive Security Platform. Debian 12 with 35+ security tools, 6-container Docker stack, and AI-driven 9-phase attack pipeline." \
+        --description "${PRODUCT} — Autonomous Offensive Security Platform. Debian 12 with 35+ security tools, 9-container Docker stack, AI-driven 9-phase attack pipeline, and VPN IP rotation." \
         --version "${VERSION}"
 
     # Cleanup temp VM

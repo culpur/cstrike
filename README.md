@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Autonomous Offensive Security Platform</strong><br>
-  <sub>9-container Docker stack | 35+ integrated tools | AI-driven 9-phase attack pipeline</sub>
+  <sub>9-container Docker stack | 35+ integrated tools | AI-driven 9-phase attack pipeline | VPN IP rotation</sub>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 
 ---
 
-CStrike v2 is an autonomous offensive security platform built on a containerized Docker stack with a real-time web dashboard and AI-driven scan orchestration across 35+ integrated tools. Features a 9-phase attack pipeline (recon through exploitation), multi-provider AI reasoning (OpenAI, Anthropic, Ollama, Grok) with MCP tool server, nftables VPN kill switch across 5 providers (WireGuard, OpenVPN, Tailscale, NordVPN, Mullvad), Metasploit RPC automation, and remote browser access via KasmVNC. Built for red team operations on isolated infrastructure with engagement lifecycle management, OPSEC gating, and emergency wipe capability.
+CStrike v2 is an autonomous offensive security platform built on a containerized Docker stack with a real-time web dashboard and AI-driven scan orchestration across 35+ integrated tools. Features a 9-phase attack pipeline (recon through exploitation), multi-provider AI reasoning (OpenAI, Anthropic, Ollama, Grok) with MCP tool server, nftables VPN kill switch across 5 providers (WireGuard, OpenVPN, Tailscale, NordVPN, Mullvad), automatic VPN IP rotation during scans via WireGuard config pool swapping, Metasploit RPC automation, and remote browser access via KasmVNC. Built for red team operations on isolated infrastructure with engagement lifecycle management, OPSEC gating, and emergency wipe capability.
 
 Built for authorized red team engagements. Requires explicit scope authorization before use.
 
@@ -72,17 +72,17 @@ Pre-built VM images — boot and go, no building required.
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | Proxmox / KVM / libvirt | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_amd64.qcow2) |
-| **OVA** | VirtualBox / VMware | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_amd64.ova) |
-| **VDI** | VirtualBox (native) | ~31 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_amd64.vdi) |
+| **QCOW2** | Proxmox / KVM / libvirt | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6.1_amd64.qcow2) |
+| **OVA** | VirtualBox / VMware | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6.1_amd64.ova) |
+| **VDI** | VirtualBox (native) | ~31 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6.1_amd64.vdi) |
 
 #### aarch64 (ARM64)
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | QEMU / UTM / Parallels | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.qcow2) |
-| **OVA** | VMware Fusion / UTM | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.ova) |
-| **VDI** | VirtualBox (native) | ~31 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.vdi) |
+| **QCOW2** | QEMU / UTM / Parallels | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6.1_aarch64.qcow2) |
+| **OVA** | VMware Fusion / UTM | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6.1_aarch64.ova) |
+| **VDI** | VirtualBox (native) | ~31 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6.1_aarch64.vdi) |
 
 [BitTorrent downloads](docs/DISTRIBUTION.md#bittorrent-recommended-for-large-files) | [Checksums](https://registry.culpur.net/dist/checksums.sha256) | [All formats](docs/DISTRIBUTION.md)
 
@@ -183,7 +183,7 @@ The frontend is a React 19 / TypeScript / Tailwind CSS 4 application with a dark
 
 | Module | Description |
 |--------|-------------|
-| **Command Center** | System metrics (CPU, RAM, VPN IP), service status, scan launcher, AI feed |
+| **Command Center** | System metrics (CPU, RAM, VPN IP, network IPs), service status, scan launcher, AI feed |
 | **Services** | Service health panel (API, Metasploit, ZAP, Burp) |
 | **Targets** | Add/manage targets, launch scans, view per-target results |
 | **AI Stream** | Real-time AI thought stream and command decisions |
@@ -191,7 +191,8 @@ The frontend is a React 19 / TypeScript / Tailwind CSS 4 application with a dark
 | **Loot** | Credential tracker with sensitivity heatmaps and export |
 | **Results** | Scan results browser with severity filtering |
 | **Logs** | Streaming log viewer with level filtering |
-| **Configuration** | AI provider selection, scan modes, tool allowlist, service connections |
+| **Configuration** | AI provider selection, scan modes, tool allowlist, service connections, VPN rotation |
+| **Battle Map** | Attack visualization with scan progress, tool execution, VPN rotation IP tracking |
 
 ### WebSocket Events
 
@@ -199,7 +200,7 @@ Real-time updates via Socket.IO:
 
 | Event | Payload |
 |-------|---------|
-| `system_metrics` | CPU %, memory %, VPN IP, uptime |
+| `system_metrics` | CPU %, memory %, VPN IP, uptime, network IPs, service health |
 | `recon_output` | Tool name, target, output, completion status |
 | `ai_thought` | Thought type, content, command |
 | `ai_command_execution` | Command, status, output |
@@ -213,6 +214,7 @@ Real-time updates via Socket.IO:
 | `log_entry` | Level, source, message |
 | `status_update` | Metrics, services, phase |
 | `service_auto_start` | Service name, status |
+| `vpn_rotation` | Config file, provider, old/new IP, duration, success |
 
 ---
 
@@ -302,7 +304,7 @@ The Express 5 API server exposes 14 route groups under `/api/v1/` with Zod reque
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/status` | System metrics (CPU, RAM, VPN, uptime) |
+| GET | `/api/v1/status` | System metrics (CPU, RAM, VPN, network IPs, uptime) |
 | GET | `/api/v1/services` | Service health states |
 | GET | `/api/v1/config` | Read configuration entries |
 | PUT | `/api/v1/config` | Update configuration |
@@ -318,6 +320,12 @@ The Express 5 API server exposes 14 route groups under `/api/v1/` with Zod reque
 | POST | `/api/v1/mcp/tools/:name` | Execute MCP tool |
 | GET | `/api/v1/vpn` | VPN connection status |
 | POST | `/api/v1/vpn/:provider/connect` | Connect VPN provider |
+| GET | `/api/v1/vpn/rotation/config` | VPN rotation configuration |
+| PUT | `/api/v1/vpn/rotation/config` | Update rotation config |
+| POST | `/api/v1/vpn/rotation/generate/nordvpn` | Generate NordVPN WireGuard configs |
+| POST | `/api/v1/vpn/rotation/generate/mullvad` | Generate Mullvad WireGuard configs |
+| GET | `/api/v1/vpn/rotation/pool` | List available rotation configs |
+| GET | `/api/v1/vpn/rotation/history/:scanId` | Rotation history for a scan |
 
 ### Health
 
@@ -336,7 +344,7 @@ cstrike/
 │   │   ├── server.ts               # Entry point — Express + Socket.IO
 │   │   ├── config/                 # env, database, redis
 │   │   ├── routes/                 # 14 route modules
-│   │   ├── services/               # AI, metrics, scans, tools, VPN, MCP
+│   │   ├── services/               # AI, metrics, scans, tools, VPN, VPN rotation, MCP
 │   │   ├── middleware/             # guardrails, rate limiter, validation
 │   │   ├── schemas/                # Zod request validation
 │   │   ├── utils/                  # credential scoring, safe paths
@@ -428,6 +436,8 @@ CStrike supports 5 VPN providers with nftables kill switch enforcement:
 | Mullvad | `wg-mullvad` | Built-in lockdown mode |
 
 **Split routing:** The `redteam` user's traffic is marked with iptables fwmark and routed through a dedicated VPN tunnel. Management traffic (SSH, web UI) stays on the primary interface.
+
+**VPN IP Rotation:** During scans, CStrike can automatically rotate VPN exit IPs between tool executions to obfuscate scanning origin. Pre-generates WireGuard config pools from NordVPN (via `nordgen`) or Mullvad (native relay API), then swaps `wg-quick` configs (~5-10s per rotation). Three strategies: `per-tool` (every tool), `periodic` (every N tools, default 3), and `phase-based` (on phase change). Configured via the web UI Configuration tab or `/api/v1/vpn/rotation/` endpoints.
 
 **OPSEC gating:** All scans enforce target scope validation and tool allowlist checks at both the API middleware layer and the MCP server guardrails.
 

@@ -237,6 +237,50 @@ Plus: Metasploit Framework (msfrpcd on port 55552), subfinder, amass, katana, ga
 
 ---
 
+## v2.6.1 (March 2026)
+
+### New Features
+
+| Feature | Details |
+|---------|---------|
+| VPN IP Rotation | Automatic VPN exit IP rotation during scans via WireGuard config pool swapping (~5-10s per rotation) |
+| NordVPN Config Generation | `nordgen` pip package generates WireGuard configs from NordVPN token — no CLI client needed |
+| Mullvad Config Generation | Native TypeScript relay API fetch generates WireGuard configs from Mullvad credentials |
+| Rotation Strategies | Three modes: `per-tool` (every tool), `periodic` (every N tools), `phase-based` (on phase change) |
+| Rotation Config UI | Configuration tab VPN section with enable toggle, strategy selection, config pool generation |
+| Battle Map Rotation Badge | Real-time VPN rotation IP badge on Battle Map during active scans |
+| Network IP Reporting | Command Center and REST `/status` endpoint now report management and operations interface IPs (internal + public) |
+| Dynamic Interface Discovery | Metrics collector auto-discovers default-route interface name via `ip route show default` fallback |
+| Service Health Indicators | PostgreSQL, Redis, Ollama, Docker health status polled and reported in system metrics |
+
+### Bug Fixes
+
+| Fix | Details |
+|-----|---------|
+| Internal IP Not Reported | Added `enp0s1`/`enp0s2`/`enp0s3` and dynamic fallback to interface discovery list |
+| `iproute2` Missing in Container | Added `iproute2` to Dockerfile apt-get for container-native `ip` command |
+| REST Status Missing Network IPs | `/api/v1/status` now includes `mgmtIpInternal`, `mgmtIpPublic`, `opsIpInternal`, `opsIpPublic`, `serviceHosts` |
+| Host PATH in Metrics | All `execSync` calls in metrics collector now inject host tool PATH via `hostEnv()` |
+
+### API Endpoints Added
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/v1/vpn/rotation/config` | Read rotation configuration |
+| PUT | `/api/v1/vpn/rotation/config` | Update rotation settings |
+| POST | `/api/v1/vpn/rotation/generate/nordvpn` | Generate NordVPN WireGuard config pool |
+| POST | `/api/v1/vpn/rotation/generate/mullvad` | Generate Mullvad WireGuard config pool |
+| GET | `/api/v1/vpn/rotation/pool` | List available configs in pool |
+| GET | `/api/v1/vpn/rotation/history/:scanId` | Rotation history for a scan |
+
+### WebSocket Events Added
+
+| Event | Payload |
+|-------|---------|
+| `vpn_rotation` | `scanId`, `configFile`, `provider`, `oldIp`, `newIp`, `duration`, `rotationIndex`, `success` |
+
+---
+
 ## v2.5.0 (March 2026)
 
 ### New Features
