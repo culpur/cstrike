@@ -24,6 +24,7 @@
     "helmet": "^8.0.0",
     "ioredis": "^5.4.2",
     "morgan": "^1.10.0",
+    "multer": "^2.1.1",
     "socket.io": "^4.8.1",
     "zod": "^3.24.2"
   },
@@ -31,6 +32,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/morgan": "^1.9.9",
+    "@types/multer": "^2.1.0",
     "@types/node": "^22.12.0",
     "prisma": "^6.4.0",
     "tsx": "^4.19.3",

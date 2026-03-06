@@ -512,14 +512,17 @@ class ApiService {
       assignedIp: (c.assignedIp as string | null) ?? null,
       server: (c.server as string | null) ?? null,
       connectedAt: (c.connectedAt as number | null) ?? null,
+      configPath: (c.configPath as string | null) ?? null,
+      hasAuthToken: !!c.hasAuthToken,
+      options: (c.options as Record<string, unknown>) ?? null,
     }));
   }
 
   async connectVpn(
     provider: VpnProvider,
-    opts: { server?: string; config?: string } = {},
+    opts: { server?: string; splitRouting?: boolean } = {},
   ): Promise<{ provider: VpnProvider; status: string; assignedIp: string | null }> {
-    // Backend: POST /vpn/:provider/connect  body: {server?, config?}
+    // Backend: POST /vpn/:provider/connect  body: {server?, splitRouting?}
     const { data } = await this.client.post(`/vpn/${provider}/connect`, opts);
     return data.data;
   }
@@ -529,6 +532,28 @@ class ApiService {
   ): Promise<{ provider: VpnProvider; status: string }> {
     // Backend: POST /vpn/:provider/disconnect
     const { data } = await this.client.post(`/vpn/${provider}/disconnect`);
+    return data.data;
+  }
+
+  async uploadVpnConfig(
+    provider: VpnProvider,
+    file: File,
+  ): Promise<{ provider: string; configPath: string; filename: string; size: number }> {
+    const formData = new FormData();
+    formData.append('config', file);
+    const { data } = await this.client.post(`/vpn/${provider}/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
+    });
+    return data.data;
+  }
+
+  async authenticateVpn(
+    provider: VpnProvider,
+    authToken: string,
+    options?: Record<string, unknown>,
+  ): Promise<{ provider: string; status: string; assignedIp?: string | null }> {
+    const { data } = await this.client.post(`/vpn/${provider}/authenticate`, { authToken, options });
     return data.data;
   }
 

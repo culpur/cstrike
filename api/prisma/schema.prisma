@@ -330,6 +330,9 @@ model VpnConnection {
   publicIp    String?
   assignedIp  String?
   server      String?   // VPN server/region
+  configPath  String?   // abs path to uploaded .conf/.ovpn in data volume
+  authToken   String?   // tailscale auth key, nordvpn token, mullvad account #
+  options     Json?     // provider-specific toggles (e.g. tailscale exitNode, hostname)
   connectedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

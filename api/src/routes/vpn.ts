@@ -1,49 +1,66 @@
 /**
- * VPN management routes — connect, disconnect, status for all VPN providers.
- * GET  /api/v1/vpn
- * POST /api/v1/vpn/:provider/connect
- * POST /api/v1/vpn/:provider/disconnect
+ * VPN management routes — connect, disconnect, upload config, authenticate.
+ * All logic delegates to vpnService; routes are thin request/response wrappers.
+ *
+ * GET    /api/v1/vpn                      — list all VPN connections
+ * POST   /api/v1/vpn/:provider/connect    — connect (body: {server?, splitRouting?})
+ * POST   /api/v1/vpn/:provider/disconnect — disconnect
+ * POST   /api/v1/vpn/:provider/upload     — upload config file (multipart)
+ * POST   /api/v1/vpn/:provider/authenticate — authenticate (body: {authToken, options?})
  */
 
 import { Router } from 'express';
-import { prisma } from '../config/database.js';
+import multer from 'multer';
 import { AppError } from '../middleware/errorHandler.js';
-import { execSync } from 'node:child_process';
+import { vpnService, type VpnProvider } from '../services/vpnService.js';
 
 export const vpnRouter = Router();
 
-// Get all VPN connection states
+// ── Multer config — memory storage, 5MB limit ──────────────────────────────
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = file.originalname.toLowerCase();
+    if (ext.endsWith('.conf') || ext.endsWith('.ovpn')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .conf and .ovpn files are allowed'));
+    }
+  },
+});
+
+// ── Valid providers ─────────────────────────────────────────────────────────
+
+const VALID_PROVIDERS = new Set<string>(['wireguard', 'openvpn', 'tailscale', 'nordvpn', 'mullvad']);
+
+function assertProvider(provider: string): asserts provider is VpnProvider {
+  if (!VALID_PROVIDERS.has(provider)) {
+    throw new AppError(400, `Invalid VPN provider "${provider}". Valid: ${[...VALID_PROVIDERS].join(', ')}`);
+  }
+}
+
+// ── Routes ──────────────────────────────────────────────────────────────────
+
+// GET / — list all VPN connections (authToken redacted)
 vpnRouter.get('/', async (_req, res, next) => {
   try {
-    const connections = await prisma.vpnConnection.findMany({
-      orderBy: { provider: 'asc' },
-    });
-
-    // Refresh actual interface status
-    for (const conn of connections) {
-      const actualStatus = checkInterfaceStatus(conn.interface ?? '');
-      if (actualStatus !== conn.status.toLowerCase()) {
-        await prisma.vpnConnection.update({
-          where: { id: conn.id },
-          data: {
-            status: actualStatus === 'connected' ? 'CONNECTED' : 'DISCONNECTED',
-            publicIp: actualStatus === 'connected' ? getInterfaceIp(conn.interface ?? '') : null,
-          },
-        });
-        conn.status = actualStatus === 'connected' ? 'CONNECTED' : 'DISCONNECTED';
-      }
-    }
+    const connections = await vpnService.getAll();
 
     res.json({
       success: true,
       data: connections.map((c) => ({
         provider: c.provider,
         interface: c.interface,
-        status: c.status.toLowerCase(),
+        status: c.status,
         publicIp: c.publicIp,
         assignedIp: c.assignedIp,
         server: c.server,
-        connectedAt: c.connectedAt?.getTime(),
+        connectedAt: c.connectedAt,
+        configPath: c.configPath,
+        hasAuthToken: c.hasAuthToken,
+        options: c.options,
       })),
       timestamp: Date.now(),
     });
@@ -52,81 +69,26 @@ vpnRouter.get('/', async (_req, res, next) => {
   }
 });
 
-// Connect VPN
+// POST /:provider/connect
 vpnRouter.post('/:provider/connect', async (req, res, next) => {
   try {
     const { provider } = req.params;
-    const { server, config } = req.body as { server?: string; config?: string };
+    assertProvider(provider);
 
-    const conn = await prisma.vpnConnection.findUnique({ where: { provider } });
-    if (!conn) throw new AppError(404, `VPN provider "${provider}" not found`);
+    const { server, splitRouting } = req.body as { server?: string; splitRouting?: boolean };
+    const result = await vpnService.connect(provider, { server, splitRouting });
 
-    await prisma.vpnConnection.update({
-      where: { provider },
-      data: { status: 'CONNECTING', server },
-    });
-
-    // Execute VPN connection command
-    try {
-      const cmd = getConnectCommand(provider, server, config);
-      execSync(cmd, { timeout: 30_000 });
-
-      const ip = getInterfaceIp(conn.interface ?? '');
-
-      await prisma.vpnConnection.update({
-        where: { provider },
-        data: {
-          status: 'CONNECTED',
-          assignedIp: ip,
-          connectedAt: new Date(),
-        },
-      });
-
-      res.json({
-        success: true,
-        data: { provider, status: 'connected', assignedIp: ip },
-        timestamp: Date.now(),
-      });
-    } catch (err: any) {
-      await prisma.vpnConnection.update({
-        where: { provider },
-        data: { status: 'ERROR' },
-      });
-      throw new AppError(500, `VPN connection failed: ${err.message}`);
+    if (!result.success) {
+      throw new AppError(500, `VPN connection failed: ${result.error}`);
     }
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Disconnect VPN
-vpnRouter.post('/:provider/disconnect', async (req, res, next) => {
-  try {
-    const { provider } = req.params;
-
-    const conn = await prisma.vpnConnection.findUnique({ where: { provider } });
-    if (!conn) throw new AppError(404, `VPN provider "${provider}" not found`);
-
-    try {
-      const cmd = getDisconnectCommand(provider);
-      execSync(cmd, { timeout: 15_000 });
-    } catch {
-      // Ignore disconnect errors
-    }
-
-    await prisma.vpnConnection.update({
-      where: { provider },
-      data: {
-        status: 'DISCONNECTED',
-        assignedIp: null,
-        publicIp: null,
-        connectedAt: null,
-      },
-    });
 
     res.json({
       success: true,
-      data: { provider, status: 'disconnected' },
+      data: {
+        provider: result.provider,
+        status: result.status,
+        assignedIp: result.assignedIp,
+      },
       timestamp: Date.now(),
     });
   } catch (err) {
@@ -134,64 +96,81 @@ vpnRouter.post('/:provider/disconnect', async (req, res, next) => {
   }
 });
 
-// ── Helpers ─────────────────────────────────────────────────
-
-function checkInterfaceStatus(iface: string): string {
-  if (!iface) return 'disconnected';
+// POST /:provider/disconnect
+vpnRouter.post('/:provider/disconnect', async (req, res, next) => {
   try {
-    const output = execSync(`ip link show ${iface} 2>/dev/null`, {
-      timeout: 3000,
-      encoding: 'utf-8',
+    const { provider } = req.params;
+    assertProvider(provider);
+
+    const result = await vpnService.disconnect(provider);
+
+    res.json({
+      success: true,
+      data: {
+        provider: result.provider,
+        status: result.status,
+      },
+      timestamp: Date.now(),
     });
-    return output.includes('UP') ? 'connected' : 'disconnected';
-  } catch {
-    return 'disconnected';
+  } catch (err) {
+    next(err);
   }
-}
+});
 
-function getInterfaceIp(iface: string): string | null {
-  if (!iface) return null;
+// POST /:provider/upload — upload VPN config file (WireGuard/OpenVPN only)
+vpnRouter.post('/:provider/upload', upload.single('config'), async (req, res, next) => {
   try {
-    const output = execSync(
-      `ip -4 addr show ${iface} 2>/dev/null | grep -oP '(?<=inet )\\S+' | cut -d/ -f1`,
-      { timeout: 3000, encoding: 'utf-8' },
-    );
-    return output.trim() || null;
-  } catch {
-    return null;
-  }
-}
+    const provider = req.params.provider as string;
+    assertProvider(provider);
 
-function getConnectCommand(provider: string, server?: string, config?: string): string {
-  switch (provider) {
-    case 'wireguard':
-      return `sudo wg-quick up ${config ?? 'wg0'}`;
-    case 'openvpn':
-      return `sudo openvpn --config ${config ?? '/etc/openvpn/client.conf'} --daemon`;
-    case 'tailscale':
-      return 'sudo tailscale up';
-    case 'nordvpn':
-      return `sudo nordvpn connect ${server ?? ''}`.trim();
-    case 'mullvad':
-      return `sudo mullvad connect${server ? ` --location ${server}` : ''}`;
-    default:
-      throw new Error(`Unknown VPN provider: ${provider}`);
-  }
-}
+    if (!req.file) {
+      throw new AppError(400, 'No config file provided. Send as multipart with field name "config".');
+    }
 
-function getDisconnectCommand(provider: string): string {
-  switch (provider) {
-    case 'wireguard':
-      return 'sudo wg-quick down wg0';
-    case 'openvpn':
-      return 'sudo pkill openvpn';
-    case 'tailscale':
-      return 'sudo tailscale down';
-    case 'nordvpn':
-      return 'sudo nordvpn disconnect';
-    case 'mullvad':
-      return 'sudo mullvad disconnect';
-    default:
-      throw new Error(`Unknown VPN provider: ${provider}`);
+    const filePath = await vpnService.saveConfigFile(provider, req.file.buffer, req.file.originalname);
+
+    res.json({
+      success: true,
+      data: {
+        provider,
+        configPath: filePath,
+        filename: req.file.originalname,
+        size: req.file.size,
+      },
+      timestamp: Date.now(),
+    });
+  } catch (err) {
+    next(err);
   }
-}
+});
+
+// POST /:provider/authenticate — authenticate VPN CLI (Tailscale/NordVPN/Mullvad)
+vpnRouter.post('/:provider/authenticate', async (req, res, next) => {
+  try {
+    const { provider } = req.params;
+    assertProvider(provider);
+
+    const { authToken, options } = req.body as { authToken: string; options?: Record<string, unknown> };
+    if (!authToken) {
+      throw new AppError(400, 'authToken is required');
+    }
+
+    const result = await vpnService.authenticate(provider, authToken, options);
+
+    if (!result.success) {
+      throw new AppError(500, `Authentication failed: ${result.error}`);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        provider: result.provider,
+        status: result.status,
+        assignedIp: result.assignedIp,
+      },
+      timestamp: Date.now(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});

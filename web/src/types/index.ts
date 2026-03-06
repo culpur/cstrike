@@ -513,6 +513,9 @@ export interface VpnConnection {
   assignedIp: string | null;
   server: string | null;
   connectedAt: number | null;
+  configPath: string | null;
+  hasAuthToken: boolean;
+  options: Record<string, unknown> | null;
 }
 
 // ============================================================================

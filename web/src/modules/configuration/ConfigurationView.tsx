@@ -30,6 +30,9 @@ import {
   Zap,
   CheckCircle2,
   XCircle,
+  Upload,
+  ExternalLink,
+  FileCheck,
 } from 'lucide-react';
 import { useUIStore } from '@stores/uiStore';
 import { useSystemStore } from '@stores/systemStore';
@@ -331,6 +334,9 @@ export function ConfigurationView() {
   const [vpnLoading, setVpnLoading] = useState(false);
   const [vpnActionLoading, setVpnActionLoading] = useState<Record<string, boolean>>({});
   const [splitRouting, setSplitRouting] = useState(false);
+  const [vpnExpanded, setVpnExpanded] = useState<Record<string, boolean>>({});
+  const [vpnAuthInputs, setVpnAuthInputs] = useState<Record<string, Record<string, string>>>({});
+  const [vpnAuthLoading, setVpnAuthLoading] = useState<Record<string, boolean>>({});
 
   // ── AI Provider test state ──────────────────────────────────────────────────
   const [aiTestResult, setAiTestResult] = useState<{
@@ -402,12 +408,11 @@ export function ConfigurationView() {
     }
   };
 
-  const handleVpnConnect = async (provider: VpnProvider) => {
+  const handleVpnConnect = async (provider: VpnProvider, server?: string) => {
     setVpnActionLoading((prev) => ({ ...prev, [provider]: true }));
     try {
-      await apiService.connectVpn(provider);
+      await apiService.connectVpn(provider, { server, splitRouting });
       addToast({ type: 'success', message: `${provider} connecting...` });
-      // Refresh after a short delay to let the backend state settle
       setTimeout(loadVpnStatus, 2000);
     } catch {
       addToast({ type: 'error', message: `Failed to connect ${provider}` });
@@ -427,6 +432,58 @@ export function ConfigurationView() {
     } finally {
       setVpnActionLoading((prev) => ({ ...prev, [provider]: false }));
     }
+  };
+
+  const handleVpnUpload = async (provider: VpnProvider, file: File) => {
+    setVpnAuthLoading((prev) => ({ ...prev, [provider]: true }));
+    try {
+      const result = await apiService.uploadVpnConfig(provider, file);
+      addToast({ type: 'success', message: `${provider} config uploaded: ${result.filename}` });
+      await loadVpnStatus();
+    } catch (err: any) {
+      addToast({ type: 'error', message: `Upload failed: ${err.response?.data?.error || err.message}` });
+    } finally {
+      setVpnAuthLoading((prev) => ({ ...prev, [provider]: false }));
+    }
+  };
+
+  const handleVpnAuthenticate = async (provider: VpnProvider) => {
+    const inputs = vpnAuthInputs[provider] || {};
+    const authToken = inputs.authToken?.trim();
+    if (!authToken) {
+      addToast({ type: 'error', message: 'Auth token/key is required' });
+      return;
+    }
+
+    // Build provider-specific options
+    const options: Record<string, unknown> = {};
+    if (provider === 'tailscale') {
+      if (inputs.exitNode === 'true') options.exitNode = true;
+      if (inputs.acceptRoutes === 'true') options.acceptRoutes = true;
+      if (inputs.hostname) options.hostname = inputs.hostname;
+    }
+
+    setVpnAuthLoading((prev) => ({ ...prev, [provider]: true }));
+    try {
+      await apiService.authenticateVpn(provider, authToken, Object.keys(options).length > 0 ? options : undefined);
+      addToast({ type: 'success', message: `${provider} authenticated` });
+      await loadVpnStatus();
+    } catch (err: any) {
+      addToast({ type: 'error', message: `Auth failed: ${err.response?.data?.error || err.message}` });
+    } finally {
+      setVpnAuthLoading((prev) => ({ ...prev, [provider]: false }));
+    }
+  };
+
+  const toggleVpnPanel = (provider: string) => {
+    setVpnExpanded((prev) => ({ ...prev, [provider]: !prev[provider] }));
+  };
+
+  const setVpnInput = (provider: string, key: string, value: string) => {
+    setVpnAuthInputs((prev) => ({
+      ...prev,
+      [provider]: { ...(prev[provider] || {}), [key]: value },
+    }));
   };
 
   // Build a quick-lookup map from the store connections
@@ -986,26 +1043,280 @@ export function ConfigurationView() {
             </button>
           </div>
 
-          {/* Provider rows */}
+          {/* Provider cards */}
           <div className="space-y-2">
             {VPN_PROVIDERS.map((providerInfo) => {
               const conn = vpnStatusMap.get(providerInfo.id);
               const status = conn?.status ?? 'disconnected';
               const isActionLoading = vpnActionLoading[providerInfo.id] ?? false;
+              const isAuthLoading = vpnAuthLoading[providerInfo.id] ?? false;
               const isConnected = status === 'connected';
               const isConnecting = status === 'connecting';
+              const isError = status === 'error';
+              const isExpanded = vpnExpanded[providerInfo.id] ?? false;
+              const inputs = vpnAuthInputs[providerInfo.id] || {};
+              const isConfigProvider = providerInfo.id === 'wireguard' || providerInfo.id === 'openvpn';
+              const isAuthProvider = providerInfo.id === 'tailscale' || providerInfo.id === 'nordvpn' || providerInfo.id === 'mullvad';
 
               return (
-                <VpnProviderRow
+                <div
                   key={providerInfo.id}
-                  info={providerInfo}
-                  connection={conn ?? null}
-                  isActionLoading={isActionLoading}
-                  isConnected={isConnected}
-                  isConnecting={isConnecting}
-                  onConnect={() => handleVpnConnect(providerInfo.id)}
-                  onDisconnect={() => handleVpnDisconnect(providerInfo.id)}
-                />
+                  className={`rounded border transition-colors ${
+                    isConnected
+                      ? 'border-[var(--grok-recon-blue)]/40 bg-[var(--grok-recon-blue)]/5'
+                      : isError
+                        ? 'border-[var(--grok-error)]/40 bg-[var(--grok-error)]/5'
+                        : 'border-[var(--grok-border)] bg-[var(--grok-surface-2)]'
+                  }`}
+                >
+                  {/* Header row */}
+                  <div className="flex items-center gap-3 px-3 py-2.5">
+                    <VpnStatusDot status={status} />
+
+                    {/* Provider info */}
+                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleVpnPanel(providerInfo.id)}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-[var(--grok-text-heading)]">{providerInfo.label}</span>
+                        <span className="text-[9px] font-mono text-[var(--grok-text-muted)]">{providerInfo.defaultInterface}</span>
+                        {/* Config/auth badges */}
+                        {isConfigProvider && conn?.configPath && (
+                          <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-[var(--grok-recon-blue)]/10 text-[var(--grok-recon-blue)]">
+                            <FileCheck className="w-2.5 h-2.5 inline mr-0.5" />config
+                          </span>
+                        )}
+                        {isAuthProvider && conn?.hasAuthToken && (
+                          <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-[var(--grok-recon-blue)]/10 text-[var(--grok-recon-blue)]">
+                            <Key className="w-2.5 h-2.5 inline mr-0.5" />auth
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[9px] text-[var(--grok-text-muted)] truncate">{providerInfo.description}</p>
+                      {isConnected && (conn?.assignedIp || conn?.publicIp) && (
+                        <p className="text-[9px] font-mono text-[var(--grok-recon-blue)] mt-0.5">
+                          {conn.assignedIp ?? conn.publicIp}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Status label */}
+                    <span className={`text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                      isConnected ? 'text-[var(--grok-recon-blue)] bg-[var(--grok-recon-blue)]/10'
+                        : isConnecting ? 'text-[var(--grok-warning)] bg-[var(--grok-warning)]/10'
+                          : isError ? 'text-[var(--grok-error)] bg-[var(--grok-error)]/10'
+                            : 'text-[var(--grok-text-muted)] bg-[var(--grok-surface-3)]'
+                    }`}>{status}</span>
+
+                    {/* Expand toggle */}
+                    <button
+                      onClick={() => toggleVpnPanel(providerInfo.id)}
+                      className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-text-muted)]"
+                    >
+                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    </button>
+
+                    {/* Connect/Disconnect */}
+                    <button
+                      onClick={isConnected ? () => handleVpnDisconnect(providerInfo.id) : () => handleVpnConnect(providerInfo.id, inputs.server)}
+                      disabled={isActionLoading || isConnecting}
+                      className={`flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                        isConnected
+                          ? 'border-[var(--grok-error)]/50 text-[var(--grok-error)] hover:bg-[var(--grok-error)]/10'
+                          : 'border-[var(--grok-recon-blue)]/50 text-[var(--grok-recon-blue)] hover:bg-[var(--grok-recon-blue)]/10'
+                      }`}
+                    >
+                      {isActionLoading || isConnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : isConnected ? <WifiOff className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
+                      {isConnected ? 'Disconnect' : 'Connect'}
+                    </button>
+                  </div>
+
+                  {/* Expanded panel */}
+                  {isExpanded && (
+                    <div className="px-3 pb-3 pt-1 border-t border-[var(--grok-border)] space-y-2">
+                      {/* WireGuard / OpenVPN: file upload */}
+                      {isConfigProvider && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-[var(--grok-text-muted)] block">Configuration File</label>
+                          <div className="flex items-center gap-2">
+                            <label className="flex items-center gap-1.5 text-[10px] font-medium px-2.5 py-1.5 rounded border border-[var(--grok-border)] hover:bg-[var(--grok-surface-3)] cursor-pointer transition-colors">
+                              <Upload className="w-3 h-3" />
+                              Choose {providerInfo.id === 'wireguard' ? '.conf' : '.ovpn'} file
+                              <input
+                                type="file"
+                                accept={providerInfo.id === 'wireguard' ? '.conf' : '.ovpn,.conf'}
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleVpnUpload(providerInfo.id, file);
+                                  e.target.value = '';
+                                }}
+                                disabled={isAuthLoading}
+                              />
+                            </label>
+                            {isAuthLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--grok-text-muted)]" />}
+                            {conn?.configPath && (
+                              <span className="text-[9px] font-mono text-[var(--grok-text-muted)] truncate">
+                                {conn.configPath.split('/').pop()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tailscale: auth key + options */}
+                      {providerInfo.id === 'tailscale' && (
+                        <div className="space-y-2">
+                          <div>
+                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">Auth Key</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="password"
+                                value={inputs.authToken || ''}
+                                onChange={(e) => setVpnInput('tailscale', 'authToken', e.target.value)}
+                                placeholder="tskey-auth-..."
+                                className="flex-1 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                              />
+                              <button
+                                onClick={() => handleVpnAuthenticate('tailscale')}
+                                disabled={isAuthLoading || !inputs.authToken?.trim()}
+                                className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded border border-[var(--grok-recon-blue)]/50 text-[var(--grok-recon-blue)] hover:bg-[var(--grok-recon-blue)]/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {isAuthLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />}
+                                Authenticate
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-3 text-[10px]">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={inputs.exitNode === 'true'}
+                                onChange={(e) => setVpnInput('tailscale', 'exitNode', e.target.checked ? 'true' : '')}
+                                className="accent-[var(--grok-recon-blue)]"
+                              />
+                              <span className="text-[var(--grok-text-body)]">Advertise as exit node</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={inputs.acceptRoutes === 'true'}
+                                onChange={(e) => setVpnInput('tailscale', 'acceptRoutes', e.target.checked ? 'true' : '')}
+                                className="accent-[var(--grok-recon-blue)]"
+                              />
+                              <span className="text-[var(--grok-text-body)]">Accept routes</span>
+                            </label>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">Hostname</label>
+                            <input
+                              type="text"
+                              value={inputs.hostname || ''}
+                              onChange={(e) => setVpnInput('tailscale', 'hostname', e.target.value)}
+                              placeholder="cstrike"
+                              className="w-48 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                            />
+                          </div>
+                          {/* Remote access URL when connected */}
+                          {isConnected && conn?.assignedIp && (
+                            <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-[var(--grok-recon-blue)]/10 border border-[var(--grok-recon-blue)]/20">
+                              <ExternalLink className="w-3 h-3 text-[var(--grok-recon-blue)]" />
+                              <span className="text-[9px] text-[var(--grok-text-muted)]">Remote Access:</span>
+                              <a
+                                href={`https://${conn.assignedIp}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[9px] font-mono text-[var(--grok-recon-blue)] hover:underline"
+                              >
+                                https://{conn.assignedIp}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* NordVPN: token + server */}
+                      {providerInfo.id === 'nordvpn' && (
+                        <div className="space-y-2">
+                          <div>
+                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">Token</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="password"
+                                value={inputs.authToken || ''}
+                                onChange={(e) => setVpnInput('nordvpn', 'authToken', e.target.value)}
+                                placeholder="NordVPN access token"
+                                className="flex-1 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                              />
+                              <button
+                                onClick={() => handleVpnAuthenticate('nordvpn')}
+                                disabled={isAuthLoading || !inputs.authToken?.trim()}
+                                className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded border border-[var(--grok-recon-blue)]/50 text-[var(--grok-recon-blue)] hover:bg-[var(--grok-recon-blue)]/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {isAuthLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />}
+                                Authenticate
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">Server</label>
+                            <input
+                              type="text"
+                              value={inputs.server || ''}
+                              onChange={(e) => setVpnInput('nordvpn', 'server', e.target.value)}
+                              placeholder="us-east (optional)"
+                              className="w-48 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                            />
+                          </div>
+                          {conn?.hasAuthToken && (
+                            <div className="flex items-center gap-1.5 text-[9px] text-[var(--grok-recon-blue)]">
+                              <CheckCircle2 className="w-3 h-3" /> Authenticated
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Mullvad: account number + location */}
+                      {providerInfo.id === 'mullvad' && (
+                        <div className="space-y-2">
+                          <div>
+                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">Account Number</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="password"
+                                value={inputs.authToken || ''}
+                                onChange={(e) => setVpnInput('mullvad', 'authToken', e.target.value)}
+                                placeholder="1234567890123456"
+                                className="flex-1 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                              />
+                              <button
+                                onClick={() => handleVpnAuthenticate('mullvad')}
+                                disabled={isAuthLoading || !inputs.authToken?.trim()}
+                                className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded border border-[var(--grok-recon-blue)]/50 text-[var(--grok-recon-blue)] hover:bg-[var(--grok-recon-blue)]/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {isAuthLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />}
+                                Authenticate
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">Location</label>
+                            <input
+                              type="text"
+                              value={inputs.server || ''}
+                              onChange={(e) => setVpnInput('mullvad', 'server', e.target.value)}
+                              placeholder="se-sto (optional)"
+                              className="w-48 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                            />
+                          </div>
+                          {conn?.hasAuthToken && (
+                            <div className="flex items-center gap-1.5 text-[9px] text-[var(--grok-recon-blue)]">
+                              <CheckCircle2 className="w-3 h-3" /> Authenticated
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -1044,98 +1355,6 @@ function ConfigInput({
         step={step}
         className="w-full px-3 py-1.5 text-xs font-mono bg-[var(--grok-surface-2)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
       />
-    </div>
-  );
-}
-
-// ── VpnProviderRow ────────────────────────────────────────────────────────────
-
-function VpnProviderRow({
-  info,
-  connection,
-  isActionLoading,
-  isConnected,
-  isConnecting,
-  onConnect,
-  onDisconnect,
-}: {
-  info: VpnProviderInfo;
-  connection: VpnConnection | null;
-  isActionLoading: boolean;
-  isConnected: boolean;
-  isConnecting: boolean;
-  onConnect: () => void;
-  onDisconnect: () => void;
-}) {
-  const status = connection?.status ?? 'disconnected';
-  const isError = status === 'error';
-
-  return (
-    <div
-      className={`flex items-center gap-3 px-3 py-2.5 rounded border transition-colors ${
-        isConnected
-          ? 'border-[var(--grok-recon-blue)]/40 bg-[var(--grok-recon-blue)]/5'
-          : isError
-            ? 'border-[var(--grok-error)]/40 bg-[var(--grok-error)]/5'
-            : 'border-[var(--grok-border)] bg-[var(--grok-surface-2)]'
-      }`}
-    >
-      {/* Status dot */}
-      <VpnStatusDot status={status} />
-
-      {/* Provider info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-[var(--grok-text-heading)]">
-            {info.label}
-          </span>
-          <span className="text-[9px] font-mono text-[var(--grok-text-muted)]">
-            {info.defaultInterface}
-          </span>
-        </div>
-        <p className="text-[9px] text-[var(--grok-text-muted)] truncate">{info.description}</p>
-        {/* IP display when connected */}
-        {isConnected && (connection?.assignedIp || connection?.publicIp) && (
-          <p className="text-[9px] font-mono text-[var(--grok-recon-blue)] mt-0.5">
-            {connection.assignedIp ?? connection.publicIp}
-          </p>
-        )}
-      </div>
-
-      {/* Status label */}
-      <span
-        className={`text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded ${
-          isConnected
-            ? 'text-[var(--grok-recon-blue)] bg-[var(--grok-recon-blue)]/10'
-            : isConnecting
-              ? 'text-[var(--grok-warning)] bg-[var(--grok-warning)]/10'
-              : isError
-                ? 'text-[var(--grok-error)] bg-[var(--grok-error)]/10'
-                : 'text-[var(--grok-text-muted)] bg-[var(--grok-surface-3)]'
-        }`}
-      >
-        {status}
-      </span>
-
-      {/* Action button */}
-      <button
-        onClick={isConnected ? onDisconnect : onConnect}
-        disabled={isActionLoading || isConnecting}
-        className={`flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-          isConnected
-            ? 'border-[var(--grok-error)]/50 text-[var(--grok-error)] hover:bg-[var(--grok-error)]/10'
-            : 'border-[var(--grok-recon-blue)]/50 text-[var(--grok-recon-blue)] hover:bg-[var(--grok-recon-blue)]/10'
-        }`}
-      >
-        {isActionLoading || isConnecting ? (
-          <Loader2 className="w-3 h-3 animate-spin" />
-        ) : isConnected ? (
-          <WifiOff className="w-3 h-3" />
-        ) : (
-          <Wifi className="w-3 h-3" />
-        )}
-        {isConnected ? 'Disconnect' : 'Connect'}
-      </button>
     </div>
   );
 }
