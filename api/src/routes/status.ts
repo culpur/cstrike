@@ -34,6 +34,11 @@ statusRouter.get('/', async (_req, res, next) => {
           vpnIp: activeVpn?.assignedIp ?? activeVpn?.publicIp ?? metrics.vpnIp,
           uptime: Math.floor(process.uptime()),
           timestamp: Date.now(),
+          mgmtIpInternal: metrics.mgmtIpInternal ?? null,
+          mgmtIpPublic: metrics.mgmtIpPublic ?? null,
+          opsIpInternal: metrics.opsIpInternal ?? null,
+          opsIpPublic: metrics.opsIpPublic ?? null,
+          serviceHosts: metrics.serviceHosts,
         },
         services: {
           metasploitRpc: serviceMap['metasploit'] ?? 'stopped',
