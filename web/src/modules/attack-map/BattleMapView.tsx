@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  Map,
+  Map as MapIcon,
   Globe,
   Shield,
   Crosshair,
@@ -381,7 +381,7 @@ export function BattleMapView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-[var(--grok-text-heading)] flex items-center gap-2">
-            <Map className="w-5 h-5 text-[var(--grok-exploit-red)]" />
+            <MapIcon className="w-5 h-5 text-[var(--grok-exploit-red)]" />
             Battle Map
           </h1>
           <p className="text-[10px] text-[var(--grok-text-muted)] mt-0.5 font-mono">
