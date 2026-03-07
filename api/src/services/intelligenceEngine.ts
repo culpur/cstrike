@@ -59,11 +59,14 @@ const PORT_RULES: Array<{
     ],
     triggerLabel: (p) => `SSH on port ${p.port}`,
   },
-  // FTP
+  // FTP — browse anonymously first, then brute force if needed
   {
     match: (p) => p.service === 'ftp' || p.port === 21 || p.port === 2121 || p.port === 2123,
-    autoTasks: [],
+    autoTasks: [
+      { tool: 'ftp_browse', phase: 'ENUMERATION', configFn: (p, _t) => ({ port: p.port }) },
+    ],
     gatedTasks: [
+      { tool: 'ftp_upload', phase: 'EXPLOITATION', configFn: (p, _t) => ({ port: p.port }) },
       { tool: 'hydra', phase: 'EXPLOITATION', configFn: (p, _t) => ({ service: 'ftp', port: p.port }) },
     ],
     triggerLabel: (p) => `FTP on port ${p.port}`,

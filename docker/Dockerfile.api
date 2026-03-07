@@ -176,26 +176,38 @@ COPY --from=tools /tmp/tools/gau /usr/local/bin/gau
 COPY --from=tools /tmp/tools/rustscan /usr/local/bin/rustscan
 COPY --from=gobuilder /go/bin/waybackurls /usr/local/bin/waybackurls
 
-# Download SecLists wordlists to /opt/wordlists (staging dir — not shadowed by volume mount)
-RUN mkdir -p /opt/wordlists && \
-    # Web content discovery
+# Download wordlists to /opt/wordlists (staging dir — not shadowed by volume mount)
+# Sources: kkrypt0nn/wordlists (primary), SecLists (web content discovery)
+ARG WL_BASE=https://raw.githubusercontent.com/kkrypt0nn/wordlists/main/wordlists
+ARG SL_BASE=https://github.com/danielmiessler/SecLists/raw/refs/heads/master
+
+RUN mkdir -p /opt/wordlists /tmp/wl && \
+    # ── Web content discovery (SecLists — best-in-class for dir busting) ──
     curl -fsSL -o /opt/wordlists/common.txt \
-      "https://github.com/danielmiessler/SecLists/raw/refs/heads/master/Discovery/Web-Content/common.txt" || \
+      "${SL_BASE}/Discovery/Web-Content/common.txt" || \
     printf '.git\n.env\nadmin\napi\nbackup\nconfig\ncss\nimages\nindex.html\ninfo.php\njs\nlogin\nphpinfo.php\nphpmyadmin\nrobots.txt\nserver-status\nsitemap.xml\ntest\nuploads\nwp-admin\nwp-login.php\n' \
       > /opt/wordlists/common.txt && \
-    # Passwords — SecLists Common-Credentials (top shortlist + 10k most common)
-    curl -fsSL -o /opt/wordlists/passwords.txt \
-      "https://github.com/danielmiessler/SecLists/raw/refs/heads/master/Passwords/Common-Credentials/top-passwords-shortlist.txt" || \
-    printf 'password\npassword123\nadmin\n123456\nroot\ntoor\nletmein\nqwerty\n' \
-      > /opt/wordlists/passwords.txt && \
+    # ── Usernames — merge multiple sources, deduplicate ──
+    # unix_users (189) + cirt_default (826) + default_for_services (918) + http_default (26)
+    for f in unix_users cirt_default_usernames default_users_for_services http_default_users mirai_user; do \
+      curl -fsSL "${WL_BASE}/usernames/${f}.txt" >> /tmp/wl/users_raw.txt 2>/dev/null || true; \
+    done && \
+    sort -u /tmp/wl/users_raw.txt | grep -v '^$' > /opt/wordlists/usernames.txt && \
+    # ── Passwords (fast) — ~4K for quick brute force ──
+    # unix (1020) + defaults (1242) + hak5 (2350) + burnett (1023) + keyboard (19) + mirai (41)
+    for f in unix_passwords default_passwords_for_services hak5 burnett keyboard_patterns mirai_passwords top_adobe_passwords; do \
+      curl -fsSL "${WL_BASE}/passwords/${f}.txt" >> /tmp/wl/pass_fast_raw.txt 2>/dev/null || true; \
+    done && \
+    sort -u /tmp/wl/pass_fast_raw.txt | grep -v '^$' > /opt/wordlists/passwords.txt && \
+    # ── Passwords (10K) — darkweb_2017 for deeper sweeps ──
     curl -fsSL -o /opt/wordlists/passwords-10k.txt \
-      "https://github.com/danielmiessler/SecLists/raw/refs/heads/master/Passwords/Common-Credentials/10k-most-common.txt" || true && \
-    # Usernames — SecLists top shortlist
-    curl -fsSL -o /opt/wordlists/usernames.txt \
-      "https://github.com/danielmiessler/SecLists/raw/refs/heads/master/Usernames/top-usernames-shortlist.txt" || \
-    printf 'admin\nroot\nuser\ntest\nguest\noperator\nmanager\n' \
-      > /opt/wordlists/usernames.txt && \
-    echo "Wordlists installed:" && ls -lh /opt/wordlists/
+      "${WL_BASE}/passwords/darkweb_2017.txt" || true && \
+    # ── Passwords (large) — 88K probable passwords for thorough brute force ──
+    curl -fsSL -o /opt/wordlists/passwords-large.txt \
+      "${WL_BASE}/passwords/password.txt" || true && \
+    # ── Cleanup ──
+    rm -rf /tmp/wl && \
+    echo "Wordlists installed:" && wc -l /opt/wordlists/*.txt
 
 WORKDIR /app
 

