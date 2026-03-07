@@ -205,6 +205,13 @@ RUN mkdir -p /opt/wordlists /tmp/wl && \
     # ── Passwords (large) — 88K probable passwords for thorough brute force ──
     curl -fsSL -o /opt/wordlists/passwords-large.txt \
       "${WL_BASE}/passwords/password.txt" || true && \
+    # ── SSH-specific wordlists (small — SSH is rate-limited to ~1 try/sec) ──
+    # ~30 common SSH usernames: root, admin, user, test, etc.
+    printf 'root\nadmin\nuser\ntest\nguest\nubuntu\ndebian\npi\nec2-user\nazure\ncentos\nftp\nwww-data\nnobody\npostgres\nmysql\noracle\ngit\njenkins\nansible\nvagrant\ndocker\nkali\nmsfadmin\n' \
+      > /opt/wordlists/usernames-ssh.txt && \
+    # ~200 common SSH passwords: defaults, reversed, common patterns
+    printf 'toor\nroot\npassword\npassword1\npassword123\n123456\n12345678\n1234567890\nadmin\nadmin123\nletmein\nwelcome\nqwerty\nabc123\nmaster\nmonkey\ndragon\nlogin\nprincess\nfootball\nshadow\nsunshine\ntrustno1\niloveyou\nbatman\naccess\nhello\ncharlie\n123123\n654321\nsuperman\nqazwsx\nmichael\nmustang\njessica\npepper\n111111\n666666\n121212\nchangeme\ndefault\ntesting\ntest123\nP@ssw0rd\nP@ssword1\npassw0rd\ns3cret\nSecret123\nroot123\nadmin1\nuser\nubuntu\ndebian\nraspberry\nvagrant\nansible\nkali\nmsfadmin\nbitnami\nalpine\nzaq1@WSX\nqwerty123\npass\npass123\npasswd\n1q2w3e4r\n1qaz2wsx\nq1w2e3r4\nzaq12wsx\n!@#$%%^&*\npa55word\npa55w0rd\np@55w0rd\nPa$$w0rd\ntemp\ntemp123\nguest\nguest123\nserver\nlinux\nunix\nnetwork\nfirewall\ncisco\nrouter\nswitch\ntesttest\ntest1234\nPassword1\nPassword123\nWelcome1\nWelcome123\nAdmin123\nRoot123\nTest1234\nchangeit\nch4ng3m3\nletmein1\nopensesame\naccess14\nmaster123\nsecurity\nsecure\nwebmaster\nmanager\nmanager1\nsystem\nsupport\nservice\nmonitor\napache\nnginx\ntomcat\nmysql\npostgres\noracle\nredis\nmongodb\n' \
+      | sort -u > /opt/wordlists/passwords-ssh.txt && \
     # ── Cleanup ──
     rm -rf /tmp/wl && \
     echo "Wordlists installed:" && wc -l /opt/wordlists/*.txt

