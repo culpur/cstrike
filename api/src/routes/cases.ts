@@ -37,6 +37,10 @@ export const casesRouter = Router();
 // Active task processes for cancellation
 export const activeProcesses = new Map<string, { cancelled: boolean }>();
 
+// Debounce feedFindingsToAI — per-case cooldown to prevent re-entrant spam
+const feedDebounceTimers = new Map<string, NodeJS.Timeout>();
+const FEED_DEBOUNCE_MS = 10_000; // 10s cooldown between AI feeds per case
+
 // ---------------------------------------------------------------------------
 // Helper: run a task in background
 // ---------------------------------------------------------------------------
@@ -160,8 +164,18 @@ export async function executeTask(taskId: string, caseId: string) {
       }
     } catch { /* best effort */ }
 
-    // Feed findings to AI for strategic analysis
-    setImmediate(() => feedFindingsToAI(caseId, caseRecord?.targetId ?? ''));
+    // Advance case phase if tasks are running/completed in a later phase
+    try {
+      await advanceCasePhase(caseId);
+    } catch { /* best effort */ }
+
+    // Check if all tasks are terminal — complete the case if so
+    try {
+      await checkCaseCompletion(caseId, caseRecord?.targetId ?? '');
+    } catch { /* best effort */ }
+
+    // Feed findings to AI for strategic analysis (debounced)
+    debouncedFeedFindingsToAI(caseId, caseRecord?.targetId ?? '');
   } catch (err: any) {
     if (ctrl.cancelled) return;
 
@@ -203,6 +217,119 @@ export async function reanalyzeAfterTask(caseId: string, targetId: string) {
   } catch (err: any) {
     console.error(`[Case:${caseId}] Re-analysis failed:`, err.message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Debounced feed — collapse rapid-fire task completions into one AI call
+// ---------------------------------------------------------------------------
+
+function debouncedFeedFindingsToAI(caseId: string, targetId: string) {
+  if (!targetId) return;
+
+  // Clear any existing pending timer for this case
+  const existing = feedDebounceTimers.get(caseId);
+  if (existing) clearTimeout(existing);
+
+  // Schedule a single AI feed after the cooldown window
+  const timer = setTimeout(() => {
+    feedDebounceTimers.delete(caseId);
+    feedFindingsToAI(caseId, targetId);
+  }, FEED_DEBOUNCE_MS);
+
+  feedDebounceTimers.set(caseId, timer);
+}
+
+// ---------------------------------------------------------------------------
+// Case phase advancement — update currentPhase based on actual task phases
+// ---------------------------------------------------------------------------
+
+async function advanceCasePhase(caseId: string): Promise<void> {
+  const exploitCase = await prisma.exploitCase.findUnique({ where: { id: caseId } });
+  if (!exploitCase || exploitCase.status !== 'ACTIVE') return;
+
+  // Determine the highest phase that has running or completed tasks
+  const phaseOrder: string[] = ['ENUMERATION', 'EXPLOITATION', 'PERSISTENCE', 'POST_EXPLOITATION'];
+  const currentIdx = phaseOrder.indexOf(exploitCase.currentPhase);
+
+  const taskPhases = await prisma.exploitTask.findMany({
+    where: {
+      caseId,
+      status: { in: ['RUNNING', 'COMPLETED'] },
+    },
+    select: { phase: true },
+    distinct: ['phase'],
+  });
+
+  let highestIdx = currentIdx;
+  for (const tp of taskPhases) {
+    const idx = phaseOrder.indexOf(tp.phase);
+    if (idx > highestIdx) highestIdx = idx;
+  }
+
+  if (highestIdx > currentIdx) {
+    const newPhase = phaseOrder[highestIdx];
+    await prisma.exploitCase.update({
+      where: { id: caseId },
+      data: { currentPhase: newPhase as any },
+    });
+    emitCasePhaseChanged({ caseId, phase: newPhase });
+    console.log(`[Case:${caseId}] Phase advanced: ${exploitCase.currentPhase} → ${newPhase}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Case completion — detect when all tasks are terminal and close the case
+// ---------------------------------------------------------------------------
+
+async function checkCaseCompletion(caseId: string, targetId: string): Promise<void> {
+  const exploitCase = await prisma.exploitCase.findUnique({ where: { id: caseId } });
+  if (!exploitCase || exploitCase.status !== 'ACTIVE') return;
+
+  // Count non-terminal tasks
+  const pendingCount = await prisma.exploitTask.count({
+    where: {
+      caseId,
+      status: { in: ['QUEUED', 'RUNNING'] },
+    },
+  });
+
+  if (pendingCount > 0) return;
+
+  // All tasks are terminal — check if there's a reanalyze that might spawn more
+  // Give a grace period: only complete if no new tasks appeared in the last 30s
+  const recentTask = await prisma.exploitTask.findFirst({
+    where: { caseId },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  });
+
+  const gracePeriod = 30_000; // 30s
+  if (recentTask && Date.now() - recentTask.createdAt.getTime() < gracePeriod) {
+    // Tasks were recently created — wait for next completion cycle
+    return;
+  }
+
+  // Complete the case
+  const taskStats = await prisma.exploitTask.groupBy({
+    by: ['status'],
+    where: { caseId },
+    _count: true,
+  });
+  const counts = Object.fromEntries(taskStats.map((s) => [s.status, s._count]));
+
+  await prisma.exploitCase.update({
+    where: { id: caseId },
+    data: { status: 'COMPLETED' },
+  });
+
+  // Clear debounce timer
+  const timer = feedDebounceTimers.get(caseId);
+  if (timer) {
+    clearTimeout(timer);
+    feedDebounceTimers.delete(caseId);
+  }
+
+  console.log(`[Case:${caseId}] COMPLETED — ${counts.COMPLETED ?? 0} completed, ${counts.FAILED ?? 0} failed, ${counts.CANCELLED ?? 0} cancelled`);
 }
 
 // ---------------------------------------------------------------------------
