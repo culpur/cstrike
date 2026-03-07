@@ -230,7 +230,7 @@ Plus: Metasploit Framework (msfrpcd on port 55552), subfinder, amass, katana, ga
 | First-boot service | `cstrike-firstboot.sh` — partition expansion, SSH key regen, password randomization, Docker stack startup |
 | OVF descriptor | `cstrike-v2.ovf` — standard VM metadata for cross-platform import |
 | Static hosting | nginx `/dist/` endpoint on registry.culpur.net for direct HTTP downloads |
-| BitTorrent | 4 `.torrent` files with webseed (BEP19), aria2 seeder daemon |
+| BitTorrent | Per-format `.torrent` files with webseed (BEP19), aria2 seeder on registry.culpur.net |
 | Network setup | `cstrike-netsetup` — interactive interface configuration on first login |
 | Cloud-init | `cloud-init-generic.yml` — deploy on AWS, GCP, Azure, DigitalOcean |
 | Documentation | README, DISTRIBUTION.md, and deployment guides updated for v2.0 release |
@@ -317,8 +317,10 @@ Plus: Metasploit Framework (msfrpcd on port 55552), subfinder, amass, katana, ga
 
 | Change | Details |
 |--------|---------|
-| Dual Architecture | amd64 + aarch64 pre-built VM images (QCOW2, OVA, VDI) |
-| Per-Format Torrents | Individual webseed torrents per image format per architecture |
+| Dual Architecture | amd64 + aarch64 pre-built VM images with all Docker containers pre-built (boot-and-go) |
+| amd64 Images | QCOW2 (~21 GB compressed), VDI (~49 GB) with torrents — Docker-ready, no `--build` needed |
+| aarch64 Images | QCOW2 (~21 GB), OVA (~20 GB), VDI (~49 GB) with torrents |
+| Per-Format Torrents | Individual torrents per image format per architecture |
 | Host Hardening | `harden-host.sh` additions for SSH, PAM, auditd |
 | Registry Distribution | Dual-arch downloads at `registry.culpur.net/dist/` |
 | VulnBox Standalone | Separate GitHub release at `culpur/vulnbox` with git bundle for offline distribution |

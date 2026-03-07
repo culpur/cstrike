@@ -72,21 +72,20 @@ Pre-built VM images — boot and go, no building required.
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | Proxmox / KVM / libvirt | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.qcow2) |
-| **OVA** | VirtualBox / VMware | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.ova) |
-| **VDI** | VirtualBox (native) | ~31 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.vdi) |
+| **QCOW2** | Proxmox / KVM / libvirt | ~21 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.qcow2) |
+| **VDI** | VirtualBox (native) | ~49 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.vdi) |
 
 #### aarch64 (ARM64)
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | QEMU / UTM / Parallels | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5.1_aarch64.qcow2) |
-| **OVA** | VMware Fusion / UTM | ~14 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5.1_aarch64.ova) |
-| **VDI** | VirtualBox (native) | ~31 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5.1_aarch64.vdi) |
+| **QCOW2** | QEMU / UTM / Parallels | ~21 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.qcow2) |
+| **OVA** | VMware Fusion / UTM | ~20 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.ova) |
+| **VDI** | VirtualBox (native) | ~49 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.vdi) |
 
 [BitTorrent downloads](docs/DISTRIBUTION.md#bittorrent-recommended-for-large-files) | [Checksums](https://registry.culpur.net/dist/checksums.sha256) | [All formats](docs/DISTRIBUTION.md)
 
-> Pre-built images include Debian 12 + 35+ security tools + Docker stack. First boot auto-expands disk, regenerates SSH keys, randomizes passwords, and starts all services.
+> Pre-built images include Debian 12 + 35+ security tools + Docker stack with all containers pre-built. First boot auto-expands disk, regenerates SSH keys, randomizes passwords, and starts all services with `docker compose up -d` (no build required).
 
 ---
 
@@ -449,7 +448,7 @@ CStrike v2 ships in 7 formats. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) 
 
 | Format | Setup Time | Command |
 |--------|:----------:|---------|
-| **Pre-built VM** (QCOW2/OVA/VDI/VMDK) | ~5 min | [Download](#downloads) → import → boot |
+| **Pre-built VM** (QCOW2/OVA/VDI) | ~5 min | [Download](#downloads) → import → boot |
 | **Docker Compose** | ~10 min | `docker compose up -d` |
 | **Bare Metal** | ~45 min | `sudo bash install.sh` |
 | **Cloud-Init** (AWS/GCP/Azure/DO) | ~30 min | User data: `scripts/vm/cloud-init-generic.yml` |

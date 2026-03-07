@@ -1,4 +1,4 @@
-# CStrike v2.5 — Distribution Guide
+# CStrike v2.5.1 — Distribution Guide
 
 CStrike v2 can be deployed in seven formats depending on your environment and requirements.
 
@@ -26,19 +26,23 @@ Pre-built VM images are available for direct download and via BitTorrent from `r
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | Proxmox / KVM / libvirt | ~14 GB | [cstrikev2.5_amd64.qcow2](https://registry.culpur.net/dist/cstrikev2.5_amd64.qcow2) |
-| **OVA** | VirtualBox / VMware (OVF + VMDK bundled) | ~14 GB | [cstrikev2.5_amd64.ova](https://registry.culpur.net/dist/cstrikev2.5_amd64.ova) |
-| **VDI** | VirtualBox (native) | ~31 GB | [cstrikev2.5_amd64.vdi](https://registry.culpur.net/dist/cstrikev2.5_amd64.vdi) |
+| **QCOW2** | Proxmox / KVM / libvirt | ~21 GB | [cstrikev2.5.1_amd64.qcow2](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.qcow2) |
+| **VDI** | VirtualBox (native) | ~49 GB | [cstrikev2.5.1_amd64.vdi](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.vdi) |
 
 ### Direct Download — aarch64 (ARM64)
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | QEMU / UTM / Parallels | ~14 GB | [cstrikev2.5_aarch64.qcow2](https://registry.culpur.net/dist/cstrikev2.5_aarch64.qcow2) |
-| **OVA** | VMware Fusion / UTM | ~14 GB | [cstrikev2.5_aarch64.ova](https://registry.culpur.net/dist/cstrikev2.5_aarch64.ova) |
-| **VDI** | VirtualBox (native) | ~31 GB | [cstrikev2.5_aarch64.vdi](https://registry.culpur.net/dist/cstrikev2.5_aarch64.vdi) |
+| **QCOW2** | QEMU / UTM / Parallels | ~21 GB | [cstrikev2.5_aarch64.qcow2](https://registry.culpur.net/dist/cstrikev2.5_aarch64.qcow2) |
+| **OVA** | VMware Fusion / UTM | ~20 GB | [cstrikev2.5_aarch64.ova](https://registry.culpur.net/dist/cstrikev2.5_aarch64.ova) |
+| **VDI** | VirtualBox (native) | ~49 GB | [cstrikev2.5_aarch64.vdi](https://registry.culpur.net/dist/cstrikev2.5_aarch64.vdi) |
 
-| **Checksums** | Integrity verification | — | [checksums.sha256](https://registry.culpur.net/dist/checksums.sha256) |
+### Checksums
+
+| Arch | File | Download |
+|------|------|----------|
+| amd64 | SHA256 checksums | [checksums-amd64-v2.5.1.sha256](https://registry.culpur.net/dist/checksums-amd64-v2.5.1.sha256) |
+| aarch64 | SHA256 checksums | [checksums-aarch64.sha256](https://registry.culpur.net/dist/checksums-aarch64.sha256) |
 
 ### BitTorrent (recommended for large files)
 
@@ -48,9 +52,8 @@ Torrents include [webseed](https://www.bittorrent.org/beps/bep_0019.html) — do
 
 | Format | Torrent |
 |--------|---------|
-| QCOW2 | [cstrikev2.5_amd64.qcow2.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_amd64.qcow2.torrent) |
-| OVA | [cstrikev2.5_amd64.ova.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_amd64.ova.torrent) |
-| VDI | [cstrikev2.5_amd64.vdi.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_amd64.vdi.torrent) |
+| QCOW2 | [cstrikev2.5.1_amd64.qcow2.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5.1_amd64.qcow2.torrent) |
+| VDI | [cstrikev2.5.1_amd64.vdi.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5.1_amd64.vdi.torrent) |
 
 #### aarch64
 
@@ -62,14 +65,19 @@ Torrents include [webseed](https://www.bittorrent.org/beps/bep_0019.html) — do
 
 ```bash
 # Download with any BitTorrent client, or use aria2:
-aria2c https://registry.culpur.net/dist/torrents/cstrikev2.5_amd64.qcow2.torrent
+aria2c https://registry.culpur.net/dist/torrents/cstrikev2.5.1_amd64.qcow2.torrent
 ```
 
 ### Verify Integrity
 
 ```bash
-curl -O https://registry.culpur.net/dist/checksums.sha256
-sha256sum -c checksums.sha256
+# amd64
+curl -O https://registry.culpur.net/dist/checksums-amd64-v2.5.1.sha256
+sha256sum -c checksums-amd64-v2.5.1.sha256
+
+# aarch64
+curl -O https://registry.culpur.net/dist/checksums-aarch64.sha256
+sha256sum -c checksums-aarch64.sha256
 ```
 
 ---
@@ -199,7 +207,7 @@ On import, the first-boot service automatically expands the partition to fill wh
 
 ## VirtualBox OVA
 
-Download the pre-built OVA: [cstrikev2.5_amd64.ova](https://registry.culpur.net/dist/cstrikev2.5_amd64.ova) (~14 GB)
+Download the pre-built OVA: [cstrikev2.5_aarch64.ova](https://registry.culpur.net/dist/cstrikev2.5_aarch64.ova) (~20 GB, aarch64 only)
 
 ### Export from an existing VirtualBox VM
 
@@ -234,7 +242,7 @@ The import helper configures host-only networking for lab access and prints conn
 
 ## Proxmox / KVM / QEMU Import
 
-Download the pre-built QCOW2: [cstrikev2.5_amd64.qcow2](https://registry.culpur.net/dist/cstrikev2.5_amd64.qcow2) (~14 GB)
+Download the pre-built QCOW2: [cstrikev2.5.1_amd64.qcow2](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.qcow2) (~21 GB)
 
 Import from the `.tar.gz` distribution package or standalone disk images.
 
@@ -267,8 +275,8 @@ Import from the `.tar.gz` distribution package or standalone disk images.
 
 The distribution package supports fully offline deployment:
 
-1. **Docker images pre-saved**: `package-vm.sh` saves all 6 container images into `cstrike-docker-images.tar.gz` before export
-2. **First-boot auto-loads**: The first-boot service detects the archive and runs `docker load` — no internet required (9 containers)
+1. **Docker images pre-built**: Pre-built VM images include all 9 Docker containers already built — `docker compose up -d` starts immediately without `--build`
+2. **First-boot auto-starts**: The first-boot service starts the Docker stack automatically — no internet required
 3. **Cloud-init support**: `cloud-init-generic.yml` checks for the pre-saved archive and loads images if present, falling back to `docker compose build` if not
 
 To deploy offline:
@@ -374,6 +382,6 @@ Verify with: `cat /opt/cstrike/.firstboot-complete`
 
 ## Legal
 
-CStrike v2.5 is intended exclusively for authorized penetration testing and red team operations. You must have explicit written authorization before scanning any target.
+CStrike v2.5.1 is intended exclusively for authorized penetration testing and red team operations. You must have explicit written authorization before scanning any target.
 
 MIT License (c) 2025-2026 Culpur Defense Inc.
