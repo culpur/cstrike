@@ -1,4 +1,4 @@
-# CStrike v2.5.1 — Distribution Guide
+# CStrike v2.5.2 — Distribution Guide
 
 CStrike v2 can be deployed in seven formats depending on your environment and requirements.
 
@@ -382,6 +382,6 @@ Verify with: `cat /opt/cstrike/.firstboot-complete`
 
 ## Legal
 
-CStrike v2.5.1 is intended exclusively for authorized penetration testing and red team operations. You must have explicit written authorization before scanning any target.
+CStrike v2.5.2 is intended exclusively for authorized penetration testing and red team operations. You must have explicit written authorization before scanning any target.
 
 MIT License (c) 2025-2026 Culpur Defense Inc.

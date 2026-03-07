@@ -100,7 +100,7 @@ RUN apt-get update -qq && \
       nmap hydra sqlmap sslscan masscan whatweb \
       nbtscan snmp smbclient sshpass openssh-client \
       john hashcat dirb \
-      perl libnet-ssleay-perl libwhisker2-perl \
+      perl libjson-perl libxml-writer-perl libnet-ssleay-perl libwhisker2-perl \
       libnet-dns-perl libnet-ip-perl libstring-random-perl \
       ruby ruby-dev build-essential zlib1g-dev \
       && rm -rf /var/lib/apt/lists/*
@@ -215,6 +215,10 @@ COPY tui/ ./tui/
 # Install Python dependencies
 RUN pip3 install --break-system-packages \
     textual click rich httpx pydantic 2>/dev/null || true
+
+# Re-copy ProjectDiscovery httpx Go binary — pip3 install httpx above
+# installs a Python CLI wrapper that shadows the Go binary at /usr/local/bin/httpx
+COPY --from=tools /tmp/tools/httpx /usr/local/bin/httpx
 
 # Generate Prisma client
 RUN npx prisma generate

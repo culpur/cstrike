@@ -237,6 +237,31 @@ Plus: Metasploit Framework (msfrpcd on port 55552), subfinder, amass, katana, ga
 
 ---
 
+## v2.5.2 (March 2026)
+
+### Bug Fixes
+
+| Fix | Details |
+|-----|---------|
+| Exploit case phase advancement | Cases stuck in ENUMERATION — full-auto mode set `gateStatus: 'APPROVED'` but never updated `currentPhase`. Phase now auto-advances based on highest active task phase |
+| Exploit case completion | No lifecycle management existed — cases stayed ACTIVE after all tasks finished. New `checkCaseCompletion()` detects all-terminal tasks (30s grace period) and closes the case |
+| AI analysis feed spam | `feedFindingsToAI()` fired per-task with no rate limiting — 25+ identical AI calls in 1.5 seconds when tasks completed near-simultaneously. Added 10s per-case debounce |
+| Scan cleanup orphans cases | `ExploitTrackManager.cleanupScan()` only cleared in-memory state, leaving DB cases as ACTIVE. Now completes active cases and cancels queued tasks on scan end |
+| nikto missing Perl modules | `libjson-perl` and `libxml-writer-perl` not installed in API container — nikto failed with `Required module not found: JSON` on every invocation |
+| httpx wrong binary | Python `httpx` pip package CLI shadowed ProjectDiscovery `httpx` Go binary at `/usr/local/bin/httpx` — tool executor passed `-u` flag which Python httpx doesn't accept. Go binary now re-copied after pip install |
+| searchsploit wrong flags | Tool executor passed `--json --colour` (invalid long options) — searchsploit uses `-j` for JSON output. Fixed to `searchsploit -j <query>` |
+
+### Infrastructure
+
+| Component | Details |
+|-----------|---------|
+| Dockerfile.api | Added `libjson-perl libxml-writer-perl` to apt, re-copy Go httpx after pip install |
+| toolExecutor.ts | Fixed searchsploit flag from `--json --colour` to `-j` |
+| cases.ts | Added `advanceCasePhase()`, `checkCaseCompletion()`, `debouncedFeedFindingsToAI()` (+131 lines) |
+| exploitTrackManager.ts | Phase advancement in full-auto dispatch, async `cleanupScan()` with case completion (+49 lines) |
+
+---
+
 ## v2.5.1 (March 2026)
 
 ### New Features

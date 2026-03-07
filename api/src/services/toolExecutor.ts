@@ -207,7 +207,7 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
   searchsploit: (target, opts) => {
     // Search ExploitDB for known exploits — use query if provided, else target host
     const query = opts.args?.[0] || extractHost(target);
-    return ['searchsploit', query, '--json', '--colour'];
+    return ['searchsploit', '-j', query];
   },
   metasploit: (target) => {
     const host = extractHost(target);

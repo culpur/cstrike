@@ -31,8 +31,8 @@
       <Info>CStrike v2 product information</Info>
       <Product>CStrike v2</Product>
       <Vendor>Culpur Defense Inc.</Vendor>
-      <Version>2.5.1</Version>
-      <FullVersion>2.5.1-20260306</FullVersion>
+      <Version>2.5.2</Version>
+      <FullVersion>2.5.2-20260307</FullVersion>
       <ProductUrl>https://github.com/culpur/cstrike</ProductUrl>
       <VendorUrl>https://culpur.net</VendorUrl>
     </ProductSection>
