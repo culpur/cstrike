@@ -8,7 +8,7 @@
  * This view reads from the aiStore and loads historical thoughts from the API.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Brain,
   Zap,
@@ -114,12 +114,9 @@ const THOUGHT_META: Record<
 
 export function AIStreamView() {
   const { thoughts, isThinking, addThought } = useAIStore();
-  const thoughtsEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new thoughts
-  useEffect(() => {
-    thoughtsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [thoughts]);
+  // Newest-first sort — reverse for display
+  const sortedThoughts = [...thoughts].reverse();
 
   // Load historical AI thoughts from API on mount
   useEffect(() => {
@@ -187,7 +184,7 @@ export function AIStreamView() {
           className="overflow-y-auto p-4 font-mono text-sm"
           style={{ height: 'calc(100vh - 200px)', background: 'var(--grok-void)' }}
         >
-          {thoughts.length === 0 ? (
+          {sortedThoughts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Brain className="w-10 h-10 text-[var(--grok-text-muted)] mb-3 opacity-30" />
               <p className="text-sm text-[var(--grok-text-muted)]">
@@ -199,10 +196,9 @@ export function AIStreamView() {
             </div>
           ) : (
             <div className="space-y-2">
-              {thoughts.map((thought) => (
+              {sortedThoughts.map((thought) => (
                 <ThoughtCard key={thought.id} thought={thought} />
               ))}
-              <div ref={thoughtsEndRef} />
             </div>
           )}
         </div>
