@@ -3,6 +3,9 @@
  *
  * The brain of the automated pipeline. Queries loot/scan results for a target
  * and produces task recommendations with auto-run vs gated classification.
+ *
+ * v2: Smart dedup (URL normalization), false-positive filtering, per-tool caps,
+ *     and parallel task group awareness.
  */
 
 import { prisma } from '../config/database.js';
@@ -20,6 +23,7 @@ export interface TaskRecommendation {
   autoRun: boolean;       // true = run immediately, false = needs gate approval
   config: Record<string, unknown>;
   priority: number;       // 1 = highest
+  parallelGroup?: string; // tools in the same group can run concurrently
 }
 
 interface PortFinding {
@@ -41,13 +45,75 @@ interface CredFinding {
 }
 
 // ---------------------------------------------------------------------------
+// URL Normalization & False-Positive Filtering
+// ---------------------------------------------------------------------------
+
+/** Normalize a URL for dedup purposes — strip query params, trailing slashes, fragments */
+function normalizeUrlForDedup(url: string): string {
+  try {
+    const u = new URL(url);
+    // Remove query string and fragment entirely for dedup
+    return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '').toLowerCase()}`;
+  } catch {
+    // Not a valid URL — just lowercase and strip trailing slashes
+    return url.replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase();
+  }
+}
+
+/** Broader dedup key: tool + normalized URL base path (not exact URL) */
+function dedupKey(tool: string, target: string): string {
+  return `${tool}::${normalizeUrlForDedup(target)}`;
+}
+
+/**
+ * False-positive URL patterns — these are NOT real attack surfaces.
+ * Apache directory listing sort params, IIS FrontPage, OIDC well-known, etc.
+ */
+const FALSE_POSITIVE_URL_PATTERNS = [
+  // Apache directory listing sort parameters
+  /[?&]C=[NMSD];O=[AD]/i,
+  /[?&]O=[AD];C=[NMSD]/i,
+  /\?C=\w/i,
+  // Apache icons directory (standard Apache assets)
+  /\/icons\/(small\/)?[\w.-]+\.(gif|png|ico|svg)/i,
+  // IIS FrontPage extensions (dead technology)
+  /_vti_(bin|cnf|pvt|adm|log|txt|inf)/i,
+  // OIDC / OAuth well-known endpoints (not exploitable via sqlmap)
+  /\.(well-known|openid-configuration|oauth-authorization-server)/i,
+  /\/\.well-known\//i,
+  // Standard non-exploitable metadata files
+  /\/(robots\.txt|sitemap\.xml|crossdomain\.xml|favicon\.ico|apple-touch-icon)/i,
+  // CSS/JS/image/font assets
+  /\.(css|js|woff2?|ttf|eot|otf|svg|png|jpg|jpeg|gif|ico|webp|avif|map)(\?.*)?$/i,
+  // Wordpress feeds and standard XML
+  /\/(feed|rss|atom|xmlrpc\.php$)/i,
+];
+
+/** Check if a URL is a known false positive that should be skipped */
+function isFalsePositiveUrl(url: string): boolean {
+  return FALSE_POSITIVE_URL_PATTERNS.some((re) => re.test(url));
+}
+
+/**
+ * Per-tool caps: max number of unique targets a single tool should be tasked against.
+ * Prevents sqlmap from running against 30 different URLs when 3-5 is sufficient.
+ */
+const TOOL_TARGET_CAPS: Record<string, number> = {
+  sqlmap: 5,    // max 5 unique URLs for SQL injection
+  ffuf: 3,      // max 3 directories to fuzz
+  commix: 3,    // max 3 command injection targets
+  nuclei: 2,    // max 2 nuclei scans (it scans broadly already)
+  http_fetch: 10, // more permissive — fetching files is cheap
+};
+
+// ---------------------------------------------------------------------------
 // Service-to-tool mapping — what to run when a service is discovered
 // ---------------------------------------------------------------------------
 
 const PORT_RULES: Array<{
   match: (p: PortFinding) => boolean;
-  autoTasks: Array<{ tool: string; phase: CasePhase; configFn: (p: PortFinding, baseTarget: string) => Record<string, unknown> }>;
-  gatedTasks: Array<{ tool: string; phase: CasePhase; configFn: (p: PortFinding, baseTarget: string) => Record<string, unknown> }>;
+  autoTasks: Array<{ tool: string; phase: CasePhase; group?: string; configFn: (p: PortFinding, baseTarget: string) => Record<string, unknown> }>;
+  gatedTasks: Array<{ tool: string; phase: CasePhase; group?: string; configFn: (p: PortFinding, baseTarget: string) => Record<string, unknown> }>;
   triggerLabel: (p: PortFinding) => string;
 }> = [
   // SSH
@@ -55,7 +121,7 @@ const PORT_RULES: Array<{
     match: (p) => p.service === 'ssh' || p.port === 22 || p.port === 2222,
     autoTasks: [],
     gatedTasks: [
-      { tool: 'hydra', phase: 'EXPLOITATION', configFn: (p, _t) => ({ service: 'ssh', port: p.port }) },
+      { tool: 'hydra', phase: 'EXPLOITATION', group: 'brute', configFn: (p, _t) => ({ service: 'ssh', port: p.port }) },
     ],
     triggerLabel: (p) => `SSH on port ${p.port}`,
   },
@@ -63,11 +129,11 @@ const PORT_RULES: Array<{
   {
     match: (p) => p.service === 'ftp' || p.port === 21 || p.port === 2121 || p.port === 2123,
     autoTasks: [
-      { tool: 'ftp_browse', phase: 'ENUMERATION', configFn: (p, _t) => ({ port: p.port }) },
+      { tool: 'ftp_browse', phase: 'ENUMERATION', group: 'ftp_enum', configFn: (p, _t) => ({ port: p.port }) },
     ],
     gatedTasks: [
-      { tool: 'ftp_upload', phase: 'EXPLOITATION', configFn: (p, _t) => ({ port: p.port }) },
-      { tool: 'hydra', phase: 'EXPLOITATION', configFn: (p, _t) => ({ service: 'ftp', port: p.port }) },
+      { tool: 'ftp_upload', phase: 'EXPLOITATION', group: 'ftp_exploit', configFn: (p, _t) => ({ port: p.port }) },
+      { tool: 'hydra', phase: 'EXPLOITATION', group: 'brute', configFn: (p, _t) => ({ service: 'ftp', port: p.port }) },
     ],
     triggerLabel: (p) => `FTP on port ${p.port}`,
   },
@@ -75,13 +141,13 @@ const PORT_RULES: Array<{
   {
     match: (p) => p.service === 'http' || p.service === 'https' || [80, 443, 8080, 8443, 8888, 9090].includes(p.port),
     autoTasks: [
-      { tool: 'gobuster', phase: 'ENUMERATION', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
-      { tool: 'whatweb', phase: 'ENUMERATION', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
-      { tool: 'nikto', phase: 'ENUMERATION', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
+      { tool: 'gobuster', phase: 'ENUMERATION', group: 'http_enum', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
+      { tool: 'whatweb', phase: 'ENUMERATION', group: 'http_enum', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
+      { tool: 'nikto', phase: 'ENUMERATION', group: 'http_enum', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
     ],
     gatedTasks: [
-      { tool: 'nuclei', phase: 'EXPLOITATION', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
-      { tool: 'sqlmap', phase: 'EXPLOITATION', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
+      { tool: 'nuclei', phase: 'EXPLOITATION', group: 'http_exploit', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
+      { tool: 'sqlmap', phase: 'EXPLOITATION', group: 'http_exploit', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
     ],
     triggerLabel: (p) => `HTTP on port ${p.port}`,
   },
@@ -89,8 +155,8 @@ const PORT_RULES: Array<{
   {
     match: (p) => p.service === 'smb' || p.service === 'microsoft-ds' || p.service === 'netbios-ssn' || [445, 139, 4455].includes(p.port),
     autoTasks: [
-      { tool: 'enum4linux', phase: 'ENUMERATION', configFn: () => ({}) },
-      { tool: 'smbclient', phase: 'ENUMERATION', configFn: () => ({}) },
+      { tool: 'enum4linux', phase: 'ENUMERATION', group: 'smb_enum', configFn: () => ({}) },
+      { tool: 'smbclient', phase: 'ENUMERATION', group: 'smb_enum', configFn: () => ({}) },
     ],
     gatedTasks: [],
     triggerLabel: (p) => `SMB on port ${p.port}`,
@@ -100,7 +166,7 @@ const PORT_RULES: Array<{
     match: (p) => p.service === 'mysql' || [3306, 3307, 3308].includes(p.port),
     autoTasks: [],
     gatedTasks: [
-      { tool: 'hydra', phase: 'EXPLOITATION', configFn: (p, _t) => ({ service: 'mysql', port: p.port }) },
+      { tool: 'hydra', phase: 'EXPLOITATION', group: 'brute', configFn: (p, _t) => ({ service: 'mysql', port: p.port }) },
     ],
     triggerLabel: (p) => `MySQL on port ${p.port}`,
   },
@@ -108,7 +174,7 @@ const PORT_RULES: Array<{
   {
     match: (p) => p.service === 'snmp' || p.port === 161 || p.port === 1161 || p.port === 1162,
     autoTasks: [
-      { tool: 'snmpwalk', phase: 'ENUMERATION', configFn: () => ({}) },
+      { tool: 'snmpwalk', phase: 'ENUMERATION', group: 'snmp_enum', configFn: () => ({}) },
     ],
     gatedTasks: [],
     triggerLabel: (p) => `SNMP on port ${p.port}`,
@@ -118,7 +184,7 @@ const PORT_RULES: Array<{
     match: (p) => p.service === 'rdp' || p.service === 'ms-wbt-server' || p.port === 3389,
     autoTasks: [],
     gatedTasks: [
-      { tool: 'hydra', phase: 'EXPLOITATION', configFn: (p, _t) => ({ service: 'rdp', port: p.port }) },
+      { tool: 'hydra', phase: 'EXPLOITATION', group: 'brute', configFn: (p, _t) => ({ service: 'rdp', port: p.port }) },
     ],
     triggerLabel: (p) => `RDP on port ${p.port}`,
   },
@@ -130,25 +196,25 @@ const URL_RULES: Array<{
   gatedTasks: Array<{ tool: string; phase: CasePhase; configFn: (url: string) => Record<string, unknown> }>;
   triggerLabel: (url: string) => string;
 }> = [
-  // Login pages → SQL injection
+  // Login pages → SQL injection (require path-level match, not just substring)
   {
-    match: (url) => /login|signin|auth/i.test(url),
+    match: (url) => /\/(login|signin|auth)(\/|$|\?)/i.test(url),
     gatedTasks: [
       { tool: 'sqlmap', phase: 'EXPLOITATION', configFn: (url) => ({ targetUrl: url, forms: true }) },
     ],
     triggerLabel: (url) => `Login page: ${url}`,
   },
-  // Admin panels
+  // Admin panels (require path-level match)
   {
-    match: (url) => /admin|dashboard|manage/i.test(url),
+    match: (url) => /\/(admin|dashboard|manage)(\/|$|\?)/i.test(url),
     gatedTasks: [
       { tool: 'sqlmap', phase: 'EXPLOITATION', configFn: (url) => ({ targetUrl: url, forms: true }) },
     ],
     triggerLabel: (url) => `Admin panel: ${url}`,
   },
-  // Upload directories
+  // Upload directories (require path-level match)
   {
-    match: (url) => /upload/i.test(url),
+    match: (url) => /\/(upload|uploads)(\/|$|\?)/i.test(url),
     gatedTasks: [
       { tool: 'ffuf', phase: 'EXPLOITATION', configFn: (url) => ({ targetUrl: url }) },
     ],
@@ -183,6 +249,8 @@ class IntelligenceEngine {
   /**
    * Analyze all findings for a target and generate task recommendations.
    * Called when a case is created and after each exploitation task completes.
+   *
+   * v2: Uses normalized URL dedup, false-positive filtering, and per-tool caps.
    */
   async analyzeFindings(
     caseId: string,
@@ -196,13 +264,21 @@ class IntelligenceEngine {
 
     const baseTarget = target.url;
 
-    // Get existing tasks to avoid duplicates
+    // Get existing tasks — use NORMALIZED dedup keys to prevent URL variant dupes
     const existingTasks = await prisma.exploitTask.findMany({
       where: { caseId },
       select: { tool: true, target: true, config: true },
     });
-    const existingKey = (tool: string, tgt: string) => `${tool}::${tgt}`;
-    const existing = new Set(existingTasks.map((t) => existingKey(t.tool, t.target)));
+    const existing = new Set(existingTasks.map((t) => dedupKey(t.tool, t.target)));
+
+    // Track per-tool target counts for capping
+    const toolTargetCounts = new Map<string, number>();
+    for (const t of existingTasks) {
+      toolTargetCounts.set(t.tool, (toolTargetCounts.get(t.tool) ?? 0) + 1);
+    }
+
+    // Also track recommendations we're adding THIS cycle to prevent intra-batch dupes
+    const batchDedup = new Set<string>();
 
     // 1. Analyze port/service discoveries
     const portFindings = await this.getPortFindings(targetId);
@@ -216,8 +292,12 @@ class IntelligenceEngine {
         // Auto-run enumeration tasks
         for (const task of rule.autoTasks) {
           const resolvedTarget = this.resolveTarget(baseTarget, pf);
-          if (existing.has(existingKey(task.tool, resolvedTarget))) continue;
+          const dk = dedupKey(task.tool, resolvedTarget);
+          if (existing.has(dk) || batchDedup.has(dk)) continue;
+          if (this.isToolCapped(task.tool, toolTargetCounts)) continue;
 
+          batchDedup.add(dk);
+          toolTargetCounts.set(task.tool, (toolTargetCounts.get(task.tool) ?? 0) + 1);
           recommendations.push({
             tool: task.tool,
             target: resolvedTarget,
@@ -226,14 +306,19 @@ class IntelligenceEngine {
             autoRun: true,
             config: task.configFn(pf, baseTarget),
             priority: priority++,
+            parallelGroup: (task as any).group,
           });
         }
 
         // Gated exploitation tasks
         for (const task of rule.gatedTasks) {
           const resolvedTarget = this.resolveTarget(baseTarget, pf);
-          if (existing.has(existingKey(task.tool, resolvedTarget))) continue;
+          const dk = dedupKey(task.tool, resolvedTarget);
+          if (existing.has(dk) || batchDedup.has(dk)) continue;
+          if (this.isToolCapped(task.tool, toolTargetCounts)) continue;
 
+          batchDedup.add(dk);
+          toolTargetCounts.set(task.tool, (toolTargetCounts.get(task.tool) ?? 0) + 1);
           recommendations.push({
             tool: task.tool,
             target: resolvedTarget,
@@ -242,46 +327,62 @@ class IntelligenceEngine {
             autoRun: false,
             config: task.configFn(pf, baseTarget),
             priority: priority++,
+            parallelGroup: (task as any).group,
           });
         }
       }
     }
 
-    // 2. Analyze URL discoveries
+    // 2. Analyze URL discoveries (with false-positive filtering)
     const urlFindings = await this.getUrlFindings(targetId);
     for (const uf of urlFindings) {
-      for (const rule of URL_RULES) {
-        if (!rule.match(uf.url)) continue;
+      // Skip false-positive URLs (Apache sort params, IIS FrontPage, etc.)
+      if (isFalsePositiveUrl(uf.url)) continue;
 
-        const trigger = `auto:${rule.triggerLabel(uf.url)}`;
+      // Ensure URLs have a host — skip bare relative paths
+      const resolvedUrl = this.ensureAbsoluteUrl(uf.url, baseTarget);
+      if (!resolvedUrl) continue;
+
+      for (const rule of URL_RULES) {
+        if (!rule.match(resolvedUrl)) continue;
+
+        const trigger = `auto:${rule.triggerLabel(resolvedUrl)}`;
 
         // Auto-run tasks (e.g., http_fetch for sensitive files)
         if (rule.autoTasks) {
           for (const task of rule.autoTasks) {
-            if (existing.has(existingKey(task.tool, uf.url))) continue;
+            const dk = dedupKey(task.tool, resolvedUrl);
+            if (existing.has(dk) || batchDedup.has(dk)) continue;
+            if (this.isToolCapped(task.tool, toolTargetCounts)) continue;
 
+            batchDedup.add(dk);
+            toolTargetCounts.set(task.tool, (toolTargetCounts.get(task.tool) ?? 0) + 1);
             recommendations.push({
               tool: task.tool,
-              target: uf.url,
+              target: resolvedUrl,
               phase: task.phase,
               trigger,
               autoRun: true,
-              config: task.configFn(uf.url),
+              config: task.configFn(resolvedUrl),
               priority: 3,
             });
           }
         }
 
         for (const task of rule.gatedTasks) {
-          if (existing.has(existingKey(task.tool, uf.url))) continue;
+          const dk = dedupKey(task.tool, resolvedUrl);
+          if (existing.has(dk) || batchDedup.has(dk)) continue;
+          if (this.isToolCapped(task.tool, toolTargetCounts)) continue;
 
+          batchDedup.add(dk);
+          toolTargetCounts.set(task.tool, (toolTargetCounts.get(task.tool) ?? 0) + 1);
           recommendations.push({
             tool: task.tool,
-            target: uf.url,
+            target: resolvedUrl,
             phase: task.phase,
             trigger,
             autoRun: false,
-            config: task.configFn(uf.url),
+            config: task.configFn(resolvedUrl),
             priority: 10,
           });
         }
@@ -366,10 +467,17 @@ class IntelligenceEngine {
       where: { targetId, category: 'URL' },
     });
 
-    return lootItems.map((item) => ({
-      url: item.value.replace(/\]$/, ''), // gobuster sometimes appends ]
-      source: item.source,
-    }));
+    // Deduplicate by normalized URL — multiple sources may discover the same path
+    const seen = new Set<string>();
+    const results: UrlFinding[] = [];
+    for (const item of lootItems) {
+      const url = item.value.replace(/\]$/, ''); // gobuster sometimes appends ]
+      const normalized = normalizeUrlForDedup(url);
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      results.push({ url, source: item.source });
+    }
+    return results;
   }
 
   private async getCredentialFindings(targetId: string): Promise<CredFinding[]> {
@@ -391,6 +499,32 @@ class IntelligenceEngine {
       return `${url.hostname}:${pf.port}`;
     } catch {
       return `${baseTarget}:${pf.port}`;
+    }
+  }
+
+  /** Check if a tool has hit its per-tool target cap */
+  private isToolCapped(tool: string, counts: Map<string, number>): boolean {
+    const cap = TOOL_TARGET_CAPS[tool];
+    if (cap === undefined) return false; // no cap for this tool
+    return (counts.get(tool) ?? 0) >= cap;
+  }
+
+  /** Ensure a URL is absolute — resolve relative paths against the base target */
+  private ensureAbsoluteUrl(url: string, baseTarget: string): string | null {
+    // Already absolute
+    if (/^https?:\/\//i.test(url)) return url;
+
+    // Relative path — resolve against base target
+    try {
+      const base = new URL(baseTarget);
+      if (url.startsWith('/')) {
+        return `${base.protocol}//${base.host}${url}`;
+      }
+      // Bare path — append to base
+      const basePath = base.pathname.replace(/\/[^/]*$/, '/');
+      return `${base.protocol}//${base.host}${basePath}${url}`;
+    } catch {
+      return null; // can't resolve
     }
   }
 }

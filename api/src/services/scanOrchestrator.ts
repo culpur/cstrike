@@ -326,7 +326,7 @@ class ScanOrchestrator {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Manual Pipeline — fixed tool list, no AI
+  // Manual Pipeline — fixed tool list, parallel groups, no AI
   // ══════════════════════════════════════════════════════════════════════════
 
   private async runManualPipeline(
@@ -343,30 +343,82 @@ class ScanOrchestrator {
       ? requestedTools.filter((t) => allowedTools.length === 0 || allowedTools.includes(t))
       : this.getDefaultTools(mode ?? 'full');
 
-    const totalTools = scanTools.length;
-    let completedTools = 0;
-
     emitPhaseChange({ phase: 'recon', target, status: 'running' });
     emitScanStarted({ target, scan_id: scanId, tools: scanTools });
 
-    // Run each tool
-    for (const tool of scanTools) {
+    // Group tools into parallel execution batches
+    const groups = this.groupToolsForParallel(scanTools);
+    let completedTools = 0;
+    const totalTools = scanTools.length;
+
+    for (const group of groups) {
       if (state?.cancelled) {
         emitLogEntry({ level: 'WARN', source: 'orchestrator', message: `Scan ${scanId} cancelled` });
         break;
       }
-
-      // Check for pause
       if (state?.paused) {
         await this.handlePause(scanId, targetId, target, [], completedTools);
         return;
       }
 
-      completedTools++;
-      const progress = `${completedTools}/${totalTools}`;
+      if (group.length === 1) {
+        // Single tool — run sequentially (no overhead)
+        completedTools++;
+        await this.executeTool(scanId, targetId, target, group[0], `${completedTools}/${totalTools}`);
+      } else {
+        // Multiple tools — run in parallel
+        emitLogEntry({
+          level: 'INFO',
+          source: 'orchestrator',
+          message: `Running ${group.length} tools in parallel: ${group.join(', ')}`,
+        });
 
-      await this.executeTool(scanId, targetId, target, tool, progress);
+        const promises = group.map((tool) => {
+          completedTools++;
+          return this.executeTool(scanId, targetId, target, tool, `${completedTools}/${totalTools}`);
+        });
+        await Promise.allSettled(promises);
+      }
     }
+  }
+
+  /**
+   * Group tools into parallel execution batches.
+   * Tools that can safely run concurrently are grouped together.
+   * Port scanners run first (they feed everything else), then enum tools in parallel.
+   */
+  private groupToolsForParallel(tools: string[]): string[][] {
+    // Phase 1: Port scanners must run first (nmap is primary, others are supplementary)
+    const portScanners = tools.filter((t) => ['nmap', 'masscan', 'rustscan'].includes(t));
+    // Phase 2: DNS tools can run in parallel
+    const dnsTools = tools.filter((t) => ['subfinder', 'amass', 'dnsenum', 'dnsrecon'].includes(t));
+    // Phase 3: HTTP fingerprinting tools can run in parallel
+    const httpFingerprint = tools.filter((t) => ['httpx', 'whatweb', 'wafw00f', 'sslscan', 'sslyze', 'testssl'].includes(t));
+    // Phase 4: Directory/content discovery tools can run in parallel
+    const dirDiscovery = tools.filter((t) => ['gobuster', 'dirb', 'ffuf', 'wfuzz', 'feroxbuster'].includes(t));
+    // Phase 5: Vulnerability scanners can run in parallel
+    const vulnScanners = tools.filter((t) => ['nikto', 'nuclei', 'wpscan'].includes(t));
+    // Phase 6: Everything else — sequential
+    const covered = new Set([...portScanners, ...dnsTools, ...httpFingerprint, ...dirDiscovery, ...vulnScanners]);
+    const remaining = tools.filter((t) => !covered.has(t));
+
+    const groups: string[][] = [];
+    // Port scanners run sequentially (nmap first for best data, then supplementary)
+    for (const ps of portScanners) groups.push([ps]);
+    // DNS tools in parallel
+    if (dnsTools.length > 0) groups.push(dnsTools);
+    // HTTP fingerprinting in parallel
+    if (httpFingerprint.length > 0) groups.push(httpFingerprint);
+    // Directory discovery in parallel (but cap at 3 concurrent to not overwhelm target)
+    for (let i = 0; i < dirDiscovery.length; i += 3) {
+      groups.push(dirDiscovery.slice(i, i + 3));
+    }
+    // Vuln scanners in parallel
+    if (vulnScanners.length > 0) groups.push(vulnScanners);
+    // Remaining tools sequentially
+    for (const r of remaining) groups.push([r]);
+
+    return groups.filter((g) => g.length > 0);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -507,16 +559,25 @@ class ScanOrchestrator {
           scanId,
         });
 
-        for (const tool of initialTools) {
-          if (state?.cancelled) break;
-          if (state?.paused) {
-            await this.handlePause(scanId, targetId, target, toolHistory, iteration);
-            return;
-          }
+        // Run initial recon tools — nmap first, then rest in parallel
+        const [nmap, ...otherInitial] = initialTools;
+        if (nmap && !state?.cancelled && !state?.paused) {
           iteration++;
-
-          const result = await this.executeTool(scanId, targetId, target, tool, `${iteration}/?`);
+          const result = await this.executeTool(scanId, targetId, target, nmap, `${iteration}/?`);
           toolHistory.push(this.summarizeResult(result));
+        }
+        if (otherInitial.length > 0 && !state?.cancelled && !state?.paused) {
+          // Run remaining initial tools in parallel
+          const parallelResults = await Promise.allSettled(
+            otherInitial.map(async (tool) => {
+              iteration++;
+              const result = await this.executeTool(scanId, targetId, target, tool, `${iteration}/?`);
+              return this.summarizeResult(result);
+            }),
+          );
+          for (const r of parallelResults) {
+            if (r.status === 'fulfilled') toolHistory.push(r.value);
+          }
         }
       }
     }

@@ -137,12 +137,22 @@ class VpnService {
     const iface = PROVIDER_INTERFACES[provider];
 
     try {
-      const cmd = this.buildAuthCommand(provider, authToken, options);
-      execSync(cmd, {
-        timeout: 30_000,
-        stdio: 'pipe',
-        env: this.buildEnv(),
-      });
+      if (provider === 'nordvpn') {
+        // NordVPN: validate token using nordgen (pip package) instead of CLI
+        // nordgen exchanges the token for a WireGuard private key — if it succeeds, the token is valid
+        // We generate configs as a side-effect of validation (useful for rotation pool)
+        const { vpnRotationService } = await import('./vpnRotationService.js');
+        const result = await vpnRotationService.generateNordConfigs(authToken);
+        console.log(`[VPN] NordVPN token validated — ${result.count} WireGuard configs generated`);
+      } else {
+        // Tailscale and Mullvad: use their respective CLI tools
+        const cmd = this.buildAuthCommand(provider, authToken, options);
+        execSync(cmd, {
+          timeout: 30_000,
+          stdio: 'pipe',
+          env: this.buildEnv(),
+        });
+      }
 
       // Store auth token and options in DB
       await prisma.vpnConnection.upsert({
@@ -213,17 +223,14 @@ class VpnService {
    * Check if a provider's CLI is currently logged in.
    * Returns true if authenticated, false otherwise.
    */
-  checkProviderLoginStatus(provider: VpnProvider): boolean {
+  async checkProviderLoginStatus(provider: VpnProvider): Promise<boolean> {
     try {
       switch (provider) {
         case 'nordvpn': {
-          const out = execSync('sudo nordvpn account 2>&1', {
-            timeout: 10_000,
-            encoding: 'utf-8',
-            stdio: 'pipe',
-            env: this.buildEnv(),
-          });
-          return !out.toLowerCase().includes('not logged in');
+          // NordVPN: check if we have a stored auth token and generated configs
+          // The nordvpn CLI is not installed — we use nordgen (pip package) instead
+          const conn = await prisma.vpnConnection.findUnique({ where: { provider: 'nordvpn' } });
+          return !!(conn?.authToken);
         }
         case 'mullvad': {
           const out = execSync('sudo mullvad account get 2>&1', {
@@ -283,7 +290,7 @@ class VpnService {
 
     // For Nord/Mullvad — check login status, re-auth from stored token if needed
     if (provider === 'nordvpn' || provider === 'mullvad') {
-      if (!this.checkProviderLoginStatus(provider) && existing?.authToken) {
+      if (!(await this.checkProviderLoginStatus(provider)) && existing?.authToken) {
         console.log(`[VPN] ${provider} not logged in — re-authenticating from stored token`);
         const authResult = await this.authenticate(provider, existing.authToken);
         if (!authResult.success) {
