@@ -239,16 +239,13 @@ RUN pip3 install --break-system-packages \
 # installs a Python CLI wrapper that shadows the Go binary at /usr/local/bin/httpx
 COPY --from=tools /tmp/tools/httpx /usr/local/bin/httpx
 
-# Create unprivileged user for tool execution (split-routing marks uid 1000 → wg0)
-# node:22-bookworm-slim already has gid 1000 (node group), so use it
-RUN useradd -u 1000 -g 1000 -s /bin/sh -M -N cstrike-ops && \
-    # Grant raw socket capability to tools that need it (nmap SYN scan, masscan)
-    setcap cap_net_raw+ep /usr/bin/nmap 2>/dev/null; \
+# Use existing 'node' user (uid 1000, gid 1000) for tool execution
+# Split routing marks uid 1000 packets with fwmark → routed through wg0
+RUN setcap cap_net_raw+ep /usr/bin/nmap 2>/dev/null; \
     setcap cap_net_raw+ep /usr/bin/masscan 2>/dev/null; \
     setcap cap_net_raw+ep /usr/bin/mtr-packet 2>/dev/null; \
     setcap cap_net_raw+ep /usr/bin/traceroute 2>/dev/null; \
     setcap cap_net_raw+ep /usr/local/bin/rustscan 2>/dev/null; \
-    # Ensure tool user can read configs, wordlists, and write to data dir
     mkdir -p /opt/cstrike/data && \
     chmod -R o+rX /opt/wordlists /opt/nikto /opt/exploitdb /opt/XSStrike /opt/commix /opt/dnsenum 2>/dev/null; \
     true
