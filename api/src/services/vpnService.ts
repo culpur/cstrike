@@ -608,6 +608,11 @@ class VpnService {
     // Get VPN interface IP for source routing (packets must come FROM the wg address)
     const vpnIp = this.getInterfaceIp(iface);
 
+    // Get WireGuard endpoint + default gateway to prevent routing loop.
+    // WireGuard inherits fwmark from inner packets to outer UDP, so without an
+    // explicit route, the outer encrypted packets get routed back through wg0.
+    const { endpointIp, gateway, gatewayDev } = this.getWgEndpointAndGateway(iface);
+
     const commands = [
       // Policy routing: marked packets → table with VPN default route
       `ip rule add fwmark ${mark} table ${FWMARK_TABLE} 2>/dev/null || true`,
@@ -615,6 +620,12 @@ class VpnService {
       vpnIp
         ? `ip route replace default dev ${iface} src ${vpnIp} table ${FWMARK_TABLE}`
         : `ip route replace default dev ${iface} table ${FWMARK_TABLE}`,
+
+      // Prevent routing loop: WireGuard outer UDP must go via default gateway,
+      // not back through wg0. The /32 route is more specific than the default.
+      ...(endpointIp && gateway && gatewayDev
+        ? [`ip route replace ${endpointIp}/32 via ${gateway} dev ${gatewayDev} table ${FWMARK_TABLE}`]
+        : []),
 
       // Flush existing mangle OUTPUT rules (clean slate)
       `iptables -t mangle -F OUTPUT 2>/dev/null || true`,
@@ -644,7 +655,7 @@ class VpnService {
       }
     }
 
-    console.log(`[VPN] Split routing via ${iface} active (fwmark=${mark}, dns=${dnsServer})`);
+    console.log(`[VPN] Split routing via ${iface} active (fwmark=${mark}, endpoint=${endpointIp}, dns=${dnsServer})`);
   }
 
   /**
@@ -707,6 +718,44 @@ class VpnService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Get WireGuard endpoint IP and default gateway for routing loop prevention.
+   * WireGuard inherits fwmark from inner to outer SKBs, so the encrypted UDP
+   * must be explicitly routed through the physical interface.
+   */
+  private getWgEndpointAndGateway(iface: string): {
+    endpointIp: string | null;
+    gateway: string | null;
+    gatewayDev: string | null;
+  } {
+    let endpointIp: string | null = null;
+    let gateway: string | null = null;
+    let gatewayDev: string | null = null;
+
+    try {
+      const endpoints = execSync(`wg show ${iface} endpoints 2>/dev/null`, {
+        timeout: 3_000, encoding: 'utf-8', stdio: 'pipe', env: this.buildEnv(),
+      });
+      // Format: "<pubkey>\t<ip>:<port>"
+      const epMatch = endpoints.match(/\t(\d+\.\d+\.\d+\.\d+):\d+/);
+      if (epMatch) endpointIp = epMatch[1];
+    } catch { /* non-fatal */ }
+
+    try {
+      const route = execSync('ip -4 route show default 2>/dev/null', {
+        timeout: 3_000, encoding: 'utf-8', stdio: 'pipe', env: this.buildEnv(),
+      });
+      // Format: "default via <gw> dev <dev> ..."
+      const gwMatch = route.match(/via\s+(\S+)\s+dev\s+(\S+)/);
+      if (gwMatch) {
+        gateway = gwMatch[1];
+        gatewayDev = gwMatch[2];
+      }
+    } catch { /* non-fatal */ }
+
+    return { endpointIp, gateway, gatewayDev };
   }
 
   private waitForInterface(iface: string, timeoutMs: number): Promise<void> {
