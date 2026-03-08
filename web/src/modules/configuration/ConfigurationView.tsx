@@ -299,7 +299,7 @@ interface VpnProviderInfo {
 const VPN_PROVIDERS: VpnProviderInfo[] = [
   { id: 'tailscale',  label: 'Tailscale',  description: 'Mesh VPN via tailscale up',        defaultInterface: 'tailscale0' },
   { id: 'wireguard',  label: 'WireGuard',  description: 'Kernel WireGuard (wg-quick)',       defaultInterface: 'wg0' },
-  { id: 'nordvpn',    label: 'NordVPN',    description: 'nordvpn CLI (nordlynx)',             defaultInterface: 'nordlynx' },
+  { id: 'nordvpn',    label: 'NordVPN',    description: 'WireGuard via nordgen config pool',   defaultInterface: 'wg0' },
   { id: 'mullvad',    label: 'Mullvad',    description: 'mullvad CLI daemon',                defaultInterface: 'wg-mullvad' },
   { id: 'openvpn',    label: 'OpenVPN',    description: 'openvpn --daemon (tun0)',            defaultInterface: 'tun0' },
 ];
@@ -346,6 +346,8 @@ export function ConfigurationView() {
     avoidRecentCount: 5,
   });
   const [rotationPool, setRotationPool] = useState({ nordvpn: 0, mullvad: 0, total: 0 });
+  // Actual config filenames for server dropdowns
+  const [nordConfigs, setNordConfigs] = useState<string[]>([]);
   const [rotationGenLoading, setRotationGenLoading] = useState<Record<string, boolean>>({});
   const [rotationGenInputs, setRotationGenInputs] = useState<Record<string, string>>({});
 
@@ -480,6 +482,8 @@ export function ConfigurationView() {
       await apiService.authenticateVpn(provider, authToken, Object.keys(options).length > 0 ? options : undefined);
       addToast({ type: 'success', message: `${provider} authenticated` });
       await loadVpnStatus();
+      // Refresh config pool (nordgen generates configs during auth)
+      if (provider === 'nordvpn' || provider === 'mullvad') await loadRotationConfig();
     } catch (err: any) {
       addToast({ type: 'error', message: `Auth failed: ${err.response?.data?.error || err.message}` });
     } finally {
@@ -508,6 +512,8 @@ export function ConfigurationView() {
       ]);
       setRotationConfig(cfg);
       setRotationPool({ nordvpn: pool.nordvpn.length, mullvad: pool.mullvad.length, total: pool.total });
+      // Store actual filenames for server dropdowns
+      setNordConfigs(pool.nordvpn);
     } catch { /* ignore on load */ }
   };
 
@@ -1478,14 +1484,27 @@ export function ConfigurationView() {
                             </div>
                           </div>
                           <div>
-                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">Server</label>
-                            <input
-                              type="text"
-                              value={inputs.server || ''}
-                              onChange={(e) => setVpnInput('nordvpn', 'server', e.target.value)}
-                              placeholder="us-east (optional)"
-                              className="w-48 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
-                            />
+                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">
+                              Server {nordConfigs.length > 0 && <span className="text-[var(--grok-text-muted)]">({nordConfigs.length} available)</span>}
+                            </label>
+                            {nordConfigs.length > 0 ? (
+                              <select
+                                value={inputs.server || ''}
+                                onChange={(e) => setVpnInput('nordvpn', 'server', e.target.value)}
+                                className="w-64 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                              >
+                                <option value="">Random server</option>
+                                {nordConfigs.map((cfg) => (
+                                  <option key={cfg} value={cfg.replace(/\.conf$/, '')}>
+                                    {cfg.replace(/\.conf$/, '')}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-[9px] text-[var(--grok-text-muted)] italic">
+                                Authenticate to generate server configs
+                              </p>
+                            )}
                           </div>
                           {conn?.hasAuthToken && (
                             <div className="flex items-center gap-1.5 text-[9px] text-[var(--grok-recon-blue)]">

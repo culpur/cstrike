@@ -50,7 +50,7 @@ const PROVIDER_INTERFACES: Record<VpnProvider, string> = {
   wireguard: 'wg0',
   openvpn: 'tun0',
   tailscale: 'tailscale0',
-  nordvpn: 'nordlynx',
+  nordvpn: 'wg0',       // WireGuard via nordgen config pool (no CLI)
   mullvad: 'wg-mullvad',
 };
 
@@ -312,24 +312,59 @@ class VpnService {
     });
 
     try {
-      // Build connect command — pass config path from DB if available
-      const configPath = existing?.configPath ?? undefined;
-      const cmd = this.buildConnectCommand(provider, opts, configPath);
-      execSync(cmd, {
-        timeout: 30_000,
-        stdio: 'pipe',
-        env: this.buildEnv(),
-      });
+      // NordVPN: use WireGuard configs from nordgen pool (no CLI installed)
+      let configPath = existing?.configPath ?? undefined;
+      let effectiveIface = iface;
+
+      if (provider === 'nordvpn') {
+        const { vpnRotationService } = await import('./vpnRotationService.js');
+        const pool = vpnRotationService.getConfigPool();
+        if (pool.nordvpn.length === 0) {
+          return { success: false, provider, status: 'error', error: 'No NordVPN WireGuard configs generated — authenticate first to generate config pool' };
+        }
+        // Pick a random config (or specific server if requested)
+        let selectedConfig: string;
+        if (opts.server) {
+          const match = pool.nordvpn.find((f) => f.toLowerCase().includes(opts.server!.toLowerCase()));
+          selectedConfig = match ?? pool.nordvpn[Math.floor(Math.random() * pool.nordvpn.length)];
+        } else {
+          selectedConfig = pool.nordvpn[Math.floor(Math.random() * pool.nordvpn.length)];
+        }
+        const nordDir = '/opt/cstrike/data/vpn/rotation/nordvpn';
+        configPath = `${nordDir}/${selectedConfig}`;
+        effectiveIface = 'wg0';
+
+        // Use wg-quick with the selected config
+        execSync(`sudo wg-quick up ${configPath}`, {
+          timeout: 30_000,
+          stdio: 'pipe',
+          env: this.buildEnv(),
+        });
+
+        // Store the config path for disconnect
+        await prisma.vpnConnection.update({
+          where: { provider },
+          data: { configPath, server: selectedConfig.replace(/\.conf$/, '') },
+        });
+      } else {
+        // All other providers: use their native CLI
+        const cmd = this.buildConnectCommand(provider, opts, configPath);
+        execSync(cmd, {
+          timeout: 30_000,
+          stdio: 'pipe',
+          env: this.buildEnv(),
+        });
+      }
 
       // Give the interface time to come up
-      await this.waitForInterface(iface, 10_000);
+      await this.waitForInterface(effectiveIface, 10_000);
 
       // Get assigned IP — Tailscale uses its own command
       let assignedIp: string | null;
       if (provider === 'tailscale') {
-        assignedIp = this.getTailscaleIp() ?? this.getInterfaceIp(iface);
+        assignedIp = this.getTailscaleIp() ?? this.getInterfaceIp(effectiveIface);
       } else {
-        assignedIp = this.getInterfaceIp(iface);
+        assignedIp = this.getInterfaceIp(effectiveIface);
       }
 
       // Resolve public IP through VPN
@@ -346,7 +381,7 @@ class VpnService {
         where: { provider },
         data: {
           status: 'CONNECTED',
-          interface: iface,
+          interface: effectiveIface,
           assignedIp,
           publicIp,
           connectedAt: new Date(),
@@ -355,7 +390,7 @@ class VpnService {
 
       // Set up split routing if requested
       if (opts.splitRouting) {
-        this.setupSplitRouting(iface, FWMARK_ID);
+        this.setupSplitRouting(effectiveIface, FWMARK_ID);
       }
 
       return { success: true, provider, status: 'connected', assignedIp };
@@ -638,9 +673,8 @@ class VpnService {
           : 'sudo tailscale up';
 
       case 'nordvpn':
-        return opts.server
-          ? `sudo nordvpn connect ${opts.server}`
-          : 'sudo nordvpn connect';
+        // NordVPN is handled directly in connect() via wg-quick — should never reach here
+        throw new Error('NordVPN connect is handled via wg-quick, not CLI');
 
       case 'mullvad':
         return opts.server
@@ -655,14 +689,14 @@ class VpnService {
   private buildDisconnectCommand(provider: VpnProvider, configPath?: string): string {
     switch (provider) {
       case 'wireguard':
-        // Use the same config path for bringing down
         return `sudo wg-quick down ${configPath ?? 'wg0'}`;
       case 'openvpn':
         return 'sudo pkill -TERM openvpn';
       case 'tailscale':
         return 'sudo tailscale down';
       case 'nordvpn':
-        return 'sudo nordvpn disconnect';
+        // NordVPN uses WireGuard configs via nordgen — bring down with wg-quick
+        return `sudo wg-quick down ${configPath ?? 'wg0'}`;
       case 'mullvad':
         return 'sudo mullvad disconnect';
       default:
