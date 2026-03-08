@@ -336,12 +336,16 @@ class VpnService {
         effectiveIface = 'wg0';
 
         // wg-quick requires /etc/wireguard/<iface>.conf — copy selected config there
-        // Strip DNS line: resolvconf isn't installed and we don't want to change VM DNS
+        // Strip DNS (no resolvconf) and add Table=off (we handle split routing ourselves,
+        // and wg-quick's default route management needs sysctl permissions we don't have)
         mkdirSync('/etc/wireguard', { recursive: true });
         const wgConf = '/etc/wireguard/wg0.conf';
         const rawConf = readFileSync(srcConfig, 'utf-8');
-        const strippedConf = rawConf.split('\n').filter((l) => !l.trim().startsWith('DNS')).join('\n');
-        writeFileSync(wgConf, strippedConf, { mode: 0o600 });
+        const lines = rawConf.split('\n').filter((l) => !l.trim().startsWith('DNS'));
+        // Insert Table = off after [Interface] to prevent wg-quick route management
+        const ifaceIdx = lines.findIndex((l) => l.trim() === '[Interface]');
+        if (ifaceIdx >= 0) lines.splice(ifaceIdx + 1, 0, 'Table = off');
+        writeFileSync(wgConf, lines.join('\n'), { mode: 0o600 });
         configPath = wgConf;
 
         // Use wg-quick with the interface name (resolves to /etc/wireguard/wg0.conf)

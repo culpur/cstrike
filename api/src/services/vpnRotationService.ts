@@ -450,11 +450,14 @@ class VpnRotationService {
         await this.sleep(1000);
       }
 
-      // Copy next config to /etc/wireguard/wg0.conf (strip DNS — no resolvconf on host)
+      // Copy next config to /etc/wireguard/wg0.conf
+      // Strip DNS (no resolvconf) and add Table=off (split routing handled separately)
       mkdirSync('/etc/wireguard', { recursive: true });
       const rawConf = readFileSync(nextConfig, 'utf-8');
-      const strippedConf = rawConf.split('\n').filter((l) => !l.trim().startsWith('DNS')).join('\n');
-      writeFileSync('/etc/wireguard/wg0.conf', strippedConf, { mode: 0o600 });
+      const lines = rawConf.split('\n').filter((l) => !l.trim().startsWith('DNS'));
+      const ifaceIdx = lines.findIndex((l) => l.trim() === '[Interface]');
+      if (ifaceIdx >= 0) lines.splice(ifaceIdx + 1, 0, 'Table = off');
+      writeFileSync('/etc/wireguard/wg0.conf', lines.join('\n'), { mode: 0o600 });
       execSync('wg-quick up wg0', {
         timeout: 15_000,
         stdio: 'pipe',
