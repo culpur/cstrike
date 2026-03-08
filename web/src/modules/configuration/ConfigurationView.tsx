@@ -1296,12 +1296,15 @@ export function ConfigurationView() {
                         : 'border-[var(--grok-border)] bg-[var(--grok-surface-2)]'
                   }`}
                 >
-                  {/* Header row */}
-                  <div className="flex items-center gap-3 px-3 py-2.5">
+                  {/* Header row — entire row toggles expansion */}
+                  <div
+                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer"
+                    onClick={() => toggleVpnPanel(providerInfo.id)}
+                  >
                     <VpnStatusDot status={status} />
 
                     {/* Provider info */}
-                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleVpnPanel(providerInfo.id)}>
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-[var(--grok-text-heading)]">{providerInfo.label}</span>
                         <span className="text-[9px] font-mono text-[var(--grok-text-muted)]">{providerInfo.defaultInterface}</span>
@@ -1334,16 +1337,13 @@ export function ConfigurationView() {
                     }`}>{status}</span>
 
                     {/* Expand toggle */}
-                    <button
-                      onClick={() => toggleVpnPanel(providerInfo.id)}
-                      className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-text-muted)]"
-                    >
+                    <span className="p-1 rounded text-[var(--grok-text-muted)]">
                       {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                    </button>
+                    </span>
 
                     {/* Connect/Disconnect */}
                     <button
-                      onClick={isConnected ? () => handleVpnDisconnect(providerInfo.id) : () => handleVpnConnect(providerInfo.id, inputs.server)}
+                      onClick={(e) => { e.stopPropagation(); isConnected ? handleVpnDisconnect(providerInfo.id) : handleVpnConnect(providerInfo.id, inputs.server); }}
                       disabled={isActionLoading || isConnecting}
                       className={`flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         isConnected
@@ -1619,7 +1619,7 @@ function VpnStatusDot({ status }: { status: string }) {
     );
   }
   return (
-    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--grok-surface-3)] border border-[var(--grok-border)]" />
+    <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--grok-surface-3)] border border-[var(--grok-border)]" />
   );
 }
 
