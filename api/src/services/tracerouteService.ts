@@ -521,8 +521,12 @@ class TracerouteService {
         '--report', '--report-cycles', '1', '--no-dns', '--json', host,
       ], {
         timeout: 30_000,
+        uid: 1000,
+        gid: 1000,
         env: {
           ...process.env,
+          HOME: '/tmp',
+          USER: 'cstrike-ops',
           PATH: `/usr/local/bin:/usr/bin:/usr/sbin:${env.HOST_LOCAL_BIN_PATH}:${env.HOST_BIN_PATH}:${env.HOST_SBIN_PATH}:${process.env.PATH}`,
         },
       });
@@ -551,8 +555,12 @@ class TracerouteService {
       let output = '';
       const child = spawn('traceroute', ['-n', '-m', '30', '-w', '2', host], {
         timeout: 60_000,
+        uid: 1000,
+        gid: 1000,
         env: {
           ...process.env,
+          HOME: '/tmp',
+          USER: 'cstrike-ops',
           PATH: `/usr/local/bin:/usr/bin:/usr/sbin:${process.env.PATH}`,
         },
       });

@@ -247,8 +247,12 @@ class MCPBridge {
 
     this.process = spawn(this.PYTHON_BIN, [this.MCP_SERVER_PATH], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      uid: 1000,
+      gid: 1000,
       env: {
         ...process.env,
+        HOME: '/tmp',
+        USER: 'cstrike-ops',
         PATH: `${env.HOST_LOCAL_BIN_PATH}:${env.HOST_BIN_PATH}:${env.HOST_SBIN_PATH}:${process.env.PATH}`,
         PYTHONUNBUFFERED: '1',
       },

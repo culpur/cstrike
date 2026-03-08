@@ -239,6 +239,19 @@ RUN pip3 install --break-system-packages \
 # installs a Python CLI wrapper that shadows the Go binary at /usr/local/bin/httpx
 COPY --from=tools /tmp/tools/httpx /usr/local/bin/httpx
 
+# Create unprivileged user for tool execution (split-routing marks uid 1000 → wg0)
+RUN groupadd -g 1000 cstrike-ops && \
+    useradd -u 1000 -g 1000 -s /bin/sh -M cstrike-ops && \
+    # Grant raw socket capability to tools that need it (nmap SYN scan, masscan)
+    setcap cap_net_raw+ep /usr/bin/nmap 2>/dev/null || true && \
+    setcap cap_net_raw+ep /usr/bin/masscan 2>/dev/null || true && \
+    setcap cap_net_raw+ep /usr/bin/mtr-packet 2>/dev/null || true && \
+    setcap cap_net_raw+ep /usr/bin/traceroute 2>/dev/null || true && \
+    setcap cap_net_raw+ep /usr/local/bin/rustscan 2>/dev/null || true && \
+    # Ensure tool user can read configs, wordlists, and write to data dir
+    mkdir -p /opt/cstrike/data && \
+    chmod -R o+rX /opt/wordlists /opt/nikto /opt/exploitdb /opt/XSStrike /opt/commix /opt/dnsenum 2>/dev/null || true
+
 # Generate Prisma client
 RUN npx prisma generate
 
@@ -247,4 +260,4 @@ HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=30s \
     CMD curl -sf http://127.0.0.1:3001/health || exit 1
 
 # Push schema, seed, copy wordlists into volume, and start
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss 2>/dev/null || true && psql \"$DATABASE_URL\" -f prisma/seed.sql 2>/dev/null || true && mkdir -p /opt/cstrike/data/wordlists && cp -f /opt/wordlists/* /opt/cstrike/data/wordlists/ 2>/dev/null || true && node dist/server.js"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss 2>/dev/null || true && psql \"$DATABASE_URL\" -f prisma/seed.sql 2>/dev/null || true && mkdir -p /opt/cstrike/data/wordlists && cp -f /opt/wordlists/* /opt/cstrike/data/wordlists/ 2>/dev/null || true && chown -R 1000:1000 /opt/cstrike/data 2>/dev/null || chmod -R o+rwX /opt/cstrike/data && chmod -R o+rX /opt/cstrike/data/wordlists && node dist/server.js"]

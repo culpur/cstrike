@@ -142,8 +142,12 @@ class CredentialValidator {
     return new Promise((resolve) => {
       const child = spawn(cmd, args, {
         timeout: 30_000,
+        uid: 1000,
+        gid: 1000,
         env: {
           ...process.env,
+          HOME: '/tmp',
+          USER: 'cstrike-ops',
           PATH: `${env.HOST_LOCAL_BIN_PATH}:${env.HOST_BIN_PATH}:${process.env.PATH}`,
         },
       });

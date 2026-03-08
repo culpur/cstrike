@@ -623,10 +623,15 @@ class ToolExecutor {
     });
 
     return new Promise((resolve) => {
+      // Spawn as cstrike-ops (uid 1000) so iptables fwmark routes tool traffic through wg0
       const child = spawn(binary, spawnArgs, {
         timeout,
+        uid: 1000,
+        gid: 1000,
         env: {
           ...process.env,
+          HOME: '/tmp',
+          USER: 'cstrike-ops',
           PATH: `/usr/local/bin:/usr/bin:${env.HOST_LOCAL_BIN_PATH}:${env.HOST_BIN_PATH}:${env.HOST_SBIN_PATH}:${process.env.PATH}`,
         },
       });
