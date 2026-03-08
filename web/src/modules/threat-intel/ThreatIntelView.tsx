@@ -96,37 +96,38 @@ interface EnrichmentResult {
 }
 
 // ============================================================================
-// OpenCTI Client
+// OpenCTI Client — proxied through CStrike API to avoid CORS
 // ============================================================================
 
-const STORAGE_URL_KEY = 'cstrike_opencti_url';
-const STORAGE_TOKEN_KEY = 'cstrike_opencti_token';
+const API_BASE = '/api/v1/threat-intel';
 
 const openctiClient = {
-  getConfig(): OpenCTIConfig {
-    return {
-      url: localStorage.getItem(STORAGE_URL_KEY) ?? '',
-      token: localStorage.getItem(STORAGE_TOKEN_KEY) ?? '',
-    };
+  /** Load config from backend (token is masked in response) */
+  async loadConfig(): Promise<OpenCTIConfig> {
+    try {
+      const res = await fetch(`${API_BASE}/config`);
+      const json = await res.json();
+      if (json.success) return { url: json.data.url, token: json.data.token };
+    } catch { /* fallback */ }
+    return { url: '', token: '' };
   },
 
-  saveConfig(config: OpenCTIConfig): void {
-    localStorage.setItem(STORAGE_URL_KEY, config.url);
-    localStorage.setItem(STORAGE_TOKEN_KEY, config.token);
+  /** Save config to backend DB */
+  async saveConfig(config: OpenCTIConfig): Promise<void> {
+    await fetch(`${API_BASE}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
   },
 
+  /** Proxy a GraphQL query through the CStrike API → OpenCTI */
   async graphql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
-    const { url, token } = this.getConfig();
-    if (!url || !token) throw new Error('OpenCTI not configured');
-
-    const res = await fetch(`${url}/graphql`, {
+    const res = await fetch(`${API_BASE}/graphql`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, variables }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -137,10 +138,12 @@ const openctiClient = {
 
   async testConnection(): Promise<{ ok: boolean; version?: string; error?: string }> {
     try {
-      const data = await this.graphql<{ about: { version: string } }>(
-        `query { about { version } }`
-      );
-      return { ok: true, version: data.about?.version };
+      const res = await fetch(`${API_BASE}/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const json = await res.json();
+      return json.data ?? { ok: false, error: 'Bad response' };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
@@ -650,7 +653,7 @@ export function ThreatIntelView() {
   const { addToast } = useUIStore();
 
   // Connection state
-  const [config, setConfig] = useState<OpenCTIConfig>(() => openctiClient.getConfig());
+  const [config, setConfig] = useState<OpenCTIConfig>({ url: '', token: '' });
   const [showToken, setShowToken] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'failed'>('unknown');
   const [connectionVersion, setConnectionVersion] = useState<string | undefined>();
@@ -685,22 +688,21 @@ export function ThreatIntelView() {
   const displayIndicators = isDemoMode && hasSearched ? DEMO_INDICATORS : indicatorResults;
   const displayReports = isDemoMode ? DEMO_REPORTS : reports;
 
-  // Load targets from CStrike API on mount
+  // Load config from backend + targets on mount, auto-test if configured
+  const hasAutoTested = useRef(false);
   useEffect(() => {
     apiService
       .getTargets()
       .then((targets) => setCstrikeTargets(targets.map((t) => t.url)))
       .catch(() => {/* targets unavailable */});
-  }, []);
 
-  // Auto-test connection on mount if config exists
-  const hasAutoTested = useRef(false);
-  useEffect(() => {
-    if (hasAutoTested.current) return;
-    if (config.url && config.token) {
-      hasAutoTested.current = true;
-      handleTestConnection(config);
-    }
+    openctiClient.loadConfig().then((cfg) => {
+      setConfig(cfg);
+      if (!hasAutoTested.current && cfg.url && cfg.token) {
+        hasAutoTested.current = true;
+        handleTestConnection(cfg);
+      }
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -711,7 +713,8 @@ export function ThreatIntelView() {
   async function handleTestConnection(cfg: OpenCTIConfig = config) {
     setIsTesting(true);
     try {
-      openctiClient.saveConfig(cfg);
+      // Save config to backend first, then test via proxy
+      await openctiClient.saveConfig(cfg);
       const result = await openctiClient.testConnection();
       if (result.ok) {
         setConnectionStatus('connected');
@@ -729,8 +732,8 @@ export function ThreatIntelView() {
     }
   }
 
-  function handleSaveConfig() {
-    openctiClient.saveConfig(config);
+  async function handleSaveConfig() {
+    await openctiClient.saveConfig(config);
     addToast({ type: 'success', message: 'OpenCTI config saved' });
   }
 

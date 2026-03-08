@@ -35,6 +35,7 @@ import { campaignsRouter } from './routes/campaigns.js';
 import { wordlistsRouter } from './routes/wordlists.js';
 import { terminalRouter } from './routes/terminal.js';
 import { evidenceRouter } from './routes/evidence.js';
+import { threatIntelRouter } from './routes/threatIntel.js';
 
 // Services
 import { startMetricsCollector } from './services/metricsCollector.js';
@@ -74,6 +75,7 @@ api.use('/mcp', mcpRouter);
 api.use('/vpn', vpnRouter);
 api.use('/terminal', terminalRouter);
 api.use('/evidence', evidenceRouter);
+api.use('/threat-intel', threatIntelRouter);
 
 app.use('/api/v1', api);
 
