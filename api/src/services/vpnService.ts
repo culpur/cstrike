@@ -605,10 +605,16 @@ class VpnService {
       if (m) dnsServer = m[1];
     } catch { /* use fallback exclusions */ }
 
+    // Get VPN interface IP for source routing (packets must come FROM the wg address)
+    const vpnIp = this.getInterfaceIp(iface);
+
     const commands = [
       // Policy routing: marked packets → table with VPN default route
       `ip rule add fwmark ${mark} table ${FWMARK_TABLE} 2>/dev/null || true`,
-      `ip route replace default dev ${iface} table ${FWMARK_TABLE}`,
+      // Source IP must be the VPN address so the peer accepts the traffic
+      vpnIp
+        ? `ip route replace default dev ${iface} src ${vpnIp} table ${FWMARK_TABLE}`
+        : `ip route replace default dev ${iface} table ${FWMARK_TABLE}`,
 
       // Flush existing mangle OUTPUT rules (clean slate)
       `iptables -t mangle -F OUTPUT 2>/dev/null || true`,
