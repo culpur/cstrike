@@ -102,22 +102,24 @@ interface EnrichmentResult {
 const API_BASE = '/api/v1/threat-intel';
 
 const openctiClient = {
-  /** Load config from backend (token is masked in response) */
-  async loadConfig(): Promise<OpenCTIConfig> {
+  /** Load config from backend — token is never returned, only tokenSet flag */
+  async loadConfig(): Promise<OpenCTIConfig & { tokenSet: boolean }> {
     try {
       const res = await fetch(`${API_BASE}/config`);
       const json = await res.json();
-      if (json.success) return { url: json.data.url, token: json.data.token };
+      if (json.success) return { url: json.data.url, token: '', tokenSet: json.data.tokenSet };
     } catch { /* fallback */ }
-    return { url: '', token: '' };
+    return { url: '', token: '', tokenSet: false };
   },
 
-  /** Save config to backend DB */
+  /** Save config to backend DB — only sends token if non-empty */
   async saveConfig(config: OpenCTIConfig): Promise<void> {
+    const body: Record<string, string> = { url: config.url };
+    if (config.token) body.token = config.token;
     await fetch(`${API_BASE}/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify(body),
     });
   },
 
@@ -654,6 +656,7 @@ export function ThreatIntelView() {
 
   // Connection state
   const [config, setConfig] = useState<OpenCTIConfig>({ url: '', token: '' });
+  const [tokenSet, setTokenSet] = useState(false); // true if a token is stored in the backend
   const [showToken, setShowToken] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'failed'>('unknown');
   const [connectionVersion, setConnectionVersion] = useState<string | undefined>();
@@ -697,10 +700,11 @@ export function ThreatIntelView() {
       .catch(() => {/* targets unavailable */});
 
     openctiClient.loadConfig().then((cfg) => {
-      setConfig(cfg);
-      if (!hasAutoTested.current && cfg.url && cfg.token) {
+      setConfig({ url: cfg.url, token: '' });
+      setTokenSet(cfg.tokenSet);
+      if (!hasAutoTested.current && cfg.url && cfg.tokenSet) {
         hasAutoTested.current = true;
-        handleTestConnection(cfg);
+        handleTestConnection();
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -710,11 +714,9 @@ export function ThreatIntelView() {
   // Handlers
   // ============================================================================
 
-  async function handleTestConnection(cfg: OpenCTIConfig = config) {
+  async function handleTestConnection() {
     setIsTesting(true);
     try {
-      // Save config to backend first, then test via proxy
-      await openctiClient.saveConfig(cfg);
       const result = await openctiClient.testConnection();
       if (result.ok) {
         setConnectionStatus('connected');
@@ -734,6 +736,10 @@ export function ThreatIntelView() {
 
   async function handleSaveConfig() {
     await openctiClient.saveConfig(config);
+    if (config.token) {
+      setTokenSet(true);
+      setConfig((c) => ({ ...c, token: '' }));
+    }
     addToast({ type: 'success', message: 'OpenCTI config saved' });
   }
 
@@ -968,7 +974,7 @@ export function ThreatIntelView() {
                 <div className="relative">
                   <input
                     type={showToken ? 'text' : 'password'}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    placeholder={tokenSet ? '••••••••  (token saved — enter new value to replace)' : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'}
                     value={config.token}
                     onChange={(e) => setConfig((c) => ({ ...c, token: e.target.value }))}
                     className={cn(

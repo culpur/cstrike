@@ -68,7 +68,7 @@ threatIntelRouter.get('/config', async (_req, res, next) => {
       success: true,
       data: {
         url,
-        token: token ? `${token.slice(0, 8)}${'*'.repeat(Math.max(0, token.length - 8))}` : '',
+        tokenSet: !!token,
         configured: !!(url && token),
       },
     });
@@ -95,7 +95,8 @@ threatIntelRouter.put('/config', async (req, res, next) => {
       });
     }
 
-    if (token !== undefined) {
+    // Only update token if a non-empty value was provided
+    if (token) {
       await prisma.configEntry.upsert({
         where: { key: CONFIG_TOKEN_KEY },
         update: { value: token, version: { increment: 1 }, updatedBy: 'api' },
@@ -108,7 +109,7 @@ threatIntelRouter.put('/config', async (req, res, next) => {
       success: true,
       data: {
         url: config.url,
-        token: config.token ? `${config.token.slice(0, 8)}${'*'.repeat(Math.max(0, config.token.length - 8))}` : '',
+        tokenSet: !!config.token,
         configured: !!(config.url && config.token),
       },
     });
