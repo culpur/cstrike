@@ -126,6 +126,7 @@ const PORT_RULES: Array<{
 
 const URL_RULES: Array<{
   match: (url: string) => boolean;
+  autoTasks?: Array<{ tool: string; phase: CasePhase; configFn: (url: string) => Record<string, unknown> }>;
   gatedTasks: Array<{ tool: string; phase: CasePhase; configFn: (url: string) => Record<string, unknown> }>;
   triggerLabel: (url: string) => string;
 }> = [
@@ -161,6 +162,16 @@ const URL_RULES: Array<{
       { tool: 'commix', phase: 'EXPLOITATION', configFn: (url) => ({ targetUrl: url }) },
     ],
     triggerLabel: (url) => `API endpoint: ${url}`,
+  },
+  // Sensitive files — auto-fetch and parse for credentials
+  {
+    match: (url) => /\.(sql|bak|conf|old|orig|save|backup|dump|db|sqlite|csv|ini|pgpass|htpasswd|htaccess)(\?.*)?$/i.test(url)
+      || /\/(\.env|\.git\/config|config\.php\.bak|wp-config\.php|\.htpasswd|backup\.sql|database\.|credentials|shadow|passwd|id_rsa)/i.test(url),
+    autoTasks: [
+      { tool: 'http_fetch', phase: 'ENUMERATION', configFn: (url) => ({ targetUrl: url }) },
+    ],
+    gatedTasks: [],
+    triggerLabel: (url) => `Sensitive file: ${url}`,
   },
 ];
 
@@ -243,6 +254,23 @@ class IntelligenceEngine {
         if (!rule.match(uf.url)) continue;
 
         const trigger = `auto:${rule.triggerLabel(uf.url)}`;
+
+        // Auto-run tasks (e.g., http_fetch for sensitive files)
+        if (rule.autoTasks) {
+          for (const task of rule.autoTasks) {
+            if (existing.has(existingKey(task.tool, uf.url))) continue;
+
+            recommendations.push({
+              tool: task.tool,
+              target: uf.url,
+              phase: task.phase,
+              trigger,
+              autoRun: true,
+              config: task.configFn(uf.url),
+              priority: 3,
+            });
+          }
+        }
 
         for (const task of rule.gatedTasks) {
           if (existing.has(existingKey(task.tool, uf.url))) continue;
