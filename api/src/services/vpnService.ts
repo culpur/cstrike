@@ -154,11 +154,12 @@ class VpnService {
         });
       }
 
-      // Store auth token and options in DB
+      // Store auth token and options in DB (also refresh interface name)
       await prisma.vpnConnection.upsert({
         where: { provider },
         update: {
           authToken,
+          interface: iface,
           options: (options ?? undefined) as Prisma.InputJsonValue | undefined,
         },
         create: {
