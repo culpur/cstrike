@@ -597,11 +597,32 @@ class VpnService {
   setupSplitRouting(iface: string, fwmark: number = FWMARK_ID): void {
     const mark = `0x${fwmark.toString(16)}`;
 
+    // Read DNS server to exclude from VPN routing
+    let dnsServer: string | null = null;
+    try {
+      const resolv = readFileSync('/etc/resolv.conf', 'utf-8');
+      const m = resolv.match(/^nameserver\s+(\S+)/m);
+      if (m) dnsServer = m[1];
+    } catch { /* use fallback exclusions */ }
+
     const commands = [
+      // Policy routing: marked packets → table with VPN default route
       `ip rule add fwmark ${mark} table ${FWMARK_TABLE} 2>/dev/null || true`,
       `ip route replace default dev ${iface} table ${FWMARK_TABLE}`,
-      `iptables -t mangle -C OUTPUT -m owner --uid-owner 1000 -j MARK --set-mark ${mark} 2>/dev/null || ` +
-        `iptables -t mangle -A OUTPUT -m owner --uid-owner 1000 -j MARK --set-mark ${mark}`,
+
+      // Flush existing mangle OUTPUT rules (clean slate)
+      `iptables -t mangle -F OUTPUT 2>/dev/null || true`,
+
+      // Exclude local/management traffic from marking (RETURN = skip)
+      `iptables -t mangle -A OUTPUT -d 127.0.0.0/8 -j RETURN`,
+      `iptables -t mangle -A OUTPUT -d 10.0.0.0/8 -j RETURN`,
+      `iptables -t mangle -A OUTPUT -d 172.16.0.0/12 -j RETURN`,
+      `iptables -t mangle -A OUTPUT -d 192.168.0.0/16 -j RETURN`,
+      `iptables -t mangle -A OUTPUT -d 100.64.0.0/10 -j RETURN`,  // Tailscale CGNAT
+      ...(dnsServer ? [`iptables -t mangle -A OUTPUT -d ${dnsServer} -j RETURN`] : []),
+
+      // Mark all remaining uid 1000 traffic → routed through VPN
+      `iptables -t mangle -A OUTPUT -m owner --uid-owner 1000 -j MARK --set-mark ${mark}`,
     ];
 
     for (const cmd of commands) {
@@ -612,7 +633,7 @@ class VpnService {
       }
     }
 
-    console.log(`[VPN] Split routing via ${iface} active (fwmark=${mark})`);
+    console.log(`[VPN] Split routing via ${iface} active (fwmark=${mark}, dns=${dnsServer})`);
   }
 
   /**
@@ -624,7 +645,7 @@ class VpnService {
     const commands = [
       `ip rule del fwmark ${mark} table ${FWMARK_TABLE} 2>/dev/null || true`,
       `ip route flush table ${FWMARK_TABLE} 2>/dev/null || true`,
-      `iptables -t mangle -D OUTPUT -m owner --uid-owner 1000 -j MARK --set-mark ${mark} 2>/dev/null || true`,
+      `iptables -t mangle -F OUTPUT 2>/dev/null || true`,
     ];
 
     for (const cmd of commands) {
