@@ -389,7 +389,7 @@ class VpnRotationService {
     // Tear down WireGuard if we have an active config
     if (state.currentConfigPath) {
       try {
-        execSync(`sudo wg-quick down ${state.currentConfigPath} 2>/dev/null || true`, {
+        execSync(`wg-quick down ${state.currentConfigPath} 2>/dev/null || true`, {
           timeout: 10_000,
           stdio: 'pipe',
           env: this.buildEnv(),
@@ -440,7 +440,7 @@ class VpnRotationService {
       // Bring down current config
       if (state.currentConfigPath) {
         try {
-          execSync(`sudo wg-quick down ${state.currentConfigPath} 2>/dev/null || true`, {
+          execSync(`wg-quick down ${state.currentConfigPath} 2>/dev/null || true`, {
             timeout: 10_000,
             stdio: 'pipe',
             env: this.buildEnv(),
@@ -451,7 +451,7 @@ class VpnRotationService {
       }
 
       // Bring up next config
-      execSync(`sudo wg-quick up ${nextConfig}`, {
+      execSync(`wg-quick up ${nextConfig}`, {
         timeout: 15_000,
         stdio: 'pipe',
         env: this.buildEnv(),

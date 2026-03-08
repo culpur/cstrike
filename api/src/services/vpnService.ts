@@ -205,16 +205,16 @@ class VpnService {
   ): string {
     switch (provider) {
       case 'tailscale': {
-        let cmd = `sudo tailscale up --authkey=${authToken} --reset`;
+        let cmd = `tailscale up --authkey=${authToken} --reset`;
         if (options?.exitNode) cmd += ' --advertise-exit-node';
         if (options?.acceptRoutes) cmd += ' --accept-routes';
         if (options?.hostname) cmd += ` --hostname=${options.hostname}`;
         return cmd;
       }
       case 'nordvpn':
-        return `sudo nordvpn login --token ${authToken}`;
+        return `nordvpn login --token ${authToken}`;
       case 'mullvad':
-        return `sudo mullvad account login ${authToken}`;
+        return `mullvad account login ${authToken}`;
       default:
         throw new Error(`No auth command for provider: ${provider}`);
     }
@@ -234,7 +234,7 @@ class VpnService {
           return !!(conn?.authToken);
         }
         case 'mullvad': {
-          const out = execSync('sudo mullvad account get 2>&1', {
+          const out = execSync('mullvad account get 2>&1', {
             timeout: 10_000,
             encoding: 'utf-8',
             stdio: 'pipe',
@@ -243,7 +243,7 @@ class VpnService {
           return !out.toLowerCase().includes('not logged in') && !out.toLowerCase().includes('no account');
         }
         case 'tailscale': {
-          const out = execSync('sudo tailscale status 2>&1', {
+          const out = execSync('tailscale status 2>&1', {
             timeout: 10_000,
             encoding: 'utf-8',
             stdio: 'pipe',
@@ -264,7 +264,7 @@ class VpnService {
    */
   getTailscaleIp(): string | null {
     try {
-      const out = execSync('sudo tailscale ip -4 2>/dev/null', {
+      const out = execSync('tailscale ip -4 2>/dev/null', {
         timeout: 5_000,
         encoding: 'utf-8',
         stdio: 'pipe',
@@ -336,7 +336,7 @@ class VpnService {
         effectiveIface = 'wg0';
 
         // Use wg-quick with the selected config
-        execSync(`sudo wg-quick up ${configPath}`, {
+        execSync(`wg-quick up ${configPath}`, {
           timeout: 30_000,
           stdio: 'pipe',
           env: this.buildEnv(),
@@ -663,15 +663,15 @@ class VpnService {
     switch (provider) {
       case 'wireguard':
         // wg-quick accepts full paths — use uploaded config or default interface name
-        return `sudo wg-quick up ${configPath ?? 'wg0'}`;
+        return `wg-quick up ${configPath ?? 'wg0'}`;
 
       case 'openvpn':
-        return `sudo openvpn --config ${configPath ?? '/etc/openvpn/client.conf'} --daemon`;
+        return `openvpn --config ${configPath ?? '/etc/openvpn/client.conf'} --daemon`;
 
       case 'tailscale':
         return opts.server
-          ? `sudo tailscale up --exit-node=${opts.server}`
-          : 'sudo tailscale up';
+          ? `tailscale up --exit-node=${opts.server}`
+          : 'tailscale up';
 
       case 'nordvpn':
         // NordVPN is handled directly in connect() via wg-quick — should never reach here
@@ -679,8 +679,8 @@ class VpnService {
 
       case 'mullvad':
         return opts.server
-          ? `sudo mullvad connect --location ${opts.server}`
-          : 'sudo mullvad connect';
+          ? `mullvad connect --location ${opts.server}`
+          : 'mullvad connect';
 
       default:
         throw new Error(`Unknown VPN provider: ${provider}`);
@@ -690,16 +690,16 @@ class VpnService {
   private buildDisconnectCommand(provider: VpnProvider, configPath?: string): string {
     switch (provider) {
       case 'wireguard':
-        return `sudo wg-quick down ${configPath ?? 'wg0'}`;
+        return `wg-quick down ${configPath ?? 'wg0'}`;
       case 'openvpn':
-        return 'sudo pkill -TERM openvpn';
+        return 'pkill -TERM openvpn';
       case 'tailscale':
-        return 'sudo tailscale down';
+        return 'tailscale down';
       case 'nordvpn':
         // NordVPN uses WireGuard configs via nordgen — bring down with wg-quick
-        return `sudo wg-quick down ${configPath ?? 'wg0'}`;
+        return `wg-quick down ${configPath ?? 'wg0'}`;
       case 'mullvad':
-        return 'sudo mullvad disconnect';
+        return 'mullvad disconnect';
       default:
         throw new Error(`Unknown VPN provider: ${provider}`);
     }
