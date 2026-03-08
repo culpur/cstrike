@@ -84,31 +84,98 @@ class VpnRotationService {
   // ── Config pool generation ──────────────────────────────────────────────
 
   /**
-   * Generate NordVPN WireGuard configs using the `nordgen` pip package.
-   * Runs: nordgen --token <token> --output <dir> --non-interactive
+   * Generate NordVPN WireGuard configs by calling the NordVPN API directly.
+   * 1. Exchange token for WireGuard private key via /v1/users/services/credentials
+   * 2. Fetch WireGuard server list via /v1/servers
+   * 3. Write flat .conf files to NORDVPN_DIR
    */
   async generateNordConfigs(token: string): Promise<{ count: number; dir: string }> {
     this.ensureDir(NORDVPN_DIR);
 
-    try {
-      const cmd = `nordgen --token ${token} --output ${NORDVPN_DIR} --non-interactive`;
-      execSync(cmd, {
-        timeout: 120_000,
-        stdio: 'pipe',
-        env: this.buildEnv(),
-      });
-    } catch (err: any) {
-      const stderr = err.stderr?.toString() || '';
-      const stdout = err.stdout?.toString() || '';
-      // nordgen may exit non-zero but still generate configs
-      if (!existsSync(NORDVPN_DIR)) {
-        throw new Error(`nordgen failed: ${stderr || stdout || err.message}`);
-      }
+    // Step 1: Exchange token for NordLynx private key
+    const auth = Buffer.from(`token:${token}`).toString('base64');
+    const credResp = await fetch('https://api.nordvpn.com/v1/users/services/credentials', {
+      headers: { Authorization: `Basic ${auth}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!credResp.ok) {
+      throw new Error(`NordVPN token rejected (HTTP ${credResp.status})`);
+    }
+    const creds = (await credResp.json()) as { nordlynx_private_key?: string };
+    const privateKey = creds.nordlynx_private_key;
+    if (!privateKey) {
+      throw new Error('NordVPN API did not return a WireGuard private key — invalid token?');
+    }
+    console.log('[VPN-ROTATION] NordVPN token validated, private key obtained');
+
+    // Step 2: Fetch WireGuard servers
+    const srvResp = await fetch(
+      'https://api.nordvpn.com/v1/servers?limit=16384&filters[servers_technologies][identifier]=wireguard_udp',
+      { signal: AbortSignal.timeout(30_000) },
+    );
+    if (!srvResp.ok) {
+      throw new Error(`NordVPN server list fetch failed (HTTP ${srvResp.status})`);
+    }
+    const servers = (await srvResp.json()) as Array<{
+      name: string;
+      hostname: string;
+      station: string;
+      load: number;
+      locations: Array<{
+        country: { name: string; code: string; city: { name: string } };
+      }>;
+      technologies: Array<{
+        identifier: string;
+        metadata: Array<{ name: string; value: string }>;
+      }>;
+    }>;
+
+    // Step 3: Clean existing configs
+    for (const f of this.listConfigs(NORDVPN_DIR)) {
+      try { unlinkSync(join(NORDVPN_DIR, f)); } catch { /* ignore */ }
     }
 
-    const files = this.listConfigs(NORDVPN_DIR);
-    console.log(`[VPN-ROTATION] Generated ${files.length} NordVPN WireGuard configs`);
-    return { count: files.length, dir: NORDVPN_DIR };
+    // Step 4: Write flat .conf files — one per server
+    let count = 0;
+    const seen = new Set<string>();
+    for (const srv of servers) {
+      // Extract WireGuard public key
+      const wgTech = srv.technologies?.find((t) => t.identifier === 'wireguard_udp');
+      const pubKeyMeta = wgTech?.metadata?.find((m) => m.name === 'public_key');
+      if (!pubKeyMeta?.value) continue;
+
+      const loc = srv.locations?.[0];
+      if (!loc) continue;
+
+      const cc = loc.country.code.toLowerCase();
+      const city = loc.country.city.name.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+      // Extract server number from name (e.g. "United States #1234" → "1234")
+      const numMatch = srv.name.match(/#(\d+)/);
+      const num = numMatch ? numMatch[1] : srv.hostname.replace(/\./g, '');
+      const filename = `${cc}${num}-${city}.conf`;
+
+      if (seen.has(filename)) continue;
+      seen.add(filename);
+
+      const content = [
+        '[Interface]',
+        `PrivateKey = ${privateKey}`,
+        'Address = 10.5.0.2/16',
+        'DNS = 103.86.96.100',
+        '',
+        '[Peer]',
+        `PublicKey = ${pubKeyMeta.value}`,
+        'AllowedIPs = 0.0.0.0/0, ::/0',
+        `Endpoint = ${srv.hostname}:51820`,
+        'PersistentKeepalive = 25',
+      ].join('\n');
+
+      writeFileSync(join(NORDVPN_DIR, filename), content, { mode: 0o600 });
+      count++;
+    }
+
+    console.log(`[VPN-ROTATION] Generated ${count} NordVPN WireGuard configs`);
+    return { count, dir: NORDVPN_DIR };
   }
 
   /**
