@@ -332,20 +332,26 @@ class VpnService {
           selectedConfig = pool.nordvpn[Math.floor(Math.random() * pool.nordvpn.length)];
         }
         const nordDir = '/opt/cstrike/data/vpn/rotation/nordvpn';
-        configPath = `${nordDir}/${selectedConfig}`;
+        const srcConfig = `${nordDir}/${selectedConfig}`;
         effectiveIface = 'wg0';
 
-        // Use wg-quick with the selected config
-        execSync(`wg-quick up ${configPath}`, {
+        // wg-quick requires /etc/wireguard/<iface>.conf — copy selected config there
+        mkdirSync('/etc/wireguard', { recursive: true });
+        const wgConf = '/etc/wireguard/wg0.conf';
+        execSync(`cp ${srcConfig} ${wgConf}`, { stdio: 'pipe' });
+        configPath = wgConf;
+
+        // Use wg-quick with the interface name (resolves to /etc/wireguard/wg0.conf)
+        execSync('wg-quick up wg0', {
           timeout: 30_000,
           stdio: 'pipe',
           env: this.buildEnv(),
         });
 
-        // Store the config path for disconnect
+        // Store for disconnect
         await prisma.vpnConnection.update({
           where: { provider },
-          data: { configPath, server: selectedConfig.replace(/\.conf$/, '') },
+          data: { configPath: wgConf, server: selectedConfig.replace(/\.conf$/, '') },
         });
       } else {
         // All other providers: use their native CLI
@@ -696,8 +702,8 @@ class VpnService {
       case 'tailscale':
         return 'tailscale down';
       case 'nordvpn':
-        // NordVPN uses WireGuard configs via nordgen — bring down with wg-quick
-        return `wg-quick down ${configPath ?? 'wg0'}`;
+        // NordVPN uses WireGuard interface wg0 — always use interface name
+        return 'wg-quick down wg0';
       case 'mullvad':
         return 'mullvad disconnect';
       default:

@@ -389,7 +389,7 @@ class VpnRotationService {
     // Tear down WireGuard if we have an active config
     if (state.currentConfigPath) {
       try {
-        execSync(`wg-quick down ${state.currentConfigPath} 2>/dev/null || true`, {
+        execSync('wg-quick down wg0 2>/dev/null || true', {
           timeout: 10_000,
           stdio: 'pipe',
           env: this.buildEnv(),
@@ -440,7 +440,7 @@ class VpnRotationService {
       // Bring down current config
       if (state.currentConfigPath) {
         try {
-          execSync(`wg-quick down ${state.currentConfigPath} 2>/dev/null || true`, {
+          execSync('wg-quick down wg0 2>/dev/null || true', {
             timeout: 10_000,
             stdio: 'pipe',
             env: this.buildEnv(),
@@ -450,8 +450,10 @@ class VpnRotationService {
         await this.sleep(1000);
       }
 
-      // Bring up next config
-      execSync(`wg-quick up ${nextConfig}`, {
+      // Copy next config to /etc/wireguard/wg0.conf and bring up
+      mkdirSync('/etc/wireguard', { recursive: true });
+      execSync(`cp ${nextConfig} /etc/wireguard/wg0.conf`, { stdio: 'pipe' });
+      execSync('wg-quick up wg0', {
         timeout: 15_000,
         stdio: 'pipe',
         env: this.buildEnv(),
