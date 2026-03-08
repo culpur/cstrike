@@ -399,10 +399,10 @@ class VpnService {
         assignedIp = this.getInterfaceIp(effectiveIface);
       }
 
-      // Resolve public IP through VPN
+      // Resolve public IP through VPN interface (--interface forces traffic through wg0/tun0)
       let publicIp: string | null = null;
       try {
-        publicIp = execSync('curl -s --max-time 5 ifconfig.me 2>/dev/null', {
+        publicIp = execSync(`curl -s --max-time 5 --interface ${effectiveIface} ifconfig.me 2>/dev/null`, {
           timeout: 8_000,
           encoding: 'utf-8',
           env: this.buildEnv(),

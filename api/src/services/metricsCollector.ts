@@ -167,6 +167,14 @@ function getPublicIp(): string | null {
   }
 }
 
+function getPublicIpVia(iface: string): string | null {
+  try {
+    return execSync(`curl -s --max-time 5 --interface ${iface} ifconfig.me 2>/dev/null`, { timeout: 8000, encoding: 'utf-8', env: hostEnv() }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 function pollNetworkInterfaces() {
   const now = Date.now();
   if (now - networkCache.lastPoll < 120_000) return; // 2 min cache
@@ -183,7 +191,9 @@ function pollNetworkInterfaces() {
     (() => { const def = getDefaultInterface(); return def ? getInterfaceIp(def) : null; })();
   networkCache.mgmtIpPublic = getPublicIp();
   networkCache.opsIpInternal = getInterfaceIp('tun0') ?? getInterfaceIp('wg0');
-  networkCache.opsIpPublic = null; // VPN public IP tracked via vpnIp
+  // Resolve OPS public IP through the VPN interface (if up)
+  const opsIface = getInterfaceIp('tun0') ? 'tun0' : getInterfaceIp('wg0') ? 'wg0' : null;
+  networkCache.opsIpPublic = opsIface ? getPublicIpVia(opsIface) : null;
 }
 
 function checkServiceCmd(cmd: string): string {
