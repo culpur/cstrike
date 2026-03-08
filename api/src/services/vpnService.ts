@@ -629,6 +629,11 @@ class VpnService {
 
       // Mark all remaining uid 1000 traffic → routed through VPN
       `iptables -t mangle -A OUTPUT -m owner --uid-owner 1000 -j MARK --set-mark ${mark}`,
+
+      // MASQUERADE: rewrite source IP to VPN address for outgoing packets.
+      // Without this, packets keep the original source (e.g. 10.0.2.15 from enp0s1)
+      // even when routed through wg0, causing the VPN peer to drop responses.
+      `iptables -t nat -A POSTROUTING -o ${iface} -j MASQUERADE`,
     ];
 
     for (const cmd of commands) {
@@ -652,6 +657,7 @@ class VpnService {
       `ip rule del fwmark ${mark} table ${FWMARK_TABLE} 2>/dev/null || true`,
       `ip route flush table ${FWMARK_TABLE} 2>/dev/null || true`,
       `iptables -t mangle -F OUTPUT 2>/dev/null || true`,
+      `iptables -t nat -F POSTROUTING 2>/dev/null || true`,
     ];
 
     for (const cmd of commands) {
