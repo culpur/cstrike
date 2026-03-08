@@ -216,6 +216,11 @@ class LootService {
     // Create CredentialPair records from extracted username+password pairs
     await this.pairCredentials(extracted, source, targetId).catch(() => {});
 
+    // Extract credentials from http_fetch file downloads (SQL dumps, env files, configs)
+    if (source === 'http_fetch' && targetId) {
+      await this.extractHttpFetchCredentials(output, targetId).catch(() => {});
+    }
+
     return count;
   }
 
@@ -335,6 +340,142 @@ class LootService {
           }
         });
       }
+    }
+  }
+
+  /**
+   * Extract credentials from http_fetch output (SQL dumps, env files, PHP configs,
+   * connection strings, htpasswd files) and store them as CredentialPair records.
+   */
+  private async extractHttpFetchCredentials(
+    output: string,
+    targetId: string,
+  ): Promise<void> {
+    const pairs: Array<{ username: string; password: string; service: string }> = [];
+    const seen = new Set<string>();
+
+    const addPair = (username: string, password: string, service: string) => {
+      const u = username.trim();
+      const p = password.trim();
+      if (!u || !p) return;
+      // Strip surrounding quotes from values
+      const cleanU = u.replace(/^['"]|['"]$/g, '');
+      const cleanP = p.replace(/^['"]|['"]$/g, '');
+      if (!cleanP) return;
+      const key = `${cleanU}:${cleanP}:${service}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        pairs.push({ username: cleanU || 'unknown', password: cleanP, service });
+      }
+    };
+
+    // 1. SQL: IDENTIFIED BY 'password'
+    const identifiedByRe = /(?:CREATE\s+USER\s+['"]?(\S+?)['"]?\s+)?IDENTIFIED\s+BY\s+['"]([^'"]+)['"]/gi;
+    let m: RegExpExecArray | null;
+    while ((m = identifiedByRe.exec(output)) !== null) {
+      addPair(m[1] ?? 'unknown', m[2], 'mysql');
+    }
+
+    // 2. SQL: INSERT INTO users/accounts ... VALUES(...) — extract username/password positionally
+    //    Matches VALUES rows and extracts quoted string fields
+    const insertRe = /INSERT\s+INTO\s+(?:users|accounts|admins|members|logins)\s+.*?VALUES\s*\(([^)]+)\)/gi;
+    while ((m = insertRe.exec(output)) !== null) {
+      const valuesStr = m[1];
+      // Extract all quoted string values from the VALUES clause
+      const quotedVals: string[] = [];
+      const quotedRe = /'([^']*)'/g;
+      let qm: RegExpExecArray | null;
+      while ((qm = quotedRe.exec(valuesStr)) !== null) {
+        quotedVals.push(qm[1]);
+      }
+      // Heuristic: first quoted string = username, second = password
+      if (quotedVals.length >= 2) {
+        addPair(quotedVals[0], quotedVals[1], 'mysql');
+      }
+    }
+
+    // 3. Environment variables: *PASSWORD*=value, *SECRET*=value, *KEY*=value
+    const envRe = /^([A-Z_]*(?:PASSWORD|SECRET|KEY)[A-Z_]*)=(.+)$/gim;
+    while ((m = envRe.exec(output)) !== null) {
+      const varName = m[1].trim();
+      const value = m[2].trim().replace(/^['"]|['"]$/g, '');
+      if (!value) continue;
+      // Infer service from variable name
+      let service = 'unknown';
+      const vLower = varName.toLowerCase();
+      if (vLower.includes('mysql') || vLower.includes('maria')) service = 'mysql';
+      else if (vLower.includes('postgres') || vLower.includes('pg')) service = 'postgres';
+      else if (vLower.includes('redis')) service = 'redis';
+      else if (vLower.includes('mongo')) service = 'mongodb';
+      else if (vLower.includes('smtp') || vLower.includes('mail')) service = 'smtp';
+      else if (vLower.includes('ssh')) service = 'ssh';
+      else if (vLower.includes('ftp')) service = 'ftp';
+      else if (vLower.includes('db') || vLower.includes('database')) service = 'mysql';
+      else if (vLower.includes('api')) service = 'http';
+      addPair('unknown', value, service);
+    }
+
+    // 4. PHP: $db_pass = 'value' style assignments
+    const phpVarRe = /\$(?:db_pass(?:word)?|password|passwd|pass|secret|db_pwd)\s*=\s*['"]([^'"]+)['"]/gi;
+    while ((m = phpVarRe.exec(output)) !== null) {
+      addPair('unknown', m[1], 'mysql');
+    }
+
+    // 5. PHP: define('DB_PASSWORD', 'value')
+    const phpDefineRe = /define\s*\(\s*['"](?:DB_PASSWORD|DB_PASS|MYSQL_PASSWORD|DB_SECRET|AUTH_KEY|SECURE_AUTH_KEY)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/gi;
+    while ((m = phpDefineRe.exec(output)) !== null) {
+      addPair('unknown', m[1], 'mysql');
+    }
+
+    // 6. Connection strings: mysql://user:pass@host, postgres://user:pass@host
+    const connStrRe = /(mysql|postgres|postgresql|mongodb|redis|amqp|mssql):\/\/([^:]+):([^@]+)@/gi;
+    while ((m = connStrRe.exec(output)) !== null) {
+      const proto = m[1].toLowerCase();
+      let service = proto;
+      if (service === 'postgresql') service = 'postgres';
+      if (service === 'amqp') service = 'rabbitmq';
+      addPair(m[2], m[3], service);
+    }
+
+    // 7. htpasswd format: user:$apr1$... or user:{SHA}...
+    const htpasswdRe = /^([a-zA-Z0-9_.\-]+):(\$apr1\$[^\s]+|\{SHA\}[^\s]+|\$2[aby]\$[^\s]+)/gm;
+    while ((m = htpasswdRe.exec(output)) !== null) {
+      // For htpasswd, the "password" is actually a hash, but store it for cracking
+      addPair(m[1], m[2], 'http');
+    }
+
+    // Cap at 100 pairs to prevent runaway
+    const capped = pairs.slice(0, 100);
+
+    for (const { username, password, service } of capped) {
+      // Deduplicate against existing DB records
+      const existing = await prisma.credentialPair.findFirst({
+        where: { targetId, username, password },
+      });
+      if (existing) continue;
+
+      const scoreResult = await this.scoreCredential(username, password, service);
+
+      await prisma.credentialPair.create({
+        data: {
+          targetId,
+          username,
+          password,
+          service,
+          port: null,
+          score: scoreResult.score,
+          scoreBreakdown: scoreResult.breakdown as any,
+          source: 'http_fetch',
+          validationStatus: 'UNTESTED',
+        },
+      });
+
+      emitLootItem({
+        category: 'credential',
+        value: `${username}:***`,
+        source: 'http_fetch',
+        target: targetId,
+      });
     }
   }
 
