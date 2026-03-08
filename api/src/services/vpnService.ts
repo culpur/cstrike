@@ -51,7 +51,7 @@ const PROVIDER_INTERFACES: Record<VpnProvider, string> = {
   openvpn: 'tun0',
   tailscale: 'tailscale0',
   nordvpn: 'wg0',       // WireGuard via nordgen config pool (no CLI)
-  mullvad: 'wg-mullvad',
+  mullvad: 'wg0',         // WireGuard via Mullvad config pool
 };
 
 // Config storage directory inside the apidata volume
@@ -138,14 +138,20 @@ class VpnService {
 
     try {
       if (provider === 'nordvpn') {
-        // NordVPN: validate token using nordgen (pip package) instead of CLI
-        // nordgen exchanges the token for a WireGuard private key — if it succeeds, the token is valid
-        // We generate configs as a side-effect of validation (useful for rotation pool)
+        // NordVPN: validate token by exchanging for WireGuard key + generate config pool
         const { vpnRotationService } = await import('./vpnRotationService.js');
         const result = await vpnRotationService.generateNordConfigs(authToken);
         console.log(`[VPN] NordVPN token validated — ${result.count} WireGuard configs generated`);
+      } else if (provider === 'mullvad') {
+        // Mullvad: authToken = WireGuard address, options.privateKey = WireGuard private key
+        // Generate config pool from Mullvad relay API
+        const privateKey = options?.privateKey as string | undefined;
+        if (!privateKey) throw new Error('Mullvad requires both WireGuard address and private key');
+        const { vpnRotationService } = await import('./vpnRotationService.js');
+        const result = await vpnRotationService.generateMullvadConfigs(authToken, privateKey);
+        console.log(`[VPN] Mullvad validated — ${result.count} WireGuard configs generated`);
       } else {
-        // Tailscale and Mullvad: use their respective CLI tools
+        // Tailscale: use CLI
         const cmd = this.buildAuthCommand(provider, authToken, options);
         execSync(cmd, {
           timeout: 30_000,
@@ -234,13 +240,9 @@ class VpnService {
           return !!(conn?.authToken);
         }
         case 'mullvad': {
-          const out = execSync('mullvad account get 2>&1', {
-            timeout: 10_000,
-            encoding: 'utf-8',
-            stdio: 'pipe',
-            env: this.buildEnv(),
-          });
-          return !out.toLowerCase().includes('not logged in') && !out.toLowerCase().includes('no account');
+          // Mullvad: check if we have a stored auth token and generated configs (no CLI needed)
+          const mConn = await prisma.vpnConnection.findUnique({ where: { provider: 'mullvad' } });
+          return !!(mConn?.authToken);
         }
         case 'tailscale': {
           const out = execSync('tailscale status 2>&1', {
@@ -313,55 +315,71 @@ class VpnService {
     });
 
     try {
-      // NordVPN: use WireGuard configs from nordgen pool (no CLI installed)
       let configPath = existing?.configPath ?? undefined;
       let effectiveIface = iface;
 
-      if (provider === 'nordvpn') {
-        const { vpnRotationService } = await import('./vpnRotationService.js');
-        const pool = vpnRotationService.getConfigPool();
-        if (pool.nordvpn.length === 0) {
-          return { success: false, provider, status: 'error', error: 'No NordVPN WireGuard configs generated — authenticate first to generate config pool' };
-        }
-        // Pick a random config (or specific server if requested)
-        let selectedConfig: string;
-        if (opts.server) {
-          const match = pool.nordvpn.find((f) => f.toLowerCase().includes(opts.server!.toLowerCase()));
-          selectedConfig = match ?? pool.nordvpn[Math.floor(Math.random() * pool.nordvpn.length)];
+      // WireGuard-based providers: NordVPN, Mullvad, generic WireGuard
+      // All use wg-quick with /etc/wireguard/wg0.conf (Table=off, DNS stripped)
+      if (provider === 'nordvpn' || provider === 'mullvad' || provider === 'wireguard') {
+        let srcConfig: string | undefined;
+        let serverLabel: string | undefined;
+
+        if (provider === 'nordvpn' || provider === 'mullvad') {
+          const { vpnRotationService } = await import('./vpnRotationService.js');
+          const pool = vpnRotationService.getConfigPool();
+          const providerPool = provider === 'nordvpn' ? pool.nordvpn : pool.mullvad;
+          const providerDir = provider === 'nordvpn'
+            ? '/opt/cstrike/data/vpn/rotation/nordvpn'
+            : '/opt/cstrike/data/vpn/rotation/mullvad';
+
+          if (providerPool.length === 0) {
+            return { success: false, provider, status: 'error', error: `No ${provider} WireGuard configs generated — authenticate first to generate config pool` };
+          }
+
+          let selectedConfig: string;
+          if (opts.server) {
+            const match = providerPool.find((f) => f.toLowerCase().includes(opts.server!.toLowerCase()));
+            selectedConfig = match ?? providerPool[Math.floor(Math.random() * providerPool.length)];
+          } else {
+            selectedConfig = providerPool[Math.floor(Math.random() * providerPool.length)];
+          }
+
+          srcConfig = `${providerDir}/${selectedConfig}`;
+          serverLabel = selectedConfig.replace(/\.conf$/, '');
         } else {
-          selectedConfig = pool.nordvpn[Math.floor(Math.random() * pool.nordvpn.length)];
+          // Generic WireGuard: use uploaded config
+          if (!configPath) {
+            return { success: false, provider, status: 'error', error: 'No WireGuard config file uploaded — upload a .conf file first' };
+          }
+          srcConfig = configPath;
         }
-        const nordDir = '/opt/cstrike/data/vpn/rotation/nordvpn';
-        const srcConfig = `${nordDir}/${selectedConfig}`;
+
         effectiveIface = 'wg0';
 
-        // wg-quick requires /etc/wireguard/<iface>.conf — copy selected config there
-        // Strip DNS (no resolvconf) and add Table=off (we handle split routing ourselves,
-        // and wg-quick's default route management needs sysctl permissions we don't have)
+        // Copy to /etc/wireguard/wg0.conf with DNS stripped and Table=off
         mkdirSync('/etc/wireguard', { recursive: true });
         const wgConf = '/etc/wireguard/wg0.conf';
         const rawConf = readFileSync(srcConfig, 'utf-8');
         const lines = rawConf.split('\n').filter((l) => !l.trim().startsWith('DNS'));
-        // Insert Table = off after [Interface] to prevent wg-quick route management
-        const ifaceIdx = lines.findIndex((l) => l.trim() === '[Interface]');
-        if (ifaceIdx >= 0) lines.splice(ifaceIdx + 1, 0, 'Table = off');
+        if (!lines.some((l) => l.trim().startsWith('Table'))) {
+          const ifaceIdx = lines.findIndex((l) => l.trim() === '[Interface]');
+          if (ifaceIdx >= 0) lines.splice(ifaceIdx + 1, 0, 'Table = off');
+        }
         writeFileSync(wgConf, lines.join('\n'), { mode: 0o600 });
         configPath = wgConf;
 
-        // Use wg-quick with the interface name (resolves to /etc/wireguard/wg0.conf)
         execSync('wg-quick up wg0', {
           timeout: 30_000,
           stdio: 'pipe',
           env: this.buildEnv(),
         });
 
-        // Store for disconnect
         await prisma.vpnConnection.update({
           where: { provider },
-          data: { configPath: wgConf, server: selectedConfig.replace(/\.conf$/, '') },
+          data: { configPath: wgConf, ...(serverLabel ? { server: serverLabel } : {}) },
         });
       } else {
-        // All other providers: use their native CLI
+        // Non-WireGuard providers: openvpn, tailscale
         const cmd = this.buildConnectCommand(provider, opts, configPath);
         execSync(cmd, {
           timeout: 30_000,
@@ -674,10 +692,6 @@ class VpnService {
 
   private buildConnectCommand(provider: VpnProvider, opts: VpnConnectOptions, configPath?: string): string {
     switch (provider) {
-      case 'wireguard':
-        // wg-quick accepts full paths — use uploaded config or default interface name
-        return `wg-quick up ${configPath ?? 'wg0'}`;
-
       case 'openvpn':
         return `openvpn --config ${configPath ?? '/etc/openvpn/client.conf'} --daemon`;
 
@@ -686,33 +700,28 @@ class VpnService {
           ? `tailscale up --exit-node=${opts.server}`
           : 'tailscale up';
 
+      // WireGuard-based providers are handled inline in connect() — should never reach here
+      case 'wireguard':
       case 'nordvpn':
-        // NordVPN is handled directly in connect() via wg-quick — should never reach here
-        throw new Error('NordVPN connect is handled via wg-quick, not CLI');
-
       case 'mullvad':
-        return opts.server
-          ? `mullvad connect --location ${opts.server}`
-          : 'mullvad connect';
+        throw new Error(`${provider} connect is handled via wg-quick inline, not buildConnectCommand`);
 
       default:
         throw new Error(`Unknown VPN provider: ${provider}`);
     }
   }
 
-  private buildDisconnectCommand(provider: VpnProvider, configPath?: string): string {
+  private buildDisconnectCommand(provider: VpnProvider, _configPath?: string): string {
     switch (provider) {
       case 'wireguard':
-        return `wg-quick down ${configPath ?? 'wg0'}`;
+      case 'nordvpn':
+      case 'mullvad':
+        // All WireGuard-based providers use wg0 interface
+        return 'wg-quick down wg0';
       case 'openvpn':
         return 'pkill -TERM openvpn';
       case 'tailscale':
         return 'tailscale down';
-      case 'nordvpn':
-        // NordVPN uses WireGuard interface wg0 — always use interface name
-        return 'wg-quick down wg0';
-      case 'mullvad':
-        return 'mullvad disconnect';
       default:
         throw new Error(`Unknown VPN provider: ${provider}`);
     }

@@ -300,7 +300,7 @@ const VPN_PROVIDERS: VpnProviderInfo[] = [
   { id: 'tailscale',  label: 'Tailscale',  description: 'Mesh VPN via tailscale up',        defaultInterface: 'tailscale0' },
   { id: 'wireguard',  label: 'WireGuard',  description: 'Kernel WireGuard (wg-quick)',       defaultInterface: 'wg0' },
   { id: 'nordvpn',    label: 'NordVPN',    description: 'WireGuard via nordgen config pool',   defaultInterface: 'wg0' },
-  { id: 'mullvad',    label: 'Mullvad',    description: 'mullvad CLI daemon',                defaultInterface: 'wg-mullvad' },
+  { id: 'mullvad',    label: 'Mullvad',    description: 'WireGuard via Mullvad config pool',  defaultInterface: 'wg0' },
   { id: 'openvpn',    label: 'OpenVPN',    description: 'openvpn --daemon (tun0)',            defaultInterface: 'tun0' },
 ];
 
@@ -348,6 +348,7 @@ export function ConfigurationView() {
   const [rotationPool, setRotationPool] = useState({ nordvpn: 0, mullvad: 0, total: 0 });
   // Actual config filenames for server dropdowns
   const [nordConfigs, setNordConfigs] = useState<string[]>([]);
+  const [mullvadConfigs, setMullvadConfigs] = useState<string[]>([]);
   const [rotationGenLoading, setRotationGenLoading] = useState<Record<string, boolean>>({});
   const [rotationGenInputs, setRotationGenInputs] = useState<Record<string, string>>({});
 
@@ -476,6 +477,9 @@ export function ConfigurationView() {
       if (inputs.acceptRoutes === 'true') options.acceptRoutes = true;
       if (inputs.hostname) options.hostname = inputs.hostname;
     }
+    if (provider === 'mullvad') {
+      if (inputs.privateKey) options.privateKey = inputs.privateKey;
+    }
 
     setVpnAuthLoading((prev) => ({ ...prev, [provider]: true }));
     try {
@@ -514,6 +518,7 @@ export function ConfigurationView() {
       setRotationPool({ nordvpn: pool.nordvpn.length, mullvad: pool.mullvad.length, total: pool.total });
       // Store actual filenames for server dropdowns
       setNordConfigs(pool.nordvpn);
+      setMullvadConfigs(pool.mullvad);
     } catch { /* ignore on load */ }
   };
 
@@ -1518,34 +1523,57 @@ export function ConfigurationView() {
                       {providerInfo.id === 'mullvad' && (
                         <div className="space-y-2">
                           <div>
-                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">Account Number</label>
+                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">WireGuard Address</label>
+                            <input
+                              type="text"
+                              value={inputs.authToken || ''}
+                              onChange={(e) => setVpnInput('mullvad', 'authToken', e.target.value)}
+                              placeholder="10.x.x.x/32"
+                              className="w-full px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">WireGuard Private Key</label>
                             <div className="flex gap-2">
                               <input
                                 type="password"
-                                value={inputs.authToken || ''}
-                                onChange={(e) => setVpnInput('mullvad', 'authToken', e.target.value)}
-                                placeholder="1234567890123456"
+                                value={inputs.privateKey || ''}
+                                onChange={(e) => setVpnInput('mullvad', 'privateKey', e.target.value)}
+                                placeholder="Base64 private key"
                                 className="flex-1 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
                               />
                               <button
                                 onClick={() => handleVpnAuthenticate('mullvad')}
-                                disabled={isAuthLoading || !inputs.authToken?.trim()}
+                                disabled={isAuthLoading || !inputs.authToken?.trim() || !inputs.privateKey?.trim()}
                                 className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded border border-[var(--grok-recon-blue)]/50 text-[var(--grok-recon-blue)] hover:bg-[var(--grok-recon-blue)]/10 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {isAuthLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />}
-                                Authenticate
+                                Generate Configs
                               </button>
                             </div>
                           </div>
                           <div>
-                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">Location</label>
-                            <input
-                              type="text"
-                              value={inputs.server || ''}
-                              onChange={(e) => setVpnInput('mullvad', 'server', e.target.value)}
-                              placeholder="se-sto (optional)"
-                              className="w-48 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
-                            />
+                            <label className="text-[10px] text-[var(--grok-text-muted)] block mb-1">
+                              Server {mullvadConfigs.length > 0 && <span className="text-[var(--grok-text-muted)]">({mullvadConfigs.length} available)</span>}
+                            </label>
+                            {mullvadConfigs.length > 0 ? (
+                              <select
+                                value={inputs.server || ''}
+                                onChange={(e) => setVpnInput('mullvad', 'server', e.target.value)}
+                                className="w-64 px-2.5 py-1.5 text-[10px] font-mono bg-[var(--grok-surface-3)] border border-[var(--grok-border)] rounded text-[var(--grok-text-body)] focus:border-[var(--grok-recon-blue)] focus:outline-none"
+                              >
+                                <option value="">Random server</option>
+                                {mullvadConfigs.map((cfg) => (
+                                  <option key={cfg} value={cfg.replace(/\.conf$/, '')}>
+                                    {cfg.replace(/\.conf$/, '')}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-[9px] text-[var(--grok-text-muted)] italic">
+                                Generate configs to see available servers
+                              </p>
+                            )}
                           </div>
                           {conn?.hasAuthToken && (
                             <div className="flex items-center gap-1.5 text-[9px] text-[var(--grok-recon-blue)]">
