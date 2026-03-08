@@ -9,7 +9,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { prisma } from '../config/database.js';
 import { env } from '../config/env.js';
@@ -336,9 +336,12 @@ class VpnService {
         effectiveIface = 'wg0';
 
         // wg-quick requires /etc/wireguard/<iface>.conf — copy selected config there
+        // Strip DNS line: resolvconf isn't installed and we don't want to change VM DNS
         mkdirSync('/etc/wireguard', { recursive: true });
         const wgConf = '/etc/wireguard/wg0.conf';
-        execSync(`cp ${srcConfig} ${wgConf}`, { stdio: 'pipe' });
+        const rawConf = readFileSync(srcConfig, 'utf-8');
+        const strippedConf = rawConf.split('\n').filter((l) => !l.trim().startsWith('DNS')).join('\n');
+        writeFileSync(wgConf, strippedConf, { mode: 0o600 });
         configPath = wgConf;
 
         // Use wg-quick with the interface name (resolves to /etc/wireguard/wg0.conf)

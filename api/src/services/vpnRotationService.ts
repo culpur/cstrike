@@ -17,7 +17,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { env } from '../config/env.js';
 import { getConfigValue } from '../middleware/guardrails.js';
@@ -157,11 +157,11 @@ class VpnRotationService {
       if (seen.has(filename)) continue;
       seen.add(filename);
 
+      // No DNS line — resolvconf not available, VM DNS works fine for scanning
       const content = [
         '[Interface]',
         `PrivateKey = ${privateKey}`,
         'Address = 10.5.0.2/16',
-        'DNS = 103.86.96.100',
         '',
         '[Peer]',
         `PublicKey = ${pubKeyMeta.value}`,
@@ -223,11 +223,11 @@ class VpnRotationService {
       const sanitizedHost = relay.hostname.replace(/[^a-zA-Z0-9-]/g, '');
       const sanitizedCity = relay.city_name.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
       const filename = `${sanitizedHost}-${sanitizedCity}.conf`;
+      // No DNS line — resolvconf not available, VM DNS works fine for scanning
       const content = [
         '[Interface]',
         `PrivateKey = ${privateKey}`,
         `Address = ${address}`,
-        'DNS = 1.1.1.1',
         '',
         '[Peer]',
         `PublicKey = ${relay.public_key}`,
@@ -450,9 +450,11 @@ class VpnRotationService {
         await this.sleep(1000);
       }
 
-      // Copy next config to /etc/wireguard/wg0.conf and bring up
+      // Copy next config to /etc/wireguard/wg0.conf (strip DNS — no resolvconf on host)
       mkdirSync('/etc/wireguard', { recursive: true });
-      execSync(`cp ${nextConfig} /etc/wireguard/wg0.conf`, { stdio: 'pipe' });
+      const rawConf = readFileSync(nextConfig, 'utf-8');
+      const strippedConf = rawConf.split('\n').filter((l) => !l.trim().startsWith('DNS')).join('\n');
+      writeFileSync('/etc/wireguard/wg0.conf', strippedConf, { mode: 0o600 });
       execSync('wg-quick up wg0', {
         timeout: 15_000,
         stdio: 'pipe',
