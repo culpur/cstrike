@@ -27,19 +27,25 @@ scansRouter.post('/start', async (req, res, next) => {
 
     if (!target) throw new AppError(400, 'target is required');
 
-    await validateTargetScope(target);
-
-    // Upsert target record
-    const normalizedUrl = target.startsWith('http') ? target : `https://${target}`;
-    const targetRecord = await prisma.target.upsert({
-      where: { url: normalizedUrl },
-      update: { status: 'SCANNING' },
-      create: {
-        url: normalizedUrl,
-        hostname: (() => { try { return new URL(normalizedUrl).hostname; } catch { return target; } })(),
-        status: 'SCANNING',
-      },
-    });
+    // Check if target is an existing target ID first
+    let targetRecord = await prisma.target.findUnique({ where: { id: target } });
+    if (targetRecord) {
+      // Existing target found by ID — mark as scanning
+      await prisma.target.update({ where: { id: target }, data: { status: 'SCANNING' } });
+    } else {
+      // Treat as URL/hostname — validate scope and upsert
+      await validateTargetScope(target);
+      const normalizedUrl = target.startsWith('http') ? target : `https://${target}`;
+      targetRecord = await prisma.target.upsert({
+        where: { url: normalizedUrl },
+        update: { status: 'SCANNING' },
+        create: {
+          url: normalizedUrl,
+          hostname: (() => { try { return new URL(normalizedUrl).hostname; } catch { return target; } })(),
+          status: 'SCANNING',
+        },
+      });
+    }
 
     // Create scan record
     const scan = await prisma.scan.create({
@@ -51,8 +57,8 @@ scansRouter.post('/start', async (req, res, next) => {
       },
     });
 
-    // Start scan in background
-    scanOrchestrator.startScan(scan.id, target, tools, mode);
+    // Start scan in background — always pass the resolved URL, not the raw input
+    scanOrchestrator.startScan(scan.id, targetRecord.url, tools, mode);
 
     res.status(201).json({
       success: true,
@@ -153,18 +159,23 @@ scansRouter.post('/batch', async (req, res, next) => {
 
     const results = [];
     for (const target of targets) {
-      await validateTargetScope(target);
-
-      const normalizedUrl = target.startsWith('http') ? target : `https://${target}`;
-      const targetRecord = await prisma.target.upsert({
-        where: { url: normalizedUrl },
-        update: { status: 'SCANNING' },
-        create: {
-          url: normalizedUrl,
-          hostname: (() => { try { return new URL(normalizedUrl).hostname; } catch { return target; } })(),
-          status: 'SCANNING',
-        },
-      });
+      // Check if target is an existing target ID first
+      let targetRecord = await prisma.target.findUnique({ where: { id: target } });
+      if (targetRecord) {
+        await prisma.target.update({ where: { id: target }, data: { status: 'SCANNING' } });
+      } else {
+        await validateTargetScope(target);
+        const normalizedUrl = target.startsWith('http') ? target : `https://${target}`;
+        targetRecord = await prisma.target.upsert({
+          where: { url: normalizedUrl },
+          update: { status: 'SCANNING' },
+          create: {
+            url: normalizedUrl,
+            hostname: (() => { try { return new URL(normalizedUrl).hostname; } catch { return target; } })(),
+            status: 'SCANNING',
+          },
+        });
+      }
 
       const scan = await prisma.scan.create({
         data: {
@@ -175,8 +186,8 @@ scansRouter.post('/batch', async (req, res, next) => {
         },
       });
 
-      scanOrchestrator.startScan(scan.id, target, tools, mode);
-      results.push({ scan_id: scan.id, target });
+      scanOrchestrator.startScan(scan.id, targetRecord.url, tools, mode);
+      results.push({ scan_id: scan.id, target: targetRecord.url });
     }
 
     res.status(201).json({
