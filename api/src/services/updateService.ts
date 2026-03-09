@@ -15,6 +15,14 @@ import { emitUpdateAvailable, emitLogEntry } from '../websocket/emitter.js';
 const STATE_FILE = '/opt/cstrike/data/update-state.json';
 const REPO_DIR = '/opt/cstrike';
 
+/** Git env that marks /opt/cstrike as safe (container uid differs from host uid) */
+const GIT_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  GIT_CONFIG_COUNT: '1',
+  GIT_CONFIG_KEY_0: 'safe.directory',
+  GIT_CONFIG_VALUE_0: REPO_DIR,
+};
+
 // ── Types ──────────────────────────────────────────────────
 
 interface UpdateStep {
@@ -93,11 +101,12 @@ class UpdateService {
         timeout: 60_000,
         encoding: 'utf-8',
         cwd: REPO_DIR,
+        env: GIT_ENV,
       });
 
       const behindCount = execSync(
         'git rev-list --count HEAD..origin/main 2>/dev/null',
-        { timeout: 10_000, encoding: 'utf-8', cwd: REPO_DIR },
+        { timeout: 10_000, encoding: 'utf-8', cwd: REPO_DIR, env: GIT_ENV },
       ).trim();
 
       const commits = parseInt(behindCount, 10);
@@ -112,19 +121,19 @@ class UpdateService {
 
       const latestCommit = execSync(
         'git log origin/main -1 --format="%h" 2>/dev/null',
-        { timeout: 5_000, encoding: 'utf-8', cwd: REPO_DIR },
+        { timeout: 5_000, encoding: 'utf-8', cwd: REPO_DIR, env: GIT_ENV },
       ).trim();
 
       const latestMessage = execSync(
         'git log origin/main -1 --format="%s" 2>/dev/null',
-        { timeout: 5_000, encoding: 'utf-8', cwd: REPO_DIR },
+        { timeout: 5_000, encoding: 'utf-8', cwd: REPO_DIR, env: GIT_ENV },
       ).trim();
 
       let latestTag: string | undefined;
       try {
         latestTag = execSync(
           'git describe --tags --abbrev=0 origin/main 2>/dev/null',
-          { timeout: 5_000, encoding: 'utf-8', cwd: REPO_DIR },
+          { timeout: 5_000, encoding: 'utf-8', cwd: REPO_DIR, env: GIT_ENV },
         ).trim() || undefined;
       } catch { /* no tags */ }
 
@@ -216,6 +225,7 @@ class UpdateService {
         timeout: 600_000, // 10 min per step
         encoding: 'utf-8',
         cwd: REPO_DIR,
+        env: GIT_ENV,
       });
       state.steps[stepIndex].output = output.slice(-10_000); // keep last 10K chars
       state.steps[stepIndex].status = 'completed';
