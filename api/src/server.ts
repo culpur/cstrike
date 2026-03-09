@@ -198,3 +198,4 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 start();
 
 export { app, httpServer, io };
+// v2.5.3-dev
