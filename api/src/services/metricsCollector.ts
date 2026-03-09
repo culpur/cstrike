@@ -167,9 +167,11 @@ function getPublicIp(): string | null {
   }
 }
 
-function getPublicIpVia(iface: string): string | null {
+function getPublicIpVia(_iface: string): string | null {
   try {
-    return execSync(`curl -s --max-time 5 --interface ${iface} ifconfig.me 2>/dev/null`, { timeout: 8000, encoding: 'utf-8', env: hostEnv() }).trim() || null;
+    // Run as uid 1000 — fwmark routing sends traffic through VPN.
+    // Using --interface directly fails because DNS can't route through wg0.
+    return execSync("su -s /bin/sh -c 'curl -s --max-time 5 https://ifconfig.me 2>/dev/null' node", { timeout: 10000, encoding: 'utf-8', env: hostEnv() }).trim() || null;
   } catch {
     return null;
   }
