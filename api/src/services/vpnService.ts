@@ -368,6 +368,13 @@ class VpnService {
         writeFileSync(wgConf, lines.join('\n'), { mode: 0o600 });
         configPath = wgConf;
 
+        // Tear down any existing wg0 first (prevents "wg0 already exists" errors)
+        try {
+          execSync('wg-quick down wg0 2>/dev/null || ip link del wg0 2>/dev/null || true', {
+            timeout: 10_000, stdio: 'pipe', env: this.buildEnv(),
+          });
+        } catch { /* not running */ }
+
         execSync('wg-quick up wg0', {
           timeout: 30_000,
           stdio: 'pipe',

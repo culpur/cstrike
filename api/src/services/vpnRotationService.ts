@@ -437,18 +437,25 @@ class VpnRotationService {
     let error: string | undefined;
 
     try {
-      // Bring down current config
-      if (state.currentConfigPath) {
-        try {
-          execSync('wg-quick down wg0 2>/dev/null || true', {
-            timeout: 10_000,
-            stdio: 'pipe',
-            env: this.buildEnv(),
-          });
-        } catch { /* interface may already be down */ }
-        // Brief pause for interface teardown
-        await this.sleep(1000);
-      }
+      // Always tear down wg0 before rotation — it may exist from a manual
+      // VPN connect or a previous rotation. wg-quick fails if wg0 already exists.
+      try {
+        execSync('wg-quick down wg0 2>/dev/null || true', {
+          timeout: 10_000,
+          stdio: 'pipe',
+          env: this.buildEnv(),
+        });
+      } catch { /* interface may already be down */ }
+      // Force-remove lingering interface (wg-quick down can fail silently)
+      try {
+        execSync('ip link del wg0 2>/dev/null || true', {
+          timeout: 3_000,
+          stdio: 'pipe',
+          env: this.buildEnv(),
+        });
+      } catch { /* already gone */ }
+      // Brief pause for interface teardown
+      await this.sleep(500);
 
       // Copy next config to /etc/wireguard/wg0.conf
       // Strip DNS (no resolvconf) and add Table=off (split routing handled separately)
