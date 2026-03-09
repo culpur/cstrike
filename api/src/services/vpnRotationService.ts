@@ -20,6 +20,7 @@ import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { env } from '../config/env.js';
+import { prisma } from '../config/database.js';
 import { getConfigValue } from '../middleware/guardrails.js';
 import { emitVpnRotation, emitLogEntry } from '../websocket/emitter.js';
 import { vpnService } from './vpnService.js';
@@ -525,6 +526,16 @@ class VpnRotationService {
       const provider = nextConfig.includes('/nordvpn/') ? 'nordvpn' : 'mullvad';
       const duration = Date.now() - startTime;
 
+      // Update DB publicIp so the VPN status endpoint and battle map have the current exit IP
+      if (newIp) {
+        try {
+          await prisma.vpnConnection.updateMany({
+            where: { status: 'CONNECTED', interface: 'wg0' },
+            data: { publicIp: newIp },
+          });
+        } catch { /* non-critical */ }
+      }
+
       console.log(
         `[VPN-ROTATION] wg0: ${state.history.length > 0 ? basename(state.history[state.history.length - 1].configFile) : 'none'} → ${configName} (IP: ${oldIp} → ${newIp}) [${(duration / 1000).toFixed(1)}s]`,
       );
@@ -649,8 +660,9 @@ class VpnRotationService {
 
   private getCurrentPublicIp(): string | null {
     try {
-      return execSync('curl -s --max-time 5 ifconfig.me 2>/dev/null', {
-        timeout: 8_000,
+      // Run as uid 1000 so traffic goes through VPN via fwmark routing
+      return execSync("su -s /bin/sh -c 'curl -s --max-time 5 https://ifconfig.me 2>/dev/null' node", {
+        timeout: 10_000,
         encoding: 'utf-8',
         env: this.buildEnv(),
       }).trim() || null;

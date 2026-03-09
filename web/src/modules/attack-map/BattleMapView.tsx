@@ -276,7 +276,7 @@ export function BattleMapView() {
     return unsub;
   }, []);
 
-  // Listen for VPN rotation events
+  // Listen for VPN rotation events — update badge and re-fetch scanner geolocation
   useEffect(() => {
     const unsub = wsService.on<{
       scanId: string;
@@ -297,6 +297,15 @@ export function BattleMapView() {
           rotationIndex: data.rotationIndex,
           timestamp: Date.now(),
         });
+        // Re-fetch scanner geolocation — the VPN exit IP changed, so the
+        // CSTRIKE marker on the map needs to move to the new location
+        apiService.getScannerLocation()
+          .then((loc) => {
+            if (loc.lat !== 0 || loc.lng !== 0) {
+              setScannerOrigin({ lat: loc.lat, lng: loc.lng, city: loc.city, country: loc.country });
+            }
+          })
+          .catch(() => {});
       }
     });
     return unsub;

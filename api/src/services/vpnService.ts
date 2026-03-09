@@ -406,14 +406,38 @@ class VpnService {
         assignedIp = this.getInterfaceIp(effectiveIface);
       }
 
-      // Resolve public IP through VPN interface (--interface forces traffic through wg0/tun0)
+      // Set up split routing FIRST (before public IP resolution) so uid 1000
+      // traffic goes through VPN when we resolve the exit IP
+      let shouldSplit = opts.splitRouting ?? false;
+      if (!shouldSplit) {
+        try {
+          const entry = await prisma.configEntry.findUnique({ where: { key: 'vpn_split_routing_enabled' } });
+          shouldSplit = entry?.value === true;
+        } catch { /* non-critical */ }
+      }
+      if (shouldSplit) {
+        this.setupSplitRouting(effectiveIface, FWMARK_ID);
+      }
+
+      // Resolve public exit IP through VPN — run as uid 1000 (fwmark-routed
+      // through wg0) instead of --interface which breaks DNS resolution
       let publicIp: string | null = null;
       try {
-        publicIp = execSync(`curl -s --max-time 5 --interface ${effectiveIface} ifconfig.me 2>/dev/null`, {
-          timeout: 8_000,
-          encoding: 'utf-8',
-          env: this.buildEnv(),
-        }).trim() || null;
+        if (shouldSplit) {
+          // uid 1000 traffic goes through VPN via fwmark routing
+          publicIp = execSync(`su -s /bin/sh -c 'curl -s --max-time 5 https://ifconfig.me 2>/dev/null' node`, {
+            timeout: 10_000,
+            encoding: 'utf-8',
+            env: this.buildEnv(),
+          }).trim() || null;
+        } else {
+          // No split routing — try --interface as fallback
+          publicIp = execSync(`curl -s --max-time 5 --interface ${effectiveIface} ifconfig.me 2>/dev/null`, {
+            timeout: 8_000,
+            encoding: 'utf-8',
+            env: this.buildEnv(),
+          }).trim() || null;
+        }
       } catch { /* non-critical */ }
 
       await prisma.vpnConnection.update({
@@ -426,18 +450,6 @@ class VpnService {
           connectedAt: new Date(),
         },
       });
-
-      // Set up split routing if requested or if persisted config says so
-      let shouldSplit = opts.splitRouting ?? false;
-      if (!shouldSplit) {
-        try {
-          const entry = await prisma.configEntry.findUnique({ where: { key: 'vpn_split_routing_enabled' } });
-          shouldSplit = entry?.value === true;
-        } catch { /* non-critical */ }
-      }
-      if (shouldSplit) {
-        this.setupSplitRouting(effectiveIface, FWMARK_ID);
-      }
 
       return { success: true, provider, status: 'connected', assignedIp };
     } catch (err: any) {
@@ -643,8 +655,12 @@ class VpnService {
     const { endpointIp, gateway, gatewayDev } = this.getWgEndpointAndGateway(iface);
 
     const commands = [
+      // ── Clean up stale rules from previous calls ──
+      // Remove ALL existing fwmark ip rules (prevents duplicates after restarts)
+      `while ip rule del fwmark ${mark} table ${FWMARK_TABLE} 2>/dev/null; do :; done`,
+
       // Policy routing: marked packets → table with VPN default route
-      `ip rule add fwmark ${mark} table ${FWMARK_TABLE} 2>/dev/null || true`,
+      `ip rule add fwmark ${mark} table ${FWMARK_TABLE}`,
       // Source IP must be the VPN address so the peer accepts the traffic
       vpnIp
         ? `ip route replace default dev ${iface} src ${vpnIp} table ${FWMARK_TABLE}`
@@ -676,9 +692,11 @@ class VpnService {
       // Mark all remaining uid 1000 traffic → routed through VPN
       `iptables -t mangle -A OUTPUT -m owner --uid-owner 1000 -j MARK --set-mark ${mark}`,
 
+      // Flush old MASQUERADE rules for this interface, then add fresh one.
+      // NAT POSTROUTING is NOT flushed entirely (Docker adds its own rules).
+      `while iptables -t nat -D POSTROUTING -o ${iface} -j MASQUERADE 2>/dev/null; do :; done`,
+
       // MASQUERADE: rewrite source IP to VPN address for outgoing packets.
-      // Without this, packets keep the original source (e.g. 10.0.2.15 from enp0s1)
-      // even when routed through wg0, causing the VPN peer to drop responses.
       `iptables -t nat -A POSTROUTING -o ${iface} -j MASQUERADE`,
     ];
 
