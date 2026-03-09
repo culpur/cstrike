@@ -18,6 +18,7 @@ import { useNotificationStore } from '@stores/notificationStore';
 import { useExploitTrackStore } from '@stores/exploitTrackStore';
 import { useTerminalStore } from '@stores/terminalStore';
 import { useTaskMapStore } from '@stores/taskMapStore';
+import { useUpdateStore } from '@stores/updateStore';
 import { apiService } from '@services/api';
 import type { SystemMetrics, ServiceStatus } from '@/types';
 
@@ -781,6 +782,26 @@ export function useWebSocketHandlers() {
       }
     });
 
+    // ── Self-Update ────────────────────────────────────────────
+    const unsubUpdateAvailable = wsService.on<{
+      commits: number;
+      latestCommit: string;
+      latestMessage: string;
+      latestTag?: string;
+    }>('update_available', (data) => {
+      useUpdateStore.getState().setUpdateAvailable(true, data);
+    });
+
+    // Initial update check after mount
+    setTimeout(async () => {
+      try {
+        const result = await apiService.checkForUpdates();
+        if (result.available && result.update) {
+          useUpdateStore.getState().setUpdateAvailable(true, result.update);
+        }
+      } catch { /* API not ready yet */ }
+    }, 10_000);
+
     // ── Connection health check ────────────────────────────────
     const connectionCheck = setInterval(() => {
       setConnected(wsService.isConnected());
@@ -828,6 +849,7 @@ export function useWebSocketHandlers() {
       unsubTerminalOutput();
       unsubTerminalSessionCreated();
       unsubTerminalSessionClosed();
+      unsubUpdateAvailable();
       clearInterval(connectionCheck);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

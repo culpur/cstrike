@@ -42,6 +42,8 @@ import {
   Key,
   CalendarClock,
   Network,
+  Square,
+  Trash2,
 } from 'lucide-react';
 import {
   PieChart,
@@ -576,6 +578,24 @@ export function DashboardView() {
                         addToast({ type: 'error', message: err.message || 'Resume failed', duration: 5000 });
                       }
                     }}
+                    onStop={async () => {
+                      try {
+                        await apiService.stopRecon(scan.scan_id);
+                        addToast({ type: 'info', message: `Stopping scan: ${scan.target}`, duration: 3000 });
+                      } catch (err: any) {
+                        addToast({ type: 'error', message: err.message || 'Stop failed', duration: 5000 });
+                      }
+                    }}
+                    onDelete={async () => {
+                      if (!window.confirm(`Delete scan for ${scan.target} and all its data? This cannot be undone.`)) return;
+                      try {
+                        await apiService.deleteRecon(scan.scan_id);
+                        addToast({ type: 'success', message: `Deleted scan: ${scan.target}`, duration: 3000 });
+                        setActiveScans(prev => prev.filter(s => s.scan_id !== scan.scan_id));
+                      } catch (err: any) {
+                        addToast({ type: 'error', message: err.message || 'Delete failed', duration: 5000 });
+                      }
+                    }}
                   />
                 ))
               )}
@@ -894,10 +914,14 @@ function ScanCard({
   scan,
   onPause,
   onResume,
+  onStop,
+  onDelete,
 }: {
   scan: ActiveScan;
   onPause: () => void;
   onResume: () => void;
+  onStop: () => void;
+  onDelete: () => void;
 }) {
   const isRunning = scan.status === 'running';
   const isPaused = scan.status === 'paused';
@@ -937,23 +961,48 @@ function ScanCard({
             </span>
           )}
           {isRunning && (
-            <button
-              onClick={onPause}
-              className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-warning)] transition-colors"
-              title="Pause scan"
-            >
-              <Pause className="w-3.5 h-3.5" />
-            </button>
+            <>
+              <button
+                onClick={onPause}
+                className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-warning)] transition-colors"
+                title="Pause scan"
+              >
+                <Pause className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={onStop}
+                className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-exploit-red)] transition-colors"
+                title="Stop scan"
+              >
+                <Square className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
           {isPaused && (
-            <button
-              onClick={onResume}
-              className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-success)] transition-colors"
-              title="Resume scan"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
+            <>
+              <button
+                onClick={onResume}
+                className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-success)] transition-colors"
+                title="Resume scan"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={onStop}
+                className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-exploit-red)] transition-colors"
+                title="Stop scan"
+              >
+                <Square className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
+          <button
+            onClick={onDelete}
+            className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-text-muted)] hover:text-[var(--grok-exploit-red)] transition-colors"
+            title="Delete scan and all data"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 

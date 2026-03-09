@@ -87,6 +87,8 @@ services:
       - /opt:/host/opt:ro
       # Docker socket — allows API to manage sibling containers + exec into MSF
       - /var/run/docker.sock:/var/run/docker.sock
+      # Self-update: git + docker compose access on the host repo
+      - /opt/cstrike:/opt/cstrike
       # Shared data
       - /usr/share/wordlists:/usr/share/wordlists:ro
       - apidata:/opt/cstrike/data

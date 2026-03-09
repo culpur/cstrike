@@ -25,9 +25,11 @@ import {
   User,
   ShieldCheck,
   Zap,
+  ArrowUpCircle,
 } from 'lucide-react';
 import { useUIStore } from '@stores/uiStore';
 import { useSystemStore, type OperationMode } from '@stores/systemStore';
+import { useUpdateStore } from '@stores/updateStore';
 import { apiService } from '@services/api';
 import { cn } from '@utils/index';
 import cstrikeIcon from '@assets/cstrike-icon-64.png';
@@ -174,6 +176,7 @@ export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, activeView, setActiveView } =
     useUIStore();
   const { connected, operationMode, setOperationMode } = useSystemStore();
+  const { updateAvailable, updateInfo } = useUpdateStore();
 
   const handleSetMode = (mode: OperationMode) => {
     setOperationMode(mode);
@@ -285,6 +288,37 @@ export function Sidebar() {
           </div>
         )}
       </nav>
+
+      {/* Update Indicator — only shown when an update is available */}
+      {updateAvailable && (
+        <div className="px-3 py-2 border-t border-[var(--grok-border)]">
+          {sidebarCollapsed ? (
+            <button
+              onClick={() => setActiveView('update')}
+              className="w-full flex items-center justify-center p-2 rounded transition-all hover:bg-[var(--grok-surface-2)] relative"
+              title={`Update available: ${updateInfo?.commits} new commit(s)`}
+            >
+              <ArrowUpCircle className="w-4 h-4 text-[var(--grok-success)] animate-pulse" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--grok-success)]" />
+            </button>
+          ) : (
+            <button
+              onClick={() => setActiveView('update')}
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded transition-all text-left hover:bg-[var(--grok-surface-2)] border border-[var(--grok-success)]/30"
+            >
+              <ArrowUpCircle className="w-4 h-4 text-[var(--grok-success)] animate-pulse flex-shrink-0" />
+              <div className="min-w-0">
+                <span className="text-xs font-medium text-[var(--grok-success)] block">
+                  Update Available
+                </span>
+                <p className="text-[10px] text-[var(--grok-text-muted)] font-mono truncate">
+                  {updateInfo?.commits} new commit{(updateInfo?.commits ?? 0) > 1 ? 's' : ''}
+                </p>
+              </div>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Operation Mode Toggle */}
       <div className="px-3 py-3 border-t border-[var(--grok-border)]">

@@ -367,3 +367,14 @@ export function emitShellObtained(data: {
 }) {
   io?.emit('shell_obtained', data);
 }
+
+// ── Self-update available notification ──────────────────────────────────────
+
+export function emitUpdateAvailable(data: {
+  commits: number;
+  latestCommit: string;
+  latestMessage: string;
+  latestTag?: string;
+}) {
+  io?.emit('update_available', data);
+}

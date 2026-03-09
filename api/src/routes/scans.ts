@@ -253,43 +253,72 @@ scansRouter.get('/context/:targetId', async (req, res, next) => {
   }
 });
 
-// Cancel/delete scan
+// Cancel/delete scan — ?delete=true removes scan + all data from DB
 scansRouter.delete('/scans/:scanId', async (req, res, next) => {
   try {
     const { scanId } = req.params;
+    const shouldDelete = req.query.delete === 'true';
 
     const scan = await prisma.scan.findUnique({ where: { id: scanId } });
     if (!scan) throw new AppError(404, 'Scan not found');
 
+    // Cancel if still running
     if (scan.status === 'RUNNING' || scan.status === 'QUEUED') {
       scanOrchestrator.cancelScan(scanId);
     }
 
-    await prisma.scan.update({
-      where: { id: scanId },
-      data: { status: 'CANCELLED', endedAt: new Date() },
-    });
+    if (shouldDelete) {
+      // Wait briefly for orchestrator to register cancellation
+      if (scan.status === 'RUNNING' || scan.status === 'QUEUED') {
+        await new Promise(r => setTimeout(r, 1000));
+      }
 
-    // Also update target status back to PENDING (if no other active scans exist)
-    const otherActiveScans = await prisma.scan.count({
-      where: {
-        targetId: scan.targetId,
-        id: { not: scanId },
-        status: { in: ['QUEUED', 'RUNNING'] },
-      },
-    });
-    if (otherActiveScans === 0) {
-      await prisma.target.update({
-        where: { id: scan.targetId },
-        data: { status: 'PENDING' },
-      }).catch(() => {});
+      // Full delete — Prisma cascade removes ScanResult, LogEntry, AIThought
+      await prisma.scan.delete({ where: { id: scanId } });
+
+      // Reset target to PENDING if no other scans remain
+      const otherScans = await prisma.scan.count({
+        where: { targetId: scan.targetId },
+      });
+      if (otherScans === 0) {
+        await prisma.target.update({
+          where: { id: scan.targetId },
+          data: { status: 'PENDING' },
+        }).catch(() => {});
+      }
+
+      res.json({
+        success: true,
+        data: { scan_id: scanId, status: 'deleted' },
+        timestamp: Date.now(),
+      });
+    } else {
+      // Cancel only (existing behavior)
+      await prisma.scan.update({
+        where: { id: scanId },
+        data: { status: 'CANCELLED', endedAt: new Date() },
+      });
+
+      const otherActiveScans = await prisma.scan.count({
+        where: {
+          targetId: scan.targetId,
+          id: { not: scanId },
+          status: { in: ['QUEUED', 'RUNNING'] },
+        },
+      });
+      if (otherActiveScans === 0) {
+        await prisma.target.update({
+          where: { id: scan.targetId },
+          data: { status: 'PENDING' },
+        }).catch(() => {});
+      }
+
+      res.json({
+        success: true,
+        data: { scan_id: scanId, status: 'cancelled' },
+        timestamp: Date.now(),
+      });
     }
-
-    res.json({
-      success: true,
-      data: { scan_id: scanId, status: 'cancelled' },
-      timestamp: Date.now(),
-    });
   } catch (err) {
     next(err);
   }

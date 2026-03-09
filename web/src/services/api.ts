@@ -167,6 +167,10 @@ class ApiService {
     await this.client.delete(`/recon/scans/${scanId}`);
   }
 
+  async deleteRecon(scanId: string): Promise<void> {
+    await this.client.delete(`/recon/scans/${scanId}?delete=true`);
+  }
+
   async getActiveScans(): Promise<{
     active_scans: Array<{
       scan_id: string;
@@ -794,6 +798,45 @@ class ApiService {
   async getEvidence(targetId: string): Promise<{ targetId: string; hostname: string; url: string; evidence: EvidenceRecord[]; totalCount: number }> {
     const { data } = await this.client.get(`/evidence/${targetId}`);
     return data.data || { targetId, hostname: '', url: '', evidence: [], totalCount: 0 };
+  }
+
+  // ── Self-Update ────────────────────────────────────────────────────────
+
+  async checkForUpdates(): Promise<{
+    available: boolean;
+    update?: { commits: number; latestCommit: string; latestMessage: string; latestTag?: string };
+  }> {
+    const { data } = await this.client.get('/update/check', { timeout: 60000 });
+    return data.data;
+  }
+
+  async getUpdateStatus(): Promise<{
+    status: string;
+    currentStep: number;
+    totalSteps: number;
+    steps: Array<{
+      id: string;
+      label: string;
+      status: string;
+      output: string;
+      startedAt?: number;
+      completedAt?: number;
+    }>;
+    availableUpdate?: { commits: number; latestCommit: string; latestMessage: string; latestTag?: string };
+    error?: string;
+    startedAt?: number;
+    completedAt?: number;
+  }> {
+    const { data } = await this.client.get('/update/status');
+    return data.data;
+  }
+
+  async executeUpdate(): Promise<void> {
+    await this.client.post('/update/execute', {}, { timeout: 10000 });
+  }
+
+  async resetUpdateState(): Promise<void> {
+    await this.client.post('/update/reset');
   }
 }
 

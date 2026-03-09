@@ -21,6 +21,7 @@ import { ThreatIntelView } from '@modules/threat-intel/ThreatIntelView';
 import { ScanDiffView } from '@modules/scan-diff/ScanDiffView';
 import { EvidenceView } from '@modules/evidence/EvidenceView';
 import { TerminalView } from '@modules/terminal/TerminalView';
+import { UpdateView } from '@modules/update/UpdateView';
 
 import { useUIStore } from '@stores/uiStore';
 import { useWebSocketHandlers } from '@/hooks/useWebSocketHandlers';
@@ -84,6 +85,8 @@ function App() {
         return <EvidenceView />;
       case 'terminal':
         return <TerminalView />;
+      case 'update':
+        return <UpdateView />;
       default:
         return <DashboardView />;
     }

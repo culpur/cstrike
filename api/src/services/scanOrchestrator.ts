@@ -31,8 +31,15 @@ import { scanContextService, type ExecutionState } from './scanContextService.js
 import { tracerouteService } from './tracerouteService.js';
 import { vpnRotationService } from './vpnRotationService.js';
 
-// Active scan tracking for cancellation and pause
-const activeScans = new Map<string, { cancelled: boolean; paused: boolean }>();
+// Active scan tracking for cancellation, pause, and background scans
+const activeScans = new Map<string, {
+  cancelled: boolean;
+  paused: boolean;
+  backgroundFullScan?: {
+    promise: Promise<void>;
+    status: 'running' | 'completed' | 'cancelled' | 'error';
+  };
+}>();
 
 // ── Tool safety categories ──────────────────────────────────────────────────
 
@@ -258,10 +265,29 @@ class ScanOrchestrator {
         // Don't await — traceroute runs concurrently with the scan pipeline
       }
 
+      // ── Background full port scan (masscan 1-65535) ─────────────────────
+      if (!resumeState && !state?.cancelled) {
+        this.launchBackgroundFullScan(scanId, targetId, target, state!);
+      }
+
       if (operationMode === 'manual') {
         await this.runManualPipeline(scanId, target, targetId, requestedTools, mode, state);
       } else {
         await this.runAIPipeline(scanId, target, targetId, operationMode, requestedTools, state, resumeState);
+      }
+
+      // Wait for background full scan to finish (max 30s grace period)
+      const bgScan = activeScans.get(scanId)?.backgroundFullScan;
+      if (bgScan && bgScan.status === 'running') {
+        emitLogEntry({
+          level: 'INFO',
+          source: 'orchestrator',
+          message: 'Waiting for background full scan to complete...',
+        });
+        await Promise.race([
+          bgScan.promise,
+          new Promise(r => setTimeout(r, 30_000)),
+        ]);
       }
 
       // Check if we paused instead of finishing
@@ -388,8 +414,9 @@ class ScanOrchestrator {
    * Port scanners run first (they feed everything else), then enum tools in parallel.
    */
   private groupToolsForParallel(tools: string[]): string[][] {
-    // Phase 1: Port scanners must run first (nmap is primary, others are supplementary)
-    const portScanners = tools.filter((t) => ['nmap', 'masscan', 'rustscan'].includes(t));
+    // Phase 1: Port scanners must run first (nmap is primary, rustscan supplementary)
+    // masscan excluded — runs as background full-65K scan via launchBackgroundFullScan()
+    const portScanners = tools.filter((t) => ['nmap', 'rustscan'].includes(t));
     // Phase 2: DNS tools can run in parallel
     const dnsTools = tools.filter((t) => ['subfinder', 'amass', 'dnsenum', 'dnsrecon'].includes(t));
     // Phase 3: HTTP fingerprinting tools can run in parallel
@@ -419,6 +446,103 @@ class ScanOrchestrator {
     for (const r of remaining) groups.push([r]);
 
     return groups.filter((g) => g.length > 0);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Background Full Port Scan — masscan 1-65535 runs in parallel with pipeline
+  // ══════════════════════════════════════════════════════════════════════════
+
+  private launchBackgroundFullScan(
+    scanId: string,
+    targetId: string,
+    target: string,
+    state: { cancelled: boolean; paused: boolean },
+  ): void {
+    const scanState = activeScans.get(scanId);
+    if (!scanState) return;
+
+    const bgScan: NonNullable<typeof scanState.backgroundFullScan> = {
+      promise: Promise.resolve(),
+      status: 'running',
+    };
+
+    bgScan.promise = (async () => {
+      try {
+        emitLogEntry({
+          level: 'INFO',
+          source: 'orchestrator',
+          message: `Background full port scan (1-65535) started against ${target}`,
+        });
+
+        emitReconOutput({
+          tool: 'masscan_fullscan',
+          target,
+          output: 'Starting background full port scan (1-65535)...',
+          complete: false,
+          event: 'tool_start',
+          scan_id: scanId,
+        });
+
+        const result = await toolExecutor.run('masscan', target);
+
+        if (state.cancelled) {
+          bgScan.status = 'cancelled';
+          return;
+        }
+
+        // Store result
+        await prisma.scanResult.create({
+          data: {
+            scanId,
+            resultType: 'PORT_SCAN',
+            data: {
+              tool: 'masscan_fullscan',
+              output: result.output,
+              exitCode: result.exitCode,
+              duration: result.duration,
+              isFullScan: true,
+            } as any,
+            source: 'masscan_fullscan',
+          },
+        });
+
+        // Emit discoveries (ports, services)
+        if (result.output && !result.error) {
+          this.emitDiscoveries('masscan', target, result.output, scanId);
+        }
+
+        // Extract loot
+        if (result.output && !result.error) {
+          await lootService.extractFromOutput(result.output, 'masscan', targetId).catch(() => {});
+        }
+
+        bgScan.status = 'completed';
+
+        emitLogEntry({
+          level: 'INFO',
+          source: 'orchestrator',
+          message: `Background full scan complete (${Math.round(result.duration / 1000)}s)`,
+        });
+
+        emitReconOutput({
+          tool: 'masscan_fullscan',
+          target,
+          output: `Full port scan complete (${Math.round(result.duration / 1000)}s)`,
+          complete: true,
+          event: 'tool_complete',
+          scan_id: scanId,
+        });
+      } catch (err: any) {
+        bgScan.status = 'error';
+        emitLogEntry({
+          level: 'ERROR',
+          source: 'orchestrator',
+          message: `Background full scan failed: ${err.message}`,
+        });
+      }
+    })();
+
+    scanState.backgroundFullScan = bgScan;
   }
 
   // ══════════════════════════════════════════════════════════════════════════

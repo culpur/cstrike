@@ -36,10 +36,12 @@ import { wordlistsRouter } from './routes/wordlists.js';
 import { terminalRouter } from './routes/terminal.js';
 import { evidenceRouter } from './routes/evidence.js';
 import { threatIntelRouter } from './routes/threatIntel.js';
+import { updateRouter } from './routes/update.js';
 
 // Services
 import { startMetricsCollector } from './services/metricsCollector.js';
 import { autoStartServices, startServiceMonitor, stopServiceMonitor } from './services/serviceMonitor.js';
+import { updateService } from './services/updateService.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -76,6 +78,7 @@ api.use('/vpn', vpnRouter);
 api.use('/terminal', terminalRouter);
 api.use('/evidence', evidenceRouter);
 api.use('/threat-intel', threatIntelRouter);
+api.use('/update', updateRouter);
 
 app.use('/api/v1', api);
 
@@ -159,6 +162,14 @@ async function start() {
 
     // Recover interrupted scans — mark RUNNING as PAUSED (operator resumes manually)
     await recoverInterruptedScans();
+
+    // Self-update: check if we just restarted after an update
+    updateService.checkPostUpdateState().catch((err) => {
+      console.warn('[CStrike API] Post-update check failed:', err.message);
+    });
+
+    // Start periodic update check (every 5 min)
+    updateService.startPeriodicCheck();
 
     // Start HTTP server
     httpServer.listen(env.PORT, env.HOST, () => {
