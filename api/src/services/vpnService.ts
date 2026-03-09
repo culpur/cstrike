@@ -645,6 +645,12 @@ class VpnService {
       `iptables -t mangle -A OUTPUT -d 100.64.0.0/10 -j RETURN`,  // Tailscale CGNAT
       ...(dnsServer ? [`iptables -t mangle -A OUTPUT -d ${dnsServer} -j RETURN`] : []),
 
+      // MSS clamping: uid 1000 SYN packets get MSS based on enp0s1 (1460) during
+      // initial routing, then fwmark re-routes them through wg0 (MTU 1420). Without
+      // clamping, the server sends segments too large for the WireGuard tunnel,
+      // breaking TLS handshakes (Server Hello + certs exceed the tunnel MTU).
+      `iptables -t mangle -A OUTPUT -m owner --uid-owner 1000 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1280`,
+
       // Mark all remaining uid 1000 traffic → routed through VPN
       `iptables -t mangle -A OUTPUT -m owner --uid-owner 1000 -j MARK --set-mark ${mark}`,
 
