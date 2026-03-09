@@ -189,15 +189,23 @@ class UpdateService {
       state.steps[3].startedAt = Date.now();
       this.saveState(state);
 
-      // Detached process: restart api, wait, restart frontend
-      const child = spawn('sh', ['-c',
-        `docker compose -f ${REPO_DIR}/docker-compose.yml up -d api && ` +
-        `sleep 5 && ` +
-        `docker compose -f ${REPO_DIR}/docker-compose.yml up -d frontend`,
+      // Spawn a SEPARATE container to handle restarts.
+      // A detached child inside this container dies when Docker kills us,
+      // so we use "docker run --rm" to create an independent container
+      // that outlives the API container restart.
+      const child = spawn('docker', [
+        'run', '--rm',
+        '--name', 'cstrike-updater',
+        '-v', '/var/run/docker.sock:/var/run/docker.sock',
+        '-v', '/usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins:ro',
+        '-v', `${REPO_DIR}:${REPO_DIR}`,
+        '-w', REPO_DIR,
+        'docker:cli',
+        'sh', '-c',
+        `docker compose up -d api && sleep 10 && docker compose up -d frontend`,
       ], {
         detached: true,
         stdio: 'ignore',
-        cwd: REPO_DIR,
       });
       child.unref();
 
