@@ -49,6 +49,7 @@ function assertProvider(provider: string): asserts provider is VpnProvider {
 vpnRouter.get('/', async (_req, res, next) => {
   try {
     const connections = await vpnService.getAll();
+    const splitRoutingActive = vpnService.isSplitRoutingActive();
 
     res.json({
       success: true,
@@ -64,6 +65,7 @@ vpnRouter.get('/', async (_req, res, next) => {
         hasAuthToken: c.hasAuthToken,
         options: c.options,
       })),
+      splitRoutingActive,
       timestamp: Date.now(),
     });
   } catch (err) {
@@ -190,6 +192,7 @@ vpnRouter.get('/rotation/config', async (_req, res, next) => {
       'vpn_rotation_interval',
       'vpn_rotation_providers',
       'vpn_rotation_avoid_recent',
+      'vpn_split_routing_enabled',
     ];
     const config: Record<string, unknown> = {};
     for (const key of keys) {
@@ -207,6 +210,7 @@ vpnRouter.get('/rotation/config', async (_req, res, next) => {
         periodicInterval: config.vpn_rotation_interval ?? 3,
         providers: config.vpn_rotation_providers ?? ['nordvpn'],
         avoidRecentCount: config.vpn_rotation_avoid_recent ?? 5,
+        splitRoutingEnabled: config.vpn_split_routing_enabled ?? false,
       },
       timestamp: Date.now(),
     });
@@ -218,12 +222,13 @@ vpnRouter.get('/rotation/config', async (_req, res, next) => {
 // PUT /rotation/config — update rotation config
 vpnRouter.put('/rotation/config', async (req, res, next) => {
   try {
-    const { enabled, strategy, periodicInterval, providers, avoidRecentCount } = req.body as {
+    const { enabled, strategy, periodicInterval, providers, avoidRecentCount, splitRoutingEnabled } = req.body as {
       enabled?: boolean;
       strategy?: string;
       periodicInterval?: number;
       providers?: string[];
       avoidRecentCount?: number;
+      splitRoutingEnabled?: boolean;
     };
 
     const updates: Array<{ key: string; value: unknown }> = [];
@@ -232,6 +237,7 @@ vpnRouter.put('/rotation/config', async (req, res, next) => {
     if (periodicInterval !== undefined) updates.push({ key: 'vpn_rotation_interval', value: periodicInterval });
     if (providers !== undefined) updates.push({ key: 'vpn_rotation_providers', value: providers });
     if (avoidRecentCount !== undefined) updates.push({ key: 'vpn_rotation_avoid_recent', value: avoidRecentCount });
+    if (splitRoutingEnabled !== undefined) updates.push({ key: 'vpn_split_routing_enabled', value: splitRoutingEnabled });
 
     for (const { key, value } of updates) {
       await prisma.configEntry.upsert({

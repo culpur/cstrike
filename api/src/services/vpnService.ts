@@ -427,8 +427,15 @@ class VpnService {
         },
       });
 
-      // Set up split routing if requested
-      if (opts.splitRouting) {
+      // Set up split routing if requested or if persisted config says so
+      let shouldSplit = opts.splitRouting ?? false;
+      if (!shouldSplit) {
+        try {
+          const entry = await prisma.configEntry.findUnique({ where: { key: 'vpn_split_routing_enabled' } });
+          shouldSplit = entry?.value === true;
+        } catch { /* non-critical */ }
+      }
+      if (shouldSplit) {
         this.setupSplitRouting(effectiveIface, FWMARK_ID);
       }
 
@@ -596,6 +603,21 @@ class VpnService {
   }
 
   // ── Split routing (iptables fwmark) ──────────────────────────────────────
+
+  /**
+   * Check if split routing is currently active by looking for the MARK rule.
+   */
+  isSplitRoutingActive(): boolean {
+    try {
+      const out = execSync(
+        `iptables -t mangle -S OUTPUT 2>/dev/null | grep -- '--set-xmark 0x29a'`,
+        { timeout: 3_000, encoding: 'utf-8', stdio: 'pipe', env: this.buildEnv() },
+      );
+      return out.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
 
   /**
    * Set up policy routing: packets marked with fwmark are routed through the VPN

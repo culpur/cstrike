@@ -414,8 +414,12 @@ export function ConfigurationView() {
   const loadVpnStatus = async () => {
     setVpnLoading(true);
     try {
-      const connections = await apiService.getVpnConnections();
-      setVpnConnections(connections);
+      const result = await apiService.getVpnConnectionsRaw();
+      setVpnConnections(result.connections);
+      // Reflect actual split routing state from OS (iptables check)
+      if (result.splitRoutingActive !== undefined) {
+        setSplitRouting(result.splitRoutingActive);
+      }
     } catch {
       addToast({ type: 'error', message: 'Failed to load VPN status' });
     } finally {
@@ -515,6 +519,10 @@ export function ConfigurationView() {
         apiService.getVpnRotationPool(),
       ]);
       setRotationConfig(cfg);
+      // Restore persisted split routing toggle
+      if ((cfg as any).splitRoutingEnabled !== undefined) {
+        setSplitRouting((cfg as any).splitRoutingEnabled);
+      }
       setRotationPool({ nordvpn: pool.nordvpn.length, mullvad: pool.mullvad.length, total: pool.total });
       // Store actual filenames for server dropdowns
       setNordConfigs(pool.nordvpn);
@@ -1093,7 +1101,10 @@ export function ConfigurationView() {
             label="Split Routing"
             description="Route only tool traffic through VPN — keep management traffic on direct path (requires ip route / fwmark)"
             checked={splitRouting}
-            onChange={setSplitRouting}
+            onChange={(v) => {
+              setSplitRouting(v);
+              apiService.updateVpnRotationConfig({ splitRoutingEnabled: v } as any).catch(() => {});
+            }}
           />
 
           <div className="h-px bg-[var(--grok-border)]" />

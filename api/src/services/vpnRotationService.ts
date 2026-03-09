@@ -320,10 +320,23 @@ class VpnRotationService {
   /**
    * Check if rotation should occur and execute if so.
    * Called before each tool execution in the orchestrator.
+   * Auto-initializes rotation state if missing (e.g., after container restart).
    */
   async shouldRotateAndExecute(scanId: string, toolIndex: number, phase: string): Promise<void> {
-    const state = this.scanStates.get(scanId);
-    if (!state || !state.config.enabled || state.disabled) return;
+    let state = this.scanStates.get(scanId);
+
+    // Auto-initialize if state is missing (container restart wiped in-memory map)
+    if (!state) {
+      try {
+        await this.initForScan(scanId);
+        state = this.scanStates.get(scanId);
+      } catch (err: any) {
+        console.warn(`[VPN-ROTATION] Auto-init failed for scan ${scanId}: ${err.message}`);
+      }
+      if (!state) return;
+    }
+
+    if (!state.config.enabled || state.disabled) return;
 
     state.toolsSinceLastRotation++;
 

@@ -502,9 +502,14 @@ class ApiService {
   // ============================================================================
 
   async getVpnConnections(): Promise<VpnConnection[]> {
-    // Backend: GET /vpn — returns {success, data: VpnConnection[], timestamp}
+    const result = await this.getVpnConnectionsRaw();
+    return result.connections;
+  }
+
+  async getVpnConnectionsRaw(): Promise<{ connections: VpnConnection[]; splitRoutingActive: boolean }> {
+    // Backend: GET /vpn — returns {success, data: VpnConnection[], splitRoutingActive, timestamp}
     const { data } = await this.client.get('/vpn');
-    return (data.data || []).map((c: Record<string, unknown>) => ({
+    const connections = (data.data || []).map((c: Record<string, unknown>) => ({
       provider: c.provider as VpnProvider,
       interface: c.interface as string,
       status: (c.status as string) as VpnConnection['status'],
@@ -516,6 +521,7 @@ class ApiService {
       hasAuthToken: !!c.hasAuthToken,
       options: (c.options as Record<string, unknown>) ?? null,
     }));
+    return { connections, splitRoutingActive: data.splitRoutingActive ?? false };
   }
 
   async connectVpn(
@@ -576,6 +582,7 @@ class ApiService {
     periodicInterval?: number;
     providers?: string[];
     avoidRecentCount?: number;
+    splitRoutingEnabled?: boolean;
   }): Promise<void> {
     await this.client.put('/vpn/rotation/config', config);
   }
