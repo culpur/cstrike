@@ -450,6 +450,16 @@ class VpnRotationService {
     let error: string | undefined;
 
     try {
+      // ── Kill-switch: DROP all uid 1000 outbound traffic during rotation ──
+      // This prevents ANY traffic leak through the direct connection while
+      // wg0 is down and split routing rules are being re-established.
+      try {
+        execSync(
+          'iptables -I OUTPUT -m owner --uid-owner 1000 -j DROP 2>/dev/null || true',
+          { timeout: 3_000, stdio: 'pipe', env: this.buildEnv() },
+        );
+      } catch { /* non-critical */ }
+
       // Always tear down wg0 before rotation — it may exist from a manual
       // VPN connect or a previous rotation. wg-quick fails if wg0 already exists.
       try {
@@ -487,8 +497,16 @@ class VpnRotationService {
       // Wait for wg0 interface
       await this.waitForInterface('wg0', 10_000);
 
-      // Set up split routing
+      // Set up split routing (this flushes mangle OUTPUT and re-adds rules)
       vpnService.setupSplitRouting('wg0', FWMARK_ID);
+
+      // ── Remove kill-switch: split routing is now active, traffic can flow ──
+      try {
+        execSync(
+          'iptables -D OUTPUT -m owner --uid-owner 1000 -j DROP 2>/dev/null || true',
+          { timeout: 3_000, stdio: 'pipe', env: this.buildEnv() },
+        );
+      } catch { /* non-critical */ }
 
       // Resolve new public IP
       newIp = this.getCurrentPublicIp();
@@ -579,6 +597,15 @@ class VpnRotationService {
 
       // Too many failures — disable rotation for this scan
       state.disabled = true;
+
+      // Remove kill-switch so tools can still run (via direct or existing VPN)
+      try {
+        execSync(
+          'iptables -D OUTPUT -m owner --uid-owner 1000 -j DROP 2>/dev/null || true',
+          { timeout: 3_000, stdio: 'pipe', env: this.buildEnv() },
+        );
+      } catch { /* non-critical */ }
+
       emitLogEntry({
         level: 'ERROR',
         source: 'vpn-rotation',
