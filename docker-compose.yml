@@ -85,8 +85,9 @@ services:
       - /usr/sbin:/host/usr/sbin:ro
       - /usr/local/bin:/host/usr/local/bin:ro
       - /opt:/host/opt:ro
-      # Docker socket — allows API to manage sibling containers + exec into MSF
+      # Docker socket + compose plugin — allows API to manage sibling containers
       - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins:ro
       # Self-update: git + docker compose access on the host repo
       - /opt/cstrike:/opt/cstrike
       # Shared data
