@@ -718,10 +718,13 @@ class VpnService {
     const mark = `0x${fwmark.toString(16)}`;
 
     const commands = [
-      `ip rule del fwmark ${mark} table ${FWMARK_TABLE} 2>/dev/null || true`,
+      // Remove all fwmark ip rules
+      `while ip rule del fwmark ${mark} table ${FWMARK_TABLE} 2>/dev/null; do :; done`,
       `ip route flush table ${FWMARK_TABLE} 2>/dev/null || true`,
       `iptables -t mangle -F OUTPUT 2>/dev/null || true`,
-      `iptables -t nat -F POSTROUTING 2>/dev/null || true`,
+      // Only remove VPN MASQUERADE rules — DO NOT flush entire chain
+      // (Docker adds its own bridge MASQUERADE rules that must be preserved)
+      `while iptables -t nat -D POSTROUTING -o ${iface} -j MASQUERADE 2>/dev/null; do :; done`,
     ];
 
     for (const cmd of commands) {
