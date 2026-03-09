@@ -72,18 +72,21 @@ Pre-built VM images — boot and go, no building required.
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | Proxmox / KVM / libvirt | ~21 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.qcow2) |
-| **VDI** | VirtualBox (native) | ~49 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.vdi) |
+| **QCOW2** | Proxmox / KVM / libvirt | ~21 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6_amd64.qcow2) |
+| **VMDK** | VMware ESXi / Workstation / Fusion | ~20 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6_amd64.vmdk) |
+| **OVA** | VMware / VirtualBox portable | ~20 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6_amd64.ova) |
+| **VDI** | VirtualBox (native) | ~49 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6_amd64.vdi) |
 
 #### aarch64 (ARM64)
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | QEMU / UTM / Parallels | ~21 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.qcow2) |
-| **OVA** | VMware Fusion / UTM | ~20 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.ova) |
-| **VDI** | VirtualBox (native) | ~49 GB | [Download](https://registry.culpur.net/dist/cstrikev2.5_aarch64.vdi) |
+| **QCOW2** | QEMU / UTM / Parallels | ~21 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6_aarch64.qcow2) |
+| **VMDK** | VMware Fusion | ~20 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6_aarch64.vmdk) |
+| **OVA** | VMware Fusion / UTM | ~20 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6_aarch64.ova) |
+| **VDI** | VirtualBox (native) | ~49 GB | [Download](https://registry.culpur.net/dist/cstrikev2.6_aarch64.vdi) |
 
-[BitTorrent downloads](docs/DISTRIBUTION.md#bittorrent-recommended-for-large-files) | [Checksums](https://registry.culpur.net/dist/checksums.sha256) | [All formats](docs/DISTRIBUTION.md)
+[BitTorrent downloads](docs/DISTRIBUTION.md#bittorrent-recommended-for-large-files) | [Checksums](https://registry.culpur.net/dist/checksums-amd64-v2.6.sha256) | [All formats](docs/DISTRIBUTION.md)
 
 > Pre-built images include Debian 12 + 35+ security tools + Docker stack with all containers pre-built. First boot auto-expands disk, regenerates SSH keys, randomizes passwords, and starts all services with `docker compose up -d` (no build required).
 
@@ -448,7 +451,7 @@ CStrike v2 ships in 7 formats. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) 
 
 | Format | Setup Time | Command |
 |--------|:----------:|---------|
-| **Pre-built VM** (QCOW2/OVA/VDI) | ~5 min | [Download](#downloads) → import → boot |
+| **Pre-built VM** (QCOW2/OVA/VDI/VMDK) | ~5 min | [Download](#downloads) → import → boot |
 | **Docker Compose** | ~10 min | `docker compose up -d` |
 | **Bare Metal** | ~45 min | `sudo bash install.sh` |
 | **Cloud-Init** (AWS/GCP/Azure/DO) | ~30 min | User data: `scripts/vm/cloud-init-generic.yml` |
@@ -464,7 +467,7 @@ CStrike v2 ships in 7 formats. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) 
 | [Docker Deployment](docs/DOCKER_DEPLOYMENT.md) | Docker-only deployment guide |
 | [Bare Metal Install](docs/BARE_METAL_INSTALL.md) | Full Debian 12 → CStrike walkthrough |
 | [Web UI README](web/README.md) | Frontend architecture and development |
-| [v2 Changelog](v2-changelog.md) | Full change history from v1 to v2.5 |
+| [v2 Changelog](v2-changelog.md) | Full change history from v1 to v2.6 |
 | [VulnBox](https://github.com/culpur/vulnbox) | Deliberately vulnerable target container (standalone repo) |
 
 ---

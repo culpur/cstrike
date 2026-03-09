@@ -237,6 +237,41 @@ Plus: Metasploit Framework (msfrpcd on port 55552), subfinder, amass, katana, ga
 
 ---
 
+## v2.6 (March 2026)
+
+### New Features
+
+| Feature | Details |
+|---------|---------|
+| Self-Update System | In-app self-update with animated 6-step progress UI — git pull, Docker build, container restart, health check. State persists across container restarts via JSON file on Docker volume |
+| Parallel Full Port Scan | 65,535-port nmap scan with parallel chunk execution and real-time progress via WebSocket |
+| Stop & Delete Scans | Cancel running scans and delete scan records from the Command Center with confirmation dialog |
+| VMDK Distribution | VMware streamOptimized VMDK format added to all distribution architectures |
+| VPN Kill-Switch Improvements | MASQUERADE fix, routing loop prevention, MSS clamping for WireGuard tunnels |
+
+### Infrastructure
+
+| Component | Details |
+|-----------|---------|
+| Docker Compose plugin mount | API container mounts `/usr/libexec/docker/cli-plugins` for `docker compose` access inside container |
+| Update container pattern | Self-update spawns independent `docker:cli` container via Docker socket to survive API container restart |
+| Git safe.directory | `GIT_ENV` with `GIT_CONFIG_COUNT/KEY/VALUE` for containerized git operations on host-mounted repo |
+| Dual-arch VMDK | Both aarch64 and amd64 now ship QCOW2, VMDK, VDI, and OVA formats (8 images total) |
+| BitTorrent distribution | Per-format torrents with webseed (BEP 19) for all 8 image formats |
+
+### Files Changed
+
+| File | Changes |
+|------|---------|
+| `api/src/services/updateService.ts` | New — self-update service with git fetch, docker compose build/restart, health check, periodic polling |
+| `api/src/routes/update.ts` | New — REST endpoints for update check, execute, status, reset |
+| `web/src/modules/update/UpdateView.tsx` | New — animated step-by-step update progress UI with collapsible output |
+| `web/src/stores/updateStore.ts` | New — Zustand store for update state management |
+| `docker-compose.yml` | Added compose plugin mount, Docker socket + repo volume for self-update |
+| `scripts/vm/package-vm.sh` | Added VMDK conversion step, version bump to 2.6 |
+
+---
+
 ## v2.5.2 (March 2026)
 
 ### Bug Fixes

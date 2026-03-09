@@ -1,4 +1,4 @@
-# CStrike v2.5.2 — Distribution Guide
+# CStrike v2.6 — Distribution Guide
 
 CStrike v2 can be deployed in seven formats depending on your environment and requirements.
 
@@ -26,23 +26,26 @@ Pre-built VM images are available for direct download and via BitTorrent from `r
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | Proxmox / KVM / libvirt | ~21 GB | [cstrikev2.5.1_amd64.qcow2](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.qcow2) |
-| **VDI** | VirtualBox (native) | ~49 GB | [cstrikev2.5.1_amd64.vdi](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.vdi) |
+| **QCOW2** | Proxmox / KVM / libvirt | ~21 GB | [cstrikev2.6_amd64.qcow2](https://registry.culpur.net/dist/cstrikev2.6_amd64.qcow2) |
+| **VMDK** | VMware ESXi / Workstation / Fusion | ~20 GB | [cstrikev2.6_amd64.vmdk](https://registry.culpur.net/dist/cstrikev2.6_amd64.vmdk) |
+| **OVA** | VMware / VirtualBox portable | ~20 GB | [cstrikev2.6_amd64.ova](https://registry.culpur.net/dist/cstrikev2.6_amd64.ova) |
+| **VDI** | VirtualBox (native) | ~49 GB | [cstrikev2.6_amd64.vdi](https://registry.culpur.net/dist/cstrikev2.6_amd64.vdi) |
 
 ### Direct Download — aarch64 (ARM64)
 
 | Format | Use Case | Size | Download |
 |--------|----------|------|----------|
-| **QCOW2** | QEMU / UTM / Parallels | ~21 GB | [cstrikev2.5_aarch64.qcow2](https://registry.culpur.net/dist/cstrikev2.5_aarch64.qcow2) |
-| **OVA** | VMware Fusion / UTM | ~20 GB | [cstrikev2.5_aarch64.ova](https://registry.culpur.net/dist/cstrikev2.5_aarch64.ova) |
-| **VDI** | VirtualBox (native) | ~49 GB | [cstrikev2.5_aarch64.vdi](https://registry.culpur.net/dist/cstrikev2.5_aarch64.vdi) |
+| **QCOW2** | QEMU / UTM / Parallels | ~21 GB | [cstrikev2.6_aarch64.qcow2](https://registry.culpur.net/dist/cstrikev2.6_aarch64.qcow2) |
+| **VMDK** | VMware Fusion | ~20 GB | [cstrikev2.6_aarch64.vmdk](https://registry.culpur.net/dist/cstrikev2.6_aarch64.vmdk) |
+| **OVA** | VMware Fusion / UTM | ~20 GB | [cstrikev2.6_aarch64.ova](https://registry.culpur.net/dist/cstrikev2.6_aarch64.ova) |
+| **VDI** | VirtualBox (native) | ~49 GB | [cstrikev2.6_aarch64.vdi](https://registry.culpur.net/dist/cstrikev2.6_aarch64.vdi) |
 
 ### Checksums
 
 | Arch | File | Download |
 |------|------|----------|
-| amd64 | SHA256 checksums | [checksums-amd64-v2.5.1.sha256](https://registry.culpur.net/dist/checksums-amd64-v2.5.1.sha256) |
-| aarch64 | SHA256 checksums | [checksums-aarch64.sha256](https://registry.culpur.net/dist/checksums-aarch64.sha256) |
+| amd64 | SHA256 checksums | [checksums-amd64-v2.6.sha256](https://registry.culpur.net/dist/checksums-amd64-v2.6.sha256) |
+| aarch64 | SHA256 checksums | [checksums-aarch64-v2.6.sha256](https://registry.culpur.net/dist/checksums-aarch64-v2.6.sha256) |
 
 ### BitTorrent (recommended for large files)
 
@@ -52,32 +55,35 @@ Torrents include [webseed](https://www.bittorrent.org/beps/bep_0019.html) — do
 
 | Format | Torrent |
 |--------|---------|
-| QCOW2 | [cstrikev2.5.1_amd64.qcow2.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5.1_amd64.qcow2.torrent) |
-| VDI | [cstrikev2.5.1_amd64.vdi.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5.1_amd64.vdi.torrent) |
+| QCOW2 | [cstrikev2.6_amd64.qcow2.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.6_amd64.qcow2.torrent) |
+| VMDK | [cstrikev2.6_amd64.vmdk.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.6_amd64.vmdk.torrent) |
+| OVA | [cstrikev2.6_amd64.ova.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.6_amd64.ova.torrent) |
+| VDI | [cstrikev2.6_amd64.vdi.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.6_amd64.vdi.torrent) |
 
 #### aarch64
 
 | Format | Torrent |
 |--------|---------|
-| QCOW2 | [cstrikev2.5_aarch64.qcow2.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_aarch64.qcow2.torrent) |
-| OVA | [cstrikev2.5_aarch64.ova.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_aarch64.ova.torrent) |
-| VDI | [cstrikev2.5_aarch64.vdi.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.5_aarch64.vdi.torrent) |
+| QCOW2 | [cstrikev2.6_aarch64.qcow2.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.6_aarch64.qcow2.torrent) |
+| VMDK | [cstrikev2.6_aarch64.vmdk.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.6_aarch64.vmdk.torrent) |
+| OVA | [cstrikev2.6_aarch64.ova.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.6_aarch64.ova.torrent) |
+| VDI | [cstrikev2.6_aarch64.vdi.torrent](https://registry.culpur.net/dist/torrents/cstrikev2.6_aarch64.vdi.torrent) |
 
 ```bash
 # Download with any BitTorrent client, or use aria2:
-aria2c https://registry.culpur.net/dist/torrents/cstrikev2.5.1_amd64.qcow2.torrent
+aria2c https://registry.culpur.net/dist/torrents/cstrikev2.6_amd64.qcow2.torrent
 ```
 
 ### Verify Integrity
 
 ```bash
 # amd64
-curl -O https://registry.culpur.net/dist/checksums-amd64-v2.5.1.sha256
-sha256sum -c checksums-amd64-v2.5.1.sha256
+curl -O https://registry.culpur.net/dist/checksums-amd64-v2.6.sha256
+sha256sum -c checksums-amd64-v2.6.sha256
 
 # aarch64
-curl -O https://registry.culpur.net/dist/checksums-aarch64.sha256
-sha256sum -c checksums-aarch64.sha256
+curl -O https://registry.culpur.net/dist/checksums-aarch64-v2.6.sha256
+sha256sum -c checksums-aarch64-v2.6.sha256
 ```
 
 ---
@@ -207,7 +213,7 @@ On import, the first-boot service automatically expands the partition to fill wh
 
 ## VirtualBox OVA
 
-Download the pre-built OVA: [cstrikev2.5_aarch64.ova](https://registry.culpur.net/dist/cstrikev2.5_aarch64.ova) (~20 GB, aarch64 only)
+Download the pre-built OVA: [cstrikev2.6_aarch64.ova](https://registry.culpur.net/dist/cstrikev2.6_aarch64.ova) (~20 GB, aarch64) or [cstrikev2.6_amd64.ova](https://registry.culpur.net/dist/cstrikev2.6_amd64.ova) (~20 GB, amd64)
 
 ### Export from an existing VirtualBox VM
 
@@ -242,7 +248,7 @@ The import helper configures host-only networking for lab access and prints conn
 
 ## Proxmox / KVM / QEMU Import
 
-Download the pre-built QCOW2: [cstrikev2.5.1_amd64.qcow2](https://registry.culpur.net/dist/cstrikev2.5.1_amd64.qcow2) (~21 GB)
+Download the pre-built QCOW2: [cstrikev2.6_amd64.qcow2](https://registry.culpur.net/dist/cstrikev2.6_amd64.qcow2) (~21 GB)
 
 Import from the `.tar.gz` distribution package or standalone disk images.
 
@@ -382,6 +388,6 @@ Verify with: `cat /opt/cstrike/.firstboot-complete`
 
 ## Legal
 
-CStrike v2.5.2 is intended exclusively for authorized penetration testing and red team operations. You must have explicit written authorization before scanning any target.
+CStrike v2.6 is intended exclusively for authorized penetration testing and red team operations. You must have explicit written authorization before scanning any target.
 
 MIT License (c) 2025-2026 Culpur Defense Inc.

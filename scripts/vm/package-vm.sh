@@ -28,7 +28,7 @@ SKIP_DOCKER_SAVE=false
 SSH_USER="soulofall"
 SSH_KEY=""
 NODE="${PVE_NODE:-proxmox}"
-VERSION="2.5.2"
+VERSION="2.6"
 PRODUCT="CStrike v2"
 INSTALL_DIR="/opt/cstrike"
 
@@ -443,6 +443,13 @@ qemu-img convert -f raw -O qcow2 -c \
     "${DISK_DEVICE}" "${OUTPUT_DIR}/cstrike-v2.qcow2" 2>&1
 QCOW2_SIZE=$(ls -lh "${OUTPUT_DIR}/cstrike-v2.qcow2" | awk '{print $5}')
 ok "qcow2: ${OUTPUT_DIR}/cstrike-v2.qcow2 (${QCOW2_SIZE})"
+
+# VMDK (VMware streamOptimized)
+info "Converting to VMDK (streamOptimized)..."
+qemu-img convert -f qcow2 -O vmdk -o subformat=streamOptimized \
+    "${OUTPUT_DIR}/cstrike-v2.qcow2" "${OUTPUT_DIR}/cstrike-v2.vmdk" 2>&1
+VMDK_SIZE=$(ls -lh "${OUTPUT_DIR}/cstrike-v2.vmdk" | awk '{print $5}')
+ok "vmdk: ${OUTPUT_DIR}/cstrike-v2.vmdk (${VMDK_SIZE})"
 
 # Sparse raw (for VDI/OVA conversion and tar.gz distribution)
 info "Converting to sparse raw..."

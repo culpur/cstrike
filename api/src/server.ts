@@ -173,7 +173,7 @@ async function start() {
 
     // Start HTTP server
     httpServer.listen(env.PORT, env.HOST, () => {
-      console.log(`[CStrike API] v2.0.0 listening on ${env.HOST}:${env.PORT}`);
+      console.log(`[CStrike API] v2.6.0 listening on ${env.HOST}:${env.PORT}`);
       console.log(`[CStrike API] Environment: ${env.NODE_ENV}`);
     });
   } catch (err) {
@@ -198,4 +198,4 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 start();
 
 export { app, httpServer, io };
-// v2.5.3-dev
+// v2.6.0
