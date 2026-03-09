@@ -54,7 +54,7 @@ export function UpdateView() {
     const poll = async () => {
       try {
         const status = await apiService.getUpdateStatus();
-        setSteps(status.steps);
+        setSteps(status.steps as Array<{ id: string; label: string; status: 'pending' | 'running' | 'completed' | 'error'; output: string; startedAt?: number; completedAt?: number }>);
         setCurrentStep(status.currentStep);
 
         if (status.status === 'completed') {

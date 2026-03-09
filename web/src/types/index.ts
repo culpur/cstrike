@@ -418,7 +418,8 @@ export type WSMessageType =
   | 'early_exploit_result'
   | 'persistence_deployed'
   | 'traceroute_hop'
-  | 'vpn_rotation';
+  | 'vpn_rotation'
+  | 'update_available';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;
