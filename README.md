@@ -467,7 +467,7 @@ CStrike v2 ships in 7 formats. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) 
 | [Docker Deployment](docs/DOCKER_DEPLOYMENT.md) | Docker-only deployment guide |
 | [Bare Metal Install](docs/BARE_METAL_INSTALL.md) | Full Debian 12 → CStrike walkthrough |
 | [Web UI README](web/README.md) | Frontend architecture and development |
-| [v2 Changelog](v2-changelog.md) | Full change history from v1 to v2.6 |
+| [Changelog](CHANGELOG.md) | Full change history from v1 to v2.6 |
 | [VulnBox](https://github.com/culpur/vulnbox) | Deliberately vulnerable target container (standalone repo) |
 
 ---
