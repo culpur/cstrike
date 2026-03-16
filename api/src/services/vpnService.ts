@@ -698,6 +698,14 @@ class VpnService {
 
       // MASQUERADE: rewrite source IP to VPN address for outgoing packets.
       `iptables -t nat -A POSTROUTING -o ${iface} -j MASQUERADE`,
+
+      // ── Safety net: DROP uid 1000 traffic on the real interface ──
+      // Raw sockets (masscan, nmap) bypass mangle fwmark routing and send
+      // packets directly out enp0s1, leaking the real IP. This filter OUTPUT
+      // rule catches any uid 1000 packet exiting the physical interface.
+      // Local/Docker traffic is excluded above via RETURN rules on private ranges.
+      `iptables -D OUTPUT -o enp0s1 -m owner --uid-owner 1000 -j DROP 2>/dev/null || true`,
+      `iptables -A OUTPUT -o enp0s1 -m owner --uid-owner 1000 -j DROP`,
     ];
 
     for (const cmd of commands) {
@@ -722,6 +730,8 @@ class VpnService {
       `while ip rule del fwmark ${mark} table ${FWMARK_TABLE} 2>/dev/null; do :; done`,
       `ip route flush table ${FWMARK_TABLE} 2>/dev/null || true`,
       `iptables -t mangle -F OUTPUT 2>/dev/null || true`,
+      // Remove safety-net DROP on real interface
+      `iptables -D OUTPUT -o enp0s1 -m owner --uid-owner 1000 -j DROP 2>/dev/null || true`,
       // Only remove VPN MASQUERADE rules — DO NOT flush entire chain
       // (Docker adds its own bridge MASQUERADE rules that must be preserved)
       `while iptables -t nat -D POSTROUTING -o ${iface} -j MASQUERADE 2>/dev/null; do :; done`,

@@ -100,7 +100,8 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
   nmap: (target) => {
     const host = extractHost(target);
     const port = extractPort(target);
-    const args = ['nmap', '-sV', '-sC', '-oN', '-'];
+    // Bind to wg0 so raw sockets don't leak out the real interface
+    const args = ['nmap', '-e', 'wg0', '-sV', '-sC', '-oN', '-'];
     if (port && port !== 80 && port !== 443) {
       // Scan specific port + common ports
       args.push('-p', `${port},21,22,23,25,53,80,443,3306,8080,8443`);
@@ -145,8 +146,9 @@ const TOOL_COMMANDS: Record<string, (target: string, opts: ToolOptions) => strin
   testssl: (target) => ['testssl.sh', target],
   masscan: (target) => [
     'masscan', extractHost(target), '-p1-65535', '--rate=1000', '--open-only',
+    '--adapter', 'wg0',
   ],
-  rustscan: (target) => ['rustscan', '-a', extractHost(target), '--ulimit', '5000'],
+  rustscan: (target) => ['rustscan', '-a', extractHost(target), '--ulimit', '5000', '--', '-e', 'wg0'],
   feroxbuster: (target) => {
     const wl = findWordlist(COMMON_WORDLIST);
     return ['feroxbuster', '-u', target, '-w', wl, '-q'];
