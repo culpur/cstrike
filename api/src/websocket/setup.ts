@@ -14,8 +14,8 @@ export function setupWebSocket(httpServer: HttpServer): SocketIOServer {
       methods: ['GET', 'POST'],
     },
     transports: ['websocket', 'polling'],
-    pingInterval: 10_000,
-    pingTimeout: 5_000,
+    pingInterval: 25_000,
+    pingTimeout: 20_000,
   });
 
   // Register the global reference
