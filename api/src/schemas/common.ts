@@ -43,15 +43,16 @@ export const TargetIdParamSchema = z.object({
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Coerce a string that may or may not carry an http/https prefix into a valid
- * URL string. We normalize at the schema level so route handlers never need to
- * repeat that logic.
+ * Target string — accepts bare IPs, hostnames, host:port, or full URLs.
+ * Does NOT assume or prepend any protocol. Targets are stored exactly as given.
  */
-export const UrlStringSchema = z
+export const TargetStringSchema = z
   .string()
-  .min(1, 'url is required')
-  .transform((val) => (val.startsWith('http') ? val : `https://${val}`))
-  .pipe(z.string().url('must be a valid URL'));
+  .min(1, 'target is required')
+  .transform((val) => val.trim());
+
+/** @deprecated Use TargetStringSchema — kept for backward compat */
+export const UrlStringSchema = TargetStringSchema;
 
 /**
  * IPv4 address — loose pattern that catches obvious non-IPs without being

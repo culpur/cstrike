@@ -36,16 +36,25 @@ targetsRouter.post('/', async (req, res, next) => {
 
     if (!url) throw new AppError(400, 'url is required');
 
-    // Normalize URL
-    const normalizedUrl = url.startsWith('http') ? url : `https://${url}`;
+    // Store target as-given — do NOT assume or prepend a protocol
+    const targetValue = url.trim();
+
+    // Extract hostname: if it's a full URL parse it, otherwise use the raw value (strip port)
+    let hostname: string;
+    try {
+      hostname = new URL(targetValue).hostname;
+    } catch {
+      // Bare IP, hostname, or host:port — strip any trailing port
+      hostname = targetValue.replace(/:\d+$/, '');
+    }
 
     const target = await prisma.target.upsert({
-      where: { url: normalizedUrl },
+      where: { url: targetValue },
       update: { ip, tags, notes },
       create: {
-        url: normalizedUrl,
+        url: targetValue,
         ip: ip ?? null,
-        hostname: new URL(normalizedUrl).hostname,
+        hostname,
         tags: tags ?? [],
         notes: notes ?? null,
       },

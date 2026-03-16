@@ -33,15 +33,17 @@ scansRouter.post('/start', async (req, res, next) => {
       // Existing target found by ID — mark as scanning
       await prisma.target.update({ where: { id: target }, data: { status: 'SCANNING' } });
     } else {
-      // Treat as URL/hostname — validate scope and upsert
+      // Treat as URL/hostname/IP — validate scope and upsert as-given
       await validateTargetScope(target);
-      const normalizedUrl = target.startsWith('http') ? target : `https://${target}`;
+      const targetValue = target.trim();
+      let hostname: string;
+      try { hostname = new URL(targetValue).hostname; } catch { hostname = targetValue.replace(/:\d+$/, ''); }
       targetRecord = await prisma.target.upsert({
-        where: { url: normalizedUrl },
+        where: { url: targetValue },
         update: { status: 'SCANNING' },
         create: {
-          url: normalizedUrl,
-          hostname: (() => { try { return new URL(normalizedUrl).hostname; } catch { return target; } })(),
+          url: targetValue,
+          hostname,
           status: 'SCANNING',
         },
       });
@@ -165,13 +167,15 @@ scansRouter.post('/batch', async (req, res, next) => {
         await prisma.target.update({ where: { id: target }, data: { status: 'SCANNING' } });
       } else {
         await validateTargetScope(target);
-        const normalizedUrl = target.startsWith('http') ? target : `https://${target}`;
+        const targetValue = target.trim();
+        let batchHostname: string;
+        try { batchHostname = new URL(targetValue).hostname; } catch { batchHostname = targetValue.replace(/:\d+$/, ''); }
         targetRecord = await prisma.target.upsert({
-          where: { url: normalizedUrl },
+          where: { url: targetValue },
           update: { status: 'SCANNING' },
           create: {
-            url: normalizedUrl,
-            hostname: (() => { try { return new URL(normalizedUrl).hostname; } catch { return target; } })(),
+            url: targetValue,
+            hostname: batchHostname,
             status: 'SCANNING',
           },
         });

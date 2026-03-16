@@ -141,13 +141,13 @@ const PORT_RULES: Array<{
   {
     match: (p) => p.service === 'http' || p.service === 'https' || [80, 443, 8080, 8443, 8888, 9090].includes(p.port),
     autoTasks: [
-      { tool: 'gobuster', phase: 'ENUMERATION', group: 'http_enum', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
-      { tool: 'whatweb', phase: 'ENUMERATION', group: 'http_enum', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
-      { tool: 'nikto', phase: 'ENUMERATION', group: 'http_enum', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
+      { tool: 'gobuster', phase: 'ENUMERATION', group: 'http_enum', configFn: (p, t) => { let h: string; try { h = new URL(t).hostname; } catch { h = t.replace(/:\d+$/, ''); } const scheme = (p.port === 443 || p.port === 8443) ? 'https' : 'http'; return { targetUrl: `${scheme}://${h}:${p.port}` }; } },
+      { tool: 'whatweb', phase: 'ENUMERATION', group: 'http_enum', configFn: (p, t) => { let h: string; try { h = new URL(t).hostname; } catch { h = t.replace(/:\d+$/, ''); } const scheme = (p.port === 443 || p.port === 8443) ? 'https' : 'http'; return { targetUrl: `${scheme}://${h}:${p.port}` }; } },
+      { tool: 'nikto', phase: 'ENUMERATION', group: 'http_enum', configFn: (p, t) => { let h: string; try { h = new URL(t).hostname; } catch { h = t.replace(/:\d+$/, ''); } const scheme = (p.port === 443 || p.port === 8443) ? 'https' : 'http'; return { targetUrl: `${scheme}://${h}:${p.port}` }; } },
     ],
     gatedTasks: [
-      { tool: 'nuclei', phase: 'EXPLOITATION', group: 'http_exploit', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
-      { tool: 'sqlmap', phase: 'EXPLOITATION', group: 'http_exploit', configFn: (p, t) => ({ targetUrl: `http://${new URL(t).hostname}:${p.port}` }) },
+      { tool: 'nuclei', phase: 'EXPLOITATION', group: 'http_exploit', configFn: (p, t) => { let h: string; try { h = new URL(t).hostname; } catch { h = t.replace(/:\d+$/, ''); } const scheme = (p.port === 443 || p.port === 8443) ? 'https' : 'http'; return { targetUrl: `${scheme}://${h}:${p.port}` }; } },
+      { tool: 'sqlmap', phase: 'EXPLOITATION', group: 'http_exploit', configFn: (p, t) => { let h: string; try { h = new URL(t).hostname; } catch { h = t.replace(/:\d+$/, ''); } const scheme = (p.port === 443 || p.port === 8443) ? 'https' : 'http'; return { targetUrl: `${scheme}://${h}:${p.port}` }; } },
     ],
     triggerLabel: (p) => `HTTP on port ${p.port}`,
   },

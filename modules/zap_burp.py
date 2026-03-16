@@ -57,7 +57,9 @@ def run_web_scans(target, output_base="targets"):
         cfg = {}
     zap_port = cfg.get("zap_port", 8090)
     zap_host = cfg.get("zap_host", "127.0.0.1")
-    zap_scan_cmd = f"curl http://{zap_host}:{zap_port}/JSON/ascan/action/scan/?url=http://{target}"
+    # Use the target as-given — only add http:// if no protocol is present
+    scan_target = target if target.startswith(("http://", "https://")) else f"http://{target}"
+    zap_scan_cmd = f"curl http://{zap_host}:{zap_port}/JSON/ascan/action/scan/?url={scan_target}"
     burp_scan_cmd = f"echo Trigger Burp Suite scan for {target}"
 
     try:

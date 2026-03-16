@@ -107,7 +107,7 @@ export function TargetsView() {
     if (!isValidUrl(targetUrl)) {
       addToast({
         type: 'error',
-        message: 'Invalid URL format',
+        message: 'Invalid target — enter an IP, hostname, or URL',
       });
       return;
     }
@@ -207,7 +207,7 @@ export function TargetsView() {
       <Panel title="Add Target">
         <div className="flex gap-2">
           <Input
-            placeholder="https://example.com or 192.168.1.1"
+            placeholder="192.168.1.1, example.com, or https://example.com"
             value={targetUrl}
             onChange={(e) => setTargetUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddTarget()}
