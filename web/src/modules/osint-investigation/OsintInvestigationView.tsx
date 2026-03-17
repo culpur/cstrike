@@ -373,26 +373,26 @@ async function fetchDomainCluster(domains: string[]): Promise<DomainClusterResul
     })
   );
 
-  const ipMap: Map<string, string[]> = new Map();
-  const nsMap: Map<string, string[]> = new Map();
+  const ipMap: Record<string, string[]> = {};
+  const nsMap: Record<string, string[]> = {};
 
   for (const node of nodes) {
     for (const ip of node.ips) {
-      if (!ipMap.has(ip)) ipMap.set(ip, []);
-      ipMap.get(ip)!.push(node.domain);
+      if (!ipMap[ip]) ipMap[ip] = [];
+      ipMap[ip].push(node.domain);
     }
     for (const ns of node.nameservers) {
       const nsKey = ns.replace(/\.$/, '');
-      if (!nsMap.has(nsKey)) nsMap.set(nsKey, []);
-      nsMap.get(nsKey)!.push(node.domain);
+      if (!nsMap[nsKey]) nsMap[nsKey] = [];
+      nsMap[nsKey].push(node.domain);
     }
   }
 
   const groups: ClusterGroup[] = [];
-  for (const [ip, doms] of ipMap) {
+  for (const [ip, doms] of Object.entries(ipMap)) {
     if (doms.length > 1) groups.push({ type: 'ip', value: ip, domains: doms });
   }
-  for (const [ns, doms] of nsMap) {
+  for (const [ns, doms] of Object.entries(nsMap)) {
     if (doms.length > 1) groups.push({ type: 'nameserver', value: ns, domains: doms });
   }
 
@@ -1200,29 +1200,29 @@ function DomainClusterTab() {
     const ids: string[] = [];
     let successCount = 0;
     try {
-      const domainIdMap: Map<string, string> = new Map();
+      const domainIdMap: Record<string, string> = {};
       for (const node of result.nodes) {
         try {
           const id = await pushDomainToOpenCTI(node.domain);
           ids.push(id);
-          domainIdMap.set(node.domain, id);
+          domainIdMap[node.domain] = id;
           successCount++;
         } catch { /* skip */ }
       }
 
-      const ipIdMap: Map<string, string> = new Map();
+      const ipIdMap: Record<string, string> = {};
       for (const group of result.groups) {
         if (group.type === 'ip') {
           try {
-            if (!ipIdMap.has(group.value)) {
+            if (!ipIdMap[group.value]) {
               const id = await pushIPToOpenCTI(group.value);
-              ipIdMap.set(group.value, id);
+              ipIdMap[group.value] = id;
               ids.push(id);
             }
-            const ipId = ipIdMap.get(group.value)!;
+            const ipId = ipIdMap[group.value];
             for (const d of group.domains) {
-              const domId = domainIdMap.get(d);
-              if (domId) await linkObservables(domId, ipId, 'resolves-to').catch(() => {});
+              const domId = domainIdMap[d];
+              if (domId && ipId) await linkObservables(domId, ipId, 'resolves-to').catch(() => {});
             }
           } catch { /* skip */ }
         }
