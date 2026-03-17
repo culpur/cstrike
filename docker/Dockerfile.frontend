@@ -12,7 +12,7 @@ RUN npm ci 2>/dev/null || npm install
 
 # Copy source and build (remove dev .env to prevent VITE_API_URL leaking into production)
 COPY web/ ./
-RUN rm -f .env .env.local && npm run build
+RUN rm -f .env .env.local && rm -f node_modules/.tmp/*.tsbuildinfo && npm run build
 
 # ── Stage 2: Serve ───────────────────────────────────────────
 FROM node:22-alpine
