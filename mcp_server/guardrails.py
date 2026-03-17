@@ -35,6 +35,16 @@ TOOL_MODE_MAP = {
                     "chisel", "responder", "bloodhound-python",
                     "proxychains4"],
     "credentials": ["cstrike-credentials", "hydra"],
+    "poscoin":     ["poscoin_scan", "poscoin_extract_config",
+                    "poscoin_api_probe", "poscoin_urlscan_hunt",
+                    "poscoin_trace_wallet", "poscoin_enumerate_victims"],
+    "osint_investigation": [
+                    "osint_domain_recon", "osint_reverse_ip", "osint_ip_whois",
+                    "osint_domain_cluster", "osint_wayback_lookup",
+                    "osint_page_fingerprint", "osint_urlscan_search",
+                    "osint_urlscan_result", "osint_urlscan_response",
+                    "osint_blockchain_address", "osint_blockchain_trace",
+                    "osint_scamadviser", "osint_numbered_domain_scan"],
 }
 
 EXPLOITATION_TOOLS = [
@@ -43,6 +53,8 @@ EXPLOITATION_TOOLS = [
     "impacket-secretsdump", "impacket-psexec",
     "impacket-wmiexec", "impacket-smbexec", "impacket-GetUserSPNs",
     "responder", "chisel", "bloodhound-python",
+    "poscoin_extract_config", "poscoin_api_probe",
+    "poscoin_enumerate_victims",
 ]
 
 

@@ -30,6 +30,7 @@ from mcp_server.tools import zap_burp, black_ops, credentials, loot, system
 from mcp_server.tools import web_exploit, network_enum, impacket
 from mcp_server.tools import ssl_tls, osint, password_crypto
 from mcp_server.tools import post_exploit, cloud_container
+from mcp_server.tools import poscoin, osint_investigation
 
 _TOOL_MODULES = [
     recon, exploitation, vulnapi_tools, metasploit,
@@ -37,6 +38,7 @@ _TOOL_MODULES = [
     web_exploit, network_enum, impacket,
     ssl_tls, osint, password_crypto,
     post_exploit, cloud_container,
+    poscoin, osint_investigation,
 ]
 
 for module in _TOOL_MODULES:
