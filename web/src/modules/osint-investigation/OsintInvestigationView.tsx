@@ -10,15 +10,13 @@
  *  6. Blockchain        — ETH/BSC/Polygon wallet tracing, transaction mapping
  *  7. Numbered Domain   — Prefix/suffix range scan (e.g., qsjt1-100.com)
  *
- * Each tab executes tools via POST /api/v1/mcp/tools/{tool_name}.
- * "Push to OpenCTI" buttons create STIX observables via /api/v1/threat-intel/graphql.
+ * Push to OpenCTI creates STIX observables via /api/v1/threat-intel/graphql.
  */
 
-import { useState, useCallback, useRef, memo } from 'react';
+import { useState, useCallback, memo } from 'react';
 import {
   Globe,
   Map,
-  Link2,
   Archive,
   Search,
   Bitcoin,
@@ -32,7 +30,6 @@ import {
   ExternalLink,
   Upload,
   Copy,
-  RefreshCw,
   Server,
   Network,
   FileText,
@@ -48,7 +45,6 @@ import { cn } from '@utils/index';
 // Constants
 // ============================================================================
 
-const MCP_BASE = '/api/v1/mcp/tools';
 const GRAPHQL_BASE = '/api/v1/threat-intel/graphql';
 
 // ============================================================================
@@ -66,7 +62,6 @@ type TabId =
 
 type LoadState = 'idle' | 'loading' | 'success' | 'error';
 
-// ---- Domain Recon ----
 interface WhoisRecord {
   registrar?: string;
   registrant?: string;
@@ -75,7 +70,6 @@ interface WhoisRecord {
   updated?: string;
   nameservers?: string[];
   status?: string[];
-  emails?: string[];
 }
 
 interface DnsRecord {
@@ -95,15 +89,12 @@ interface DomainReconResult {
   dns: DnsRecord[];
   headers: HttpHeaderRecord[];
   resolvedIPs: string[];
-  reverseDns?: string;
   timestamp: string;
 }
 
-// ---- Infrastructure Map ----
 interface CoHostedDomain {
   domain: string;
   ip: string;
-  lastSeen?: string;
 }
 
 interface IpWhoisRecord {
@@ -120,20 +111,17 @@ interface InfraMapResult {
   ip: string;
   ipWhois: IpWhoisRecord;
   coHosted: CoHostedDomain[];
-  reverseDns?: string;
   timestamp: string;
 }
 
-// ---- Domain Cluster ----
 interface ClusterNode {
   domain: string;
   ips: string[];
   nameservers: string[];
-  registrar?: string;
 }
 
 interface ClusterGroup {
-  type: 'ip' | 'nameserver' | 'registrar';
+  type: 'ip' | 'nameserver';
   value: string;
   domains: string[];
 }
@@ -144,7 +132,6 @@ interface DomainClusterResult {
   timestamp: string;
 }
 
-// ---- Wayback & Content ----
 interface WaybackSnapshot {
   timestamp: string;
   url: string;
@@ -170,7 +157,6 @@ interface WaybackResult {
   timestamp: string;
 }
 
-// ---- urlscan.io ----
 interface UrlscanResult {
   task_id: string;
   url: string;
@@ -190,7 +176,6 @@ interface UrlscanDrilldown {
   links: string[];
 }
 
-// ---- Blockchain ----
 type Chain = 'ETH' | 'BSC' | 'POLYGON';
 
 interface BlockchainTransaction {
@@ -222,7 +207,6 @@ interface BlockchainResult {
   timestamp: string;
 }
 
-// ---- Numbered Domain ----
 interface NumberedDomainEntry {
   domain: string;
   registered: boolean;
@@ -239,7 +223,6 @@ interface NumberedDomainResult {
   timestamp: string;
 }
 
-// ---- OpenCTI Push ----
 interface PushState {
   state: LoadState;
   createdIds: string[];
@@ -266,77 +249,47 @@ async function octiGraphql<T>(
 }
 
 // ============================================================================
-// MCP Tool Executor
+// Public API Helpers
 // ============================================================================
 
-async function runMcpTool<T = unknown>(
-  toolName: string,
-  args: Record<string, unknown>
-): Promise<T> {
-  const res = await fetch(`${MCP_BASE}/${toolName}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(args),
-    signal: AbortSignal.timeout(120_000),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new Error(`Tool ${toolName} failed: ${text}`);
-  }
-  const json = await res.json();
-  if (!json.success) throw new Error(json.error || `Tool ${toolName} returned failure`);
-  return (json.data?.result ?? json.data ?? json) as T;
-}
-
-// ============================================================================
-// Public API Helpers (no auth required, called from browser directly)
-// ============================================================================
-
-/** Domain Recon: combines WHOIS + DNS + HTTP headers in one compound call */
 async function fetchDomainRecon(domain: string): Promise<DomainReconResult> {
-  // We piggy-back on whatweb_detect for tech fingerprint and call the mcp tool
-  // but for WHOIS/DNS we use public APIs directly from the browser since MCP bridge
-  // may not have these tools registered yet — falls back gracefully.
   const [whoisRes, dnsRes, headersRes] = await Promise.allSettled([
     fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`, { signal: AbortSignal.timeout(10_000) }),
     fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=ANY`, { signal: AbortSignal.timeout(10_000) }),
     fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`http://${domain}`)}`, { signal: AbortSignal.timeout(10_000) }),
   ]);
 
-  // WHOIS via RDAP
   let whois: WhoisRecord = {};
   if (whoisRes.status === 'fulfilled' && whoisRes.value.ok) {
     try {
       const rdap = await whoisRes.value.json();
       whois = {
-        registrar: rdap.entities?.find((e: any) => e.roles?.includes('registrar'))?.vcardArray?.[1]?.find((v: any) => v[0] === 'fn')?.[3] ?? rdap.entities?.[0]?.handle,
-        created: rdap.events?.find((e: any) => e.eventAction === 'registration')?.eventDate,
-        expires: rdap.events?.find((e: any) => e.eventAction === 'expiration')?.eventDate,
-        updated: rdap.events?.find((e: any) => e.eventAction === 'last changed')?.eventDate,
-        nameservers: rdap.nameservers?.map((ns: any) => ns.ldhName ?? ns.ldh_name ?? '').filter(Boolean),
-        status: rdap.status ?? [],
+        registrar: rdap.entities?.find((e: Record<string, unknown>) => (e.roles as string[])?.includes('registrar'))?.handle as string | undefined,
+        created: (rdap.events as Array<{ eventAction: string; eventDate: string }>)?.find((e) => e.eventAction === 'registration')?.eventDate,
+        expires: (rdap.events as Array<{ eventAction: string; eventDate: string }>)?.find((e) => e.eventAction === 'expiration')?.eventDate,
+        updated: (rdap.events as Array<{ eventAction: string; eventDate: string }>)?.find((e) => e.eventAction === 'last changed')?.eventDate,
+        nameservers: (rdap.nameservers as Array<{ ldhName?: string }>)?.map((ns) => ns.ldhName ?? '').filter(Boolean),
+        status: rdap.status as string[] ?? [],
       };
     } catch { /* keep empty */ }
   }
 
-  // DNS via Google DoH
   const dnsRecords: DnsRecord[] = [];
   const resolvedIPs: string[] = [];
   if (dnsRes.status === 'fulfilled' && dnsRes.value.ok) {
     try {
       const dnsData = await dnsRes.value.json();
-      for (const answer of (dnsData.Answer ?? [])) {
-        const typeMap: Record<number, string> = { 1: 'A', 28: 'AAAA', 2: 'NS', 5: 'CNAME', 15: 'MX', 16: 'TXT', 33: 'SRV' };
+      const typeMap: Record<number, string> = { 1: 'A', 28: 'AAAA', 2: 'NS', 5: 'CNAME', 15: 'MX', 16: 'TXT', 33: 'SRV' };
+      for (const answer of (dnsData.Answer ?? []) as Array<{ type: number; data: string; TTL: number }>) {
         const rType = typeMap[answer.type] ?? String(answer.type);
         dnsRecords.push({ type: rType, value: answer.data, ttl: answer.TTL });
         if (answer.type === 1) resolvedIPs.push(answer.data);
       }
-      // Also do A lookup if none found
       if (!resolvedIPs.length) {
         const aRes = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`, { signal: AbortSignal.timeout(8_000) });
         if (aRes.ok) {
           const aData = await aRes.json();
-          for (const a of (aData.Answer ?? [])) {
+          for (const a of (aData.Answer ?? []) as Array<{ type: number; data: string; TTL: number }>) {
             if (a.type === 1) {
               resolvedIPs.push(a.data);
               dnsRecords.push({ type: 'A', value: a.data, ttl: a.TTL });
@@ -347,7 +300,6 @@ async function fetchDomainRecon(domain: string): Promise<DomainReconResult> {
     } catch { /* keep empty */ }
   }
 
-  // HTTP headers via allorigins proxy
   const headers: HttpHeaderRecord[] = [];
   if (headersRes.status === 'fulfilled' && headersRes.value.ok) {
     try {
@@ -358,17 +310,9 @@ async function fetchDomainRecon(domain: string): Promise<DomainReconResult> {
     } catch { /* keep empty */ }
   }
 
-  return {
-    domain,
-    whois,
-    dns: dnsRecords,
-    headers,
-    resolvedIPs,
-    timestamp: new Date().toISOString(),
-  };
+  return { domain, whois, dns: dnsRecords, headers, resolvedIPs, timestamp: new Date().toISOString() };
 }
 
-/** Infra Map: reverse-IP lookup + IP WHOIS */
 async function fetchInfraMap(ip: string): Promise<InfraMapResult> {
   const [ipWhoisRes, viewDnsRes] = await Promise.allSettled([
     fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, { signal: AbortSignal.timeout(10_000) }),
@@ -380,12 +324,12 @@ async function fetchInfraMap(ip: string): Promise<InfraMapResult> {
     try {
       const d = await ipWhoisRes.value.json();
       ipWhois = {
-        cidr: d.connection?.cidr,
-        org: d.org ?? d.connection?.org,
-        country: d.country,
+        cidr: d.connection?.cidr as string | undefined,
+        org: (d.org ?? d.connection?.org) as string | undefined,
+        country: d.country as string | undefined,
         asn: d.connection?.asn ? `AS${d.connection.asn}` : undefined,
-        asnName: d.connection?.isp,
-        isp: d.connection?.isp,
+        asnName: d.connection?.isp as string | undefined,
+        isp: d.connection?.isp as string | undefined,
       };
     } catch { /* keep empty */ }
   }
@@ -403,15 +347,9 @@ async function fetchInfraMap(ip: string): Promise<InfraMapResult> {
     } catch { /* keep empty */ }
   }
 
-  return {
-    ip,
-    ipWhois,
-    coHosted,
-    timestamp: new Date().toISOString(),
-  };
+  return { ip, ipWhois, coHosted, timestamp: new Date().toISOString() };
 }
 
-/** Domain Cluster: analyze multiple domains for shared infra */
 async function fetchDomainCluster(domains: string[]): Promise<DomainClusterResult> {
   const nodes: ClusterNode[] = [];
 
@@ -423,19 +361,18 @@ async function fetchDomainCluster(domains: string[]): Promise<DomainClusterResul
         const aRes = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`, { signal: AbortSignal.timeout(10_000) });
         if (aRes.ok) {
           const data = await aRes.json();
-          for (const a of (data.Answer ?? [])) if (a.type === 1) ips.push(a.data);
+          for (const a of (data.Answer ?? []) as Array<{ type: number; data: string }>) if (a.type === 1) ips.push(a.data);
         }
         const nsRes = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=NS`, { signal: AbortSignal.timeout(10_000) });
         if (nsRes.ok) {
           const data = await nsRes.json();
-          for (const ns of (data.Answer ?? [])) if (ns.type === 2) nameservers.push(ns.data);
+          for (const ns of (data.Answer ?? []) as Array<{ type: number; data: string }>) if (ns.type === 2) nameservers.push(ns.data);
         }
       } catch { /* skip */ }
       nodes.push({ domain, ips, nameservers });
     })
   );
 
-  // Build cluster groups
   const ipMap = new Map<string, string[]>();
   const nsMap = new Map<string, string[]>();
 
@@ -462,16 +399,12 @@ async function fetchDomainCluster(domains: string[]): Promise<DomainClusterResul
   return { nodes, groups, timestamp: new Date().toISOString() };
 }
 
-/** Wayback & Content */
 async function fetchWayback(url: string): Promise<WaybackResult> {
-  const domain = url.replace(/^https?:\/\//, '').split('/')[0];
-
-  const [cdxRes, availRes] = await Promise.allSettled([
+  const [cdxRes] = await Promise.allSettled([
     fetch(
       `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(url)}&output=json&limit=20&fl=timestamp,original,statuscode,mimetype&collapse=digest&from=20200101`,
       { signal: AbortSignal.timeout(20_000) }
     ),
-    fetch(`https://archive.org/wayback/available?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(10_000) }),
   ]);
 
   const snapshots: WaybackSnapshot[] = [];
@@ -489,7 +422,6 @@ async function fetchWayback(url: string): Promise<WaybackResult> {
     } catch { /* keep empty */ }
   }
 
-  // Fingerprint by fetching meta from allorigins
   const fingerprint: PageFingerprint = { technologies: [], scripts: [], metaTags: {} };
   try {
     const fpRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(15_000) });
@@ -497,34 +429,28 @@ async function fetchWayback(url: string): Promise<WaybackResult> {
       const fpData = await fpRes.json();
       const html: string = fpData.contents ?? '';
 
-      // Extract <title>
       const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
       if (titleMatch) fingerprint.title = titleMatch[1].trim();
 
-      // Meta tags
       const metaRe = /<meta\s+(?:name|property)=["']([^"']+)["']\s+content=["']([^"']+)["']/gi;
       let mm: RegExpExecArray | null;
       while ((mm = metaRe.exec(html)) !== null) {
         fingerprint.metaTags[mm[1]] = mm[2];
       }
 
-      // Script src
       const scriptRe = /<script[^>]+src=["']([^"']+)["']/gi;
       let sm: RegExpExecArray | null;
       while ((sm = scriptRe.exec(html)) !== null) {
         fingerprint.scripts.push(sm[1]);
       }
 
-      // Generators
-      const gen = html.match(/generator['"]\s*content=['"](WordPress[^'"]*|Joomla[^'"]*|Drupal[^'"]*|Ghost[^'"]*|Wix[^'"]*|Squarespace[^'"]*)/i);
+      const gen = html.match(/generator['"] content=['"]([^'"]+)/i);
       if (gen) fingerprint.generator = gen[1];
 
-      // Common CMS detection
       if (html.includes('/wp-content/')) fingerprint.cms = 'WordPress';
       else if (html.includes('/components/com_')) fingerprint.cms = 'Joomla';
       else if (html.includes('Drupal')) fingerprint.cms = 'Drupal';
 
-      // JS tech detection
       if (html.includes('React')) fingerprint.technologies.push('React');
       if (html.includes('angular')) fingerprint.technologies.push('Angular');
       if (html.includes('vue')) fingerprint.technologies.push('Vue.js');
@@ -538,7 +464,6 @@ async function fetchWayback(url: string): Promise<WaybackResult> {
   return { url, snapshots, fingerprint, timestamp: new Date().toISOString() };
 }
 
-/** urlscan.io search */
 async function fetchUrlscan(query: string): Promise<UrlscanResult[]> {
   const res = await fetch(
     `https://urlscan.io/api/v1/search/?q=${encodeURIComponent(query)}&size=20`,
@@ -546,15 +471,15 @@ async function fetchUrlscan(query: string): Promise<UrlscanResult[]> {
   );
   if (!res.ok) throw new Error(`urlscan.io returned HTTP ${res.status}`);
   const json = await res.json();
-  return (json.results ?? []).map((r: any) => ({
-    task_id: r.task?.uuid ?? r._id,
-    url: r.page?.url ?? r.task?.url,
-    domain: r.page?.domain ?? r.task?.domain,
-    ip: r.page?.ip,
-    screenshotURL: r.screenshot,
-    verdicts: r.verdicts,
-    page: r.page,
-    submittedAt: r.task?.time ?? r.task?.submitted,
+  return (json.results ?? []).map((r: Record<string, unknown>) => ({
+    task_id: (r.task as Record<string, string>)?.uuid ?? (r as Record<string, string>)._id,
+    url: (r.page as Record<string, string>)?.url ?? (r.task as Record<string, string>)?.url,
+    domain: (r.page as Record<string, string>)?.domain ?? (r.task as Record<string, string>)?.domain,
+    ip: (r.page as Record<string, string>)?.ip,
+    screenshotURL: r.screenshot as string | undefined,
+    verdicts: r.verdicts as UrlscanResult['verdicts'],
+    page: r.page as UrlscanResult['page'],
+    submittedAt: (r.task as Record<string, string>)?.time ?? (r.task as Record<string, string>)?.submitted,
   }));
 }
 
@@ -564,56 +489,53 @@ async function fetchUrlscanDrilldown(taskId: string): Promise<UrlscanDrilldown> 
   const json = await res.json();
   return {
     task_id: taskId,
-    requests: (json.data?.requests ?? []).slice(0, 50).map((r: any) => ({
-      url: r.request?.documentURL ?? r.request?.url ?? '',
-      type: r.request?.resourceType ?? 'document',
-      size: r.response?.response?.encodedDataLength,
-      status: r.response?.response?.status,
+    requests: (json.data?.requests ?? []).slice(0, 50).map((r: Record<string, Record<string, unknown>>) => ({
+      url: (r.request?.documentURL ?? r.request?.url ?? '') as string,
+      type: (r.request?.resourceType ?? 'document') as string,
+      size: r.response?.response ? (r.response.response as Record<string, number>).encodedDataLength : undefined,
+      status: r.response?.response ? (r.response.response as Record<string, number>).status : undefined,
     })),
-    cookies: (json.data?.cookies ?? []).slice(0, 30).map((c: any) => ({
+    cookies: (json.data?.cookies ?? []).slice(0, 30).map((c: Record<string, string>) => ({
       name: c.name,
       value: c.value,
       domain: c.domain,
     })),
-    globals: (json.data?.globals ?? []).slice(0, 30).map((g: any) => g.prop ?? String(g)),
-    links: (json.lists?.urls ?? []).slice(0, 40),
+    globals: (json.data?.globals ?? []).slice(0, 30).map((g: Record<string, unknown>) => (g.prop ?? String(g)) as string),
+    links: (json.lists?.urls ?? []).slice(0, 40) as string[],
   };
 }
 
-/** Blockchain: ETH/BSC/Polygon wallet info */
 async function fetchBlockchain(address: string, chains: Chain[]): Promise<BlockchainResult> {
   const wallets: WalletInfo[] = [];
   const allTxns: BlockchainTransaction[] = [];
   const drainTxns: BlockchainTransaction[] = [];
   const relatedSet = new Set<string>();
 
-  const CHAIN_CONFIG: Record<Chain, { apiUrl: string; apiKey: string; symbol: string }> = {
-    ETH: { apiUrl: 'https://api.etherscan.io/api', apiKey: '', symbol: 'ETH' },
-    BSC: { apiUrl: 'https://api.bscscan.com/api', apiKey: '', symbol: 'BNB' },
-    POLYGON: { apiUrl: 'https://api.polygonscan.com/api', apiKey: '', symbol: 'MATIC' },
+  const CHAIN_CONFIG: Record<Chain, { apiUrl: string; symbol: string }> = {
+    ETH: { apiUrl: 'https://api.etherscan.io/api', symbol: 'ETH' },
+    BSC: { apiUrl: 'https://api.bscscan.com/api', symbol: 'BNB' },
+    POLYGON: { apiUrl: 'https://api.polygonscan.com/api', symbol: 'MATIC' },
   };
 
   await Promise.all(
     chains.map(async (chain) => {
       const { apiUrl, symbol } = CHAIN_CONFIG[chain];
       try {
-        // Balance
         const balRes = await fetch(
           `${apiUrl}?module=account&action=balance&address=${address}&tag=latest`,
           { signal: AbortSignal.timeout(12_000) }
         );
         if (!balRes.ok) return;
         const balData = await balRes.json();
-        const balanceWei = BigInt(balData.result ?? '0');
-        const balance = (Number(balanceWei) / 1e18).toFixed(6);
+        const rawBalance = Number(balData.result ?? 0);
+        const balance = (rawBalance / 1e18).toFixed(6);
 
-        // Tx count from normal transactions
         const txRes = await fetch(
           `${apiUrl}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc&offset=50&page=1`,
           { signal: AbortSignal.timeout(12_000) }
         );
         const txData = txRes.ok ? await txRes.json() : { result: [] };
-        const txList: BlockchainTransaction[] = (txData.result ?? []).map((tx: any) => {
+        const txList: BlockchainTransaction[] = (txData.result ?? []).map((tx: Record<string, string>) => {
           const valueEth = (parseInt(tx.value ?? '0', 10) / 1e18).toFixed(6);
           return {
             hash: tx.hash,
@@ -626,17 +548,17 @@ async function fetchBlockchain(address: string, chains: Chain[]): Promise<Blockc
           };
         });
 
-        // Internal tx for drain detection (transferFrom)
         const internalRes = await fetch(
           `${apiUrl}?module=account&action=tokentx&address=${address}&sort=desc&offset=30&page=1`,
           { signal: AbortSignal.timeout(12_000) }
         );
         const internalData = internalRes.ok ? await internalRes.json() : { result: [] };
         const drains: BlockchainTransaction[] = (internalData.result ?? [])
-          .filter((tx: any) => tx.from?.toLowerCase() !== address.toLowerCase() && tx.to?.toLowerCase() === address.toLowerCase())
+          .filter((tx: Record<string, string>) => tx.from?.toLowerCase() !== address.toLowerCase() && tx.to?.toLowerCase() === address.toLowerCase())
           .slice(0, 20)
-          .map((tx: any) => {
-            const valueToken = (parseInt(tx.value ?? '0', 10) / Math.pow(10, parseInt(tx.tokenDecimal ?? '18', 10))).toFixed(4);
+          .map((tx: Record<string, string>) => {
+            const decimals = parseInt(tx.tokenDecimal ?? '18', 10);
+            const valueToken = (parseInt(tx.value ?? '0', 10) / Math.pow(10, decimals)).toFixed(4);
             return {
               hash: tx.hash,
               from: tx.from,
@@ -647,7 +569,6 @@ async function fetchBlockchain(address: string, chains: Chain[]): Promise<Blockc
             };
           });
 
-        // Collect related addresses
         for (const tx of [...txList, ...drains]) {
           if (tx.from && tx.from.toLowerCase() !== address.toLowerCase()) relatedSet.add(tx.from);
           if (tx.to && tx.to.toLowerCase() !== address.toLowerCase()) relatedSet.add(tx.to);
@@ -679,7 +600,6 @@ async function fetchBlockchain(address: string, chains: Chain[]): Promise<Blockc
   };
 }
 
-/** Numbered Domain Scan */
 async function fetchNumberedDomainScan(
   prefix: string,
   suffix: string,
@@ -705,11 +625,10 @@ async function fetchNumberedDomainScan(
           const dnsRes = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`, { signal: AbortSignal.timeout(8_000) });
           if (dnsRes.ok) {
             const data = await dnsRes.json();
-            const aRecords = (data.Answer ?? []).filter((a: any) => a.type === 1);
+            const aRecords = (data.Answer ?? []).filter((a: Record<string, number>) => a.type === 1);
             if (aRecords.length > 0) {
               registered = true;
-              ip = aRecords[0].data;
-              // Attempt HTTP probe — use allorigins to sidestep CORS
+              ip = (aRecords[0] as Record<string, string>).data;
               try {
                 const probeRes = await fetch(
                   `https://api.allorigins.win/get?url=${encodeURIComponent(`http://${domain}`)}`,
@@ -717,13 +636,13 @@ async function fetchNumberedDomainScan(
                 );
                 if (probeRes.ok) {
                   const pd = await probeRes.json();
-                  statusCode = pd.status?.http_code;
+                  statusCode = pd.status?.http_code as number | undefined;
                   active = !!statusCode && statusCode < 500;
                 }
               } catch { /* no http response */ }
             }
           }
-        } catch { /* DNS failed = unregistered */ }
+        } catch { /* DNS failed */ }
         allEntries.push({ domain, registered, active, ip, statusCode });
       })
     );
@@ -797,11 +716,7 @@ async function linkObservables(fromId: string, toId: string, relationship: strin
     }
   `;
   await octiGraphql(mutation, {
-    input: {
-      fromId,
-      toId,
-      relationship_type: relationship,
-    },
+    input: { fromId, toId, relationship_type: relationship },
   });
 }
 
@@ -941,15 +856,6 @@ function PushButton({
   );
 }
 
-function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div className="mb-3">
-      <h4 className="text-xs font-semibold text-grok-text-muted uppercase tracking-wide">{title}</h4>
-      {subtitle && <p className="text-xs text-grok-text-muted mt-0.5">{subtitle}</p>}
-    </div>
-  );
-}
-
 function KVRow({ label, value }: { label: string; value?: string }) {
   if (!value) return null;
   return (
@@ -998,8 +904,7 @@ function DomainReconTab() {
       setResult(res);
       setLoadState('success');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Recon failed';
-      setError(msg);
+      setError(err instanceof Error ? err.message : 'Recon failed');
       setLoadState('error');
     }
   }, [domain]);
@@ -1025,9 +930,6 @@ function DomainReconTab() {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'OpenCTI push failed' });
     }
   }, [result, addToast]);
-
-  const dnsRows = result?.dns.map((r) => [r.type, r.value, r.ttl != null ? `${r.ttl}s` : '—']) ?? [];
-  const headerRows = result?.headers.map((h) => [h.name, h.value]) ?? [];
 
   return (
     <div className="space-y-4">
@@ -1111,13 +1013,16 @@ function DomainReconTab() {
           <Panel title="DNS Records">
             <DataTable
               headers={['Type', 'Value', 'TTL']}
-              rows={dnsRows}
+              rows={result.dns.map((r) => [r.type, r.value, r.ttl != null ? `${r.ttl}s` : '—'])}
             />
           </Panel>
 
-          {headerRows.length > 0 && (
+          {result.headers.length > 0 && (
             <Panel title="HTTP Response Info">
-              <DataTable headers={['Header', 'Value']} rows={headerRows} />
+              <DataTable
+                headers={['Header', 'Value']}
+                rows={result.headers.map((h) => [h.name, h.value])}
+              />
             </Panel>
           )}
         </>
@@ -1240,7 +1145,7 @@ function InfraMapTab() {
                   ))}
                 </div>
               ) : (
-                <EmptyState message="No co-hosted domains found (reverse-IP lookup returned empty)" />
+                <EmptyState message="No co-hosted domains found" />
               )}
             </Panel>
           </div>
@@ -1264,7 +1169,10 @@ function DomainClusterTab() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const run = useCallback(async () => {
-    const domains = input.split(',').map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0]).filter(Boolean);
+    const domains = input
+      .split(',')
+      .map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0])
+      .filter(Boolean);
     if (domains.length < 2) {
       setError('Enter at least two comma-separated domains');
       return;
@@ -1292,7 +1200,6 @@ function DomainClusterTab() {
     const ids: string[] = [];
     let successCount = 0;
     try {
-      // Push all domain nodes
       const domainIdMap = new Map<string, string>();
       for (const node of result.nodes) {
         try {
@@ -1303,7 +1210,6 @@ function DomainClusterTab() {
         } catch { /* skip */ }
       }
 
-      // Push shared IPs and link
       const ipIdMap = new Map<string, string>();
       for (const group of result.groups) {
         if (group.type === 'ip') {
@@ -1449,7 +1355,6 @@ function DomainClusterTab() {
 // ============================================================================
 
 function WaybackTab() {
-  const { addToast } = useUIStore();
   const [url, setUrl] = useState('');
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [error, setError] = useState('');
@@ -1878,7 +1783,7 @@ function BlockchainTab() {
     setSelectedChains((prev) => {
       const next = new Set(prev);
       if (next.has(chain)) {
-        if (next.size === 1) return prev; // keep at least one
+        if (next.size === 1) return prev;
         next.delete(chain);
       } else {
         next.add(chain);
@@ -1929,11 +1834,6 @@ function BlockchainTab() {
   }, [result, addToast]);
 
   const CHAINS: Chain[] = ['ETH', 'BSC', 'POLYGON'];
-  const CHAIN_COLORS: Record<Chain, string> = {
-    ETH: 'text-grok-ai-purple',
-    BSC: 'text-grok-warning',
-    POLYGON: 'text-grok-ai-purple',
-  };
 
   return (
     <div className="space-y-4">
@@ -1965,7 +1865,7 @@ function BlockchainTab() {
                 className={cn(
                   'px-2.5 py-1 rounded border text-xs font-semibold transition-colors',
                   selectedChains.has(chain)
-                    ? `border-grok-recon-blue bg-grok-recon-blue/20 ${CHAIN_COLORS[chain]}`
+                    ? 'border-grok-recon-blue bg-grok-recon-blue/20 text-grok-scan-cyan'
                     : 'border-grok-border text-grok-text-muted hover:border-grok-border-glow'
                 )}
                 aria-pressed={selectedChains.has(chain)}
@@ -1975,8 +1875,7 @@ function BlockchainTab() {
             ))}
           </div>
           <p className="text-xs text-grok-text-muted">
-            Note: Blockchain explorers (Etherscan, BscScan, PolygonScan) use public API keys with rate limits.
-            Results may be limited without a registered API key configured server-side.
+            Note: Blockchain explorers use public rate-limited APIs. Results may be partial without a registered API key configured server-side.
           </p>
         </div>
         {loadState === 'loading' && <LoadingSpinner label="Querying blockchain explorers..." />}
@@ -2001,7 +1900,7 @@ function BlockchainTab() {
                 key={s}
                 onClick={() => setActiveSection(s)}
                 className={cn(
-                  'px-3 py-1.5 rounded text-xs font-medium transition-colors capitalize',
+                  'px-3 py-1.5 rounded text-xs font-medium transition-colors',
                   activeSection === s
                     ? 'bg-grok-recon-blue text-white'
                     : 'text-grok-text-muted hover:text-grok-text-body hover:bg-grok-hover'
@@ -2066,7 +1965,7 @@ function BlockchainTab() {
               {result.drainTransactions.length > 0 && (
                 <div className="mb-3 p-2.5 bg-grok-warning/10 border border-grok-warning rounded-md text-xs text-grok-warning">
                   <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />
-                  These are token transfers where the from address differs from the wallet address — potential drainer contract activity.
+                  These are token transfers where the from address differs from the wallet — potential drainer contract activity.
                 </div>
               )}
               <DataTable
@@ -2129,7 +2028,7 @@ function NumberedDomainTab() {
       return;
     }
     if (isNaN(from) || isNaN(to) || from < 0 || to < from) {
-      setError('Invalid range — from must be ≤ to');
+      setError('Invalid range — from must be <= to');
       return;
     }
     if (to - from > 99) {
@@ -2181,14 +2080,14 @@ function NumberedDomainTab() {
     }
   }, [result, addToast]);
 
+  const registeredCount = result?.entries.filter((e) => e.registered).length ?? 0;
+  const activeCount = result?.entries.filter((e) => e.active).length ?? 0;
+
   const filtered = result?.entries.filter((e) => {
     if (filter === 'registered') return e.registered;
     if (filter === 'active') return e.active;
     return true;
   }) ?? [];
-
-  const registeredCount = result?.entries.filter((e) => e.registered).length ?? 0;
-  const activeCount = result?.entries.filter((e) => e.active).length ?? 0;
 
   return (
     <div className="space-y-4">
@@ -2196,7 +2095,7 @@ function NumberedDomainTab() {
         <div className="space-y-3">
           <p className="text-xs text-grok-text-muted">
             Scan a range of numbered domains, e.g., prefix=<code className="font-mono bg-grok-surface-3 px-1 rounded">qsjt</code>{' '}
-            suffix=<code className="font-mono bg-grok-surface-3 px-1 rounded">.com</code> range 1–100 → qsjt1.com … qsjt100.com
+            suffix=<code className="font-mono bg-grok-surface-3 px-1 rounded">.com</code> range 1-100 scans qsjt1.com through qsjt100.com
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
@@ -2230,7 +2129,7 @@ function NumberedDomainTab() {
           </div>
           <div className="text-xs text-grok-text-muted">
             Preview: <code className="font-mono bg-grok-surface-3 px-1 rounded">{prefix || '[prefix]'}{fromNum || '1'}{suffix || '[suffix]'}</code>
-            {' '}…{' '}
+            {' '}...{' '}
             <code className="font-mono bg-grok-surface-3 px-1 rounded">{prefix || '[prefix]'}{toNum || '20'}{suffix || '[suffix]'}</code>
           </div>
           <button
@@ -2315,10 +2214,10 @@ function NumberedDomainTab() {
                         ) : entry.registered ? (
                           <AlertTriangle className="w-4 h-4 text-grok-warning" />
                         ) : (
-                          <span className="text-grok-text-muted">—</span>
+                          <span className="text-grok-text-muted">-</span>
                         )}
                       </td>
-                      <td className="py-2 px-3 font-mono text-grok-scan-cyan">{entry.ip ?? '—'}</td>
+                      <td className="py-2 px-3 font-mono text-grok-scan-cyan">{entry.ip ?? '-'}</td>
                       <td className="py-2 px-3 font-mono">
                         {entry.statusCode != null ? (
                           <span className={cn(
@@ -2328,7 +2227,7 @@ function NumberedDomainTab() {
                           )}>
                             {entry.statusCode}
                           </span>
-                        ) : '—'}
+                        ) : '-'}
                       </td>
                     </tr>
                   ))}
@@ -2362,7 +2261,6 @@ export function OsintInvestigationView() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
       <div className="flex-shrink-0 px-4 pt-4 pb-0">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-grok-scan-cyan/10 rounded-lg">
@@ -2376,8 +2274,7 @@ export function OsintInvestigationView() {
           </div>
         </div>
 
-        {/* Tab bar */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="flex items-center gap-1 overflow-x-auto pb-2">
           {TABS.map((tab) => (
             <TabButton
               key={tab.id}
@@ -2392,7 +2289,6 @@ export function OsintInvestigationView() {
         <div className="h-px bg-grok-border mt-1" />
       </div>
 
-      {/* Tab Content */}
       <div className="flex-1 overflow-y-auto p-4 min-h-0">
         {activeTab === 'domain-recon' && <DomainReconTab />}
         {activeTab === 'infra-map' && <InfraMapTab />}
