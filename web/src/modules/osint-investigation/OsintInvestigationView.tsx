@@ -373,8 +373,8 @@ async function fetchDomainCluster(domains: string[]): Promise<DomainClusterResul
     })
   );
 
-  const ipMap = new Map<string, string[]>();
-  const nsMap = new Map<string, string[]>();
+  const ipMap: Map<string, string[]> = new Map();
+  const nsMap: Map<string, string[]> = new Map();
 
   for (const node of nodes) {
     for (const ip of node.ips) {
@@ -509,7 +509,7 @@ async function fetchBlockchain(address: string, chains: Chain[]): Promise<Blockc
   const wallets: WalletInfo[] = [];
   const allTxns: BlockchainTransaction[] = [];
   const drainTxns: BlockchainTransaction[] = [];
-  const relatedSet = new Set<string>();
+  const relatedSet: Set<string> = new Set();
 
   const CHAIN_CONFIG: Record<Chain, { apiUrl: string; symbol: string }> = {
     ETH: { apiUrl: 'https://api.etherscan.io/api', symbol: 'ETH' },
@@ -1200,7 +1200,7 @@ function DomainClusterTab() {
     const ids: string[] = [];
     let successCount = 0;
     try {
-      const domainIdMap = new Map<string, string>();
+      const domainIdMap: Map<string, string> = new Map();
       for (const node of result.nodes) {
         try {
           const id = await pushDomainToOpenCTI(node.domain);
@@ -1210,7 +1210,7 @@ function DomainClusterTab() {
         } catch { /* skip */ }
       }
 
-      const ipIdMap = new Map<string, string>();
+      const ipIdMap: Map<string, string> = new Map();
       for (const group of result.groups) {
         if (group.type === 'ip') {
           try {
