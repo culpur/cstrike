@@ -22,6 +22,7 @@ import { ScanDiffView } from '@modules/scan-diff/ScanDiffView';
 import { EvidenceView } from '@modules/evidence/EvidenceView';
 import { TerminalView } from '@modules/terminal/TerminalView';
 import { UpdateView } from '@modules/update/UpdateView';
+import { OsintInvestigationView } from '@modules/osint-investigation/OsintInvestigationView';
 
 import { useUIStore } from '@stores/uiStore';
 import { useWebSocketHandlers } from '@/hooks/useWebSocketHandlers';
@@ -87,6 +88,8 @@ function App() {
         return <TerminalView />;
       case 'update':
         return <UpdateView />;
+      case 'osint-investigation':
+        return <OsintInvestigationView />;
       default:
         return <DashboardView />;
     }

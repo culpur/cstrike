@@ -21,6 +21,7 @@ import {
   GitCompareArrows,
   FileCheck,
   Terminal,
+  Search,
 
   User,
   ShieldCheck,
@@ -93,6 +94,12 @@ const navigationItems = [
     id: 'scan-diff',
     label: 'Scan Diff',
     icon: GitCompareArrows,
+    section: 'intel',
+  },
+  {
+    id: 'osint-investigation',
+    label: 'OSINT Investigation',
+    icon: Search,
     section: 'intel',
   },
   {

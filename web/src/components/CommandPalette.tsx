@@ -361,6 +361,17 @@ export function CommandPalette() {
       },
     },
     {
+      id: 'nav-osint-investigation',
+      kind: 'navigation',
+      label: 'OSINT Investigation',
+      description: 'Domain recon, infrastructure mapping, blockchain tracing, urlscan.io',
+      icon: Search,
+      onSelect: (close) => {
+        setActiveView('osint-investigation');
+        close();
+      },
+    },
+    {
       id: 'nav-reports',
       kind: 'navigation',
       label: 'Reports',
