@@ -19,7 +19,6 @@ import {
   HardDrive,
   Clock,
   Play,
-  Pause,
   Zap,
   Shield,
   Target,
@@ -38,12 +37,9 @@ import {
   ChevronRight,
   Server,
   Hash,
-  RotateCcw,
   Key,
   CalendarClock,
   Network,
-  Square,
-  Trash2,
 } from 'lucide-react';
 import {
   PieChart,
@@ -252,8 +248,76 @@ export function DashboardView() {
     { key: 'docker', label: 'DOCKER', status: services.docker ?? 'stopped' },
   ];
 
+  // Per-target pipeline stage logic
+  const PIPELINE_STAGES = ['recon', 'ai_analysis_1', 'web_scans', 'exploitation', 'post_exploitation', 'complete'] as const;
+  type PipelineStage = typeof PIPELINE_STAGES[number];
+  const STAGE_LABELS: Record<PipelineStage, string> = {
+    recon: 'Rcn',
+    ai_analysis_1: 'AI',
+    web_scans: 'Web',
+    exploitation: 'Exp',
+    post_exploitation: 'Shl',
+    complete: 'Done',
+  };
+
+  // Map a current_phase value to a pipeline stage index (-1 = none started)
+  const phaseToStageIndex = (phase: string | undefined): number => {
+    const phaseMap: Record<string, number> = {
+      idle: -1,
+      recon: 0,
+      ai_analysis_1: 1,
+      ai_analysis: 1,
+      web_scans: 2,
+      vulnapi: 2,
+      metasploit: 3,
+      exploitation: 3,
+      ai_analysis_2: 3,
+      post_exploitation: 4,
+      post_exploit: 4,
+      reporting: 5,
+      complete: 5,
+    };
+    return phaseMap[phase ?? ''] ?? -1;
+  };
+
+  // Target status pill derived from active scan state
+  const getTargetScanStatus = (targetUrl: string): { label: string; color: string } | null => {
+    const scan = activeScans.find((s) => s.target === targetUrl || s.target.includes(targetUrl) || targetUrl.includes(s.target));
+    if (!scan) return null;
+    const phase = scan.current_phase || scan.phase || '';
+    if (phase === 'complete' || scan.status === 'completed') return { label: 'DONE', color: 'var(--grok-success)' };
+    if (phaseToStageIndex(phase) >= 3) return { label: 'EXPLOITED', color: 'var(--grok-exploit-red)' };
+    if (phaseToStageIndex(phase) >= 2) return { label: 'SCANNING', color: 'var(--grok-recon-blue)' };
+    return { label: 'RECON', color: 'var(--grok-scan-cyan)' };
+  };
+
+  // Color keyword segments in AI thought content
+  const colorizeThought = (content: string, thoughtType: string): React.ReactNode => {
+    const typeColors: Record<string, string> = {
+      reasoning: 'var(--grok-ai-purple)',
+      command: 'var(--grok-recon-blue)',
+      decision: 'var(--grok-scan-cyan)',
+      observation: 'var(--grok-text-body)',
+      ai_prompt: 'var(--grok-ai-purple)',
+      ai_response: 'var(--grok-loot-green)',
+      ai_decision: 'var(--grok-scan-cyan)',
+      ai_execution: 'var(--grok-warning)',
+    };
+    const color = typeColors[thoughtType] || 'var(--grok-text-body)';
+    const truncated = content.length > 180 ? content.slice(0, 180) + '...' : content;
+    return <span style={{ color }}>{truncated}</span>;
+  };
+
+  // Recent loot items for activity feed
+  const recentActivity = useMemo(() => {
+    return [...lootItems]
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 20);
+  }, [lootItems]);
+
   return (
     <div className="h-full overflow-y-auto p-5 flex flex-col gap-5">
+
       {/* ── Row 1: Header with scan launcher ───────────────────── */}
       <div className="flex items-center justify-between gap-4">
         <div>
@@ -265,7 +329,6 @@ export function DashboardView() {
             {connected ? 'Systems Online' : 'Waiting for connection...'}
           </p>
         </div>
-
         <div className="flex items-center gap-2">
           <input
             type="text"
@@ -311,7 +374,6 @@ export function DashboardView() {
               <CalendarClock className="w-3.5 h-3.5" /> {new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </span>
           </div>
-          {/* CPU usage bar */}
           <div
             className="absolute bottom-0 left-0 h-0.5 transition-all duration-1000"
             style={{ width: `${metrics.cpu}%`, backgroundColor: metrics.cpu > 80 ? 'var(--grok-error)' : 'var(--grok-scan-cyan)' }}
@@ -344,7 +406,7 @@ export function DashboardView() {
           )}
         </div>
 
-        {/* Targets */}
+        {/* Targets count */}
         <TelemetryCard
           icon={<Target className="w-4 h-4" />}
           label="Targets"
@@ -353,7 +415,7 @@ export function DashboardView() {
         />
       </div>
 
-      {/* ── Row 3: Service health (full width) ─────────────────── */}
+      {/* ── Row 3: Service health strip (full width) ────────────── */}
       <div className="cs-panel p-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)]">
@@ -386,8 +448,8 @@ export function DashboardView() {
         </div>
       </div>
 
-      {/* ── Row 4: Quick stats ──────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-3">
+      {/* ── Row 4: Quick stats (5-column) ───────────────────────── */}
+      <div className="grid grid-cols-5 gap-3">
         <QuickStat
           icon={<Server className="w-4 h-4" />}
           label="Open Ports"
@@ -399,7 +461,7 @@ export function DashboardView() {
           icon={<AlertTriangle className="w-4 h-4" />}
           label="Vulnerabilities"
           value={totalVulns}
-          color="var(--grok-warning)"
+          color="var(--grok-exploit-red)"
           onClick={() => setActiveView('results')}
         />
         <QuickStat
@@ -416,18 +478,26 @@ export function DashboardView() {
           color="var(--grok-loot-green)"
           onClick={() => setActiveView('loot')}
         />
+        <QuickStat
+          icon={<Brain className="w-4 h-4" />}
+          label="AI Insights"
+          value={thoughts.length}
+          color="var(--grok-ai-purple)"
+          onClick={() => setActiveView('ai-stream')}
+        />
       </div>
 
-      {/* ── Row 5: Charts (3-column) ────────────────────────────── */}
+      {/* ── Row 5: Charts (3-column equal) ──────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
-        {/* Vulnerability Severity Distribution */}
+
+        {/* Vuln Severity donut */}
         <div className="cs-panel p-4">
           <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)] mb-3">
-            Vulnerability Severity
+            Vuln Severity
           </div>
           {sevCounts.length > 0 ? (
             <div className="flex items-center gap-4">
-              <div className="w-28 h-28">
+              <div className="w-28 h-28 flex-shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -447,16 +517,19 @@ export function DashboardView() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-1.5 flex-1">
-                {sevCounts.map((s) => (
-                  <div key={s.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                      <span className="text-[11px] text-[var(--grok-text-body)] capitalize">{s.name}</span>
+              <div className="space-y-1.5 flex-1 min-w-0">
+                {['critical', 'high', 'medium', 'low', 'info'].map((sev) => {
+                  const entry = sevCounts.find((s) => s.name === sev);
+                  return (
+                    <div key={sev} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: SEVERITY_COLORS[sev] || '#6a6a80' }} />
+                        <span className="text-[11px] text-[var(--grok-text-body)] capitalize">{sev}</span>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-[var(--grok-text-heading)]">{entry?.value ?? 0}</span>
                     </div>
-                    <span className="text-xs font-mono font-bold text-[var(--grok-text-heading)]">{s.value}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : (
@@ -464,7 +537,7 @@ export function DashboardView() {
           )}
         </div>
 
-        {/* Port / Service Distribution */}
+        {/* Open Services bar chart */}
         <div className="cs-panel p-4">
           <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)] mb-3">
             Open Services
@@ -539,95 +612,179 @@ export function DashboardView() {
         </div>
       </div>
 
-      {/* ── Row 6: Active Operations + Recent Findings (50/50) ─── */}
+      {/* ── Row 6: Targets + Findings (50/50) ───────────────────── */}
       <div className="grid grid-cols-2 gap-3">
-        {/* Active Operations */}
+
+        {/* Targets panel with per-target pipeline */}
         <div className="cs-panel">
           <div className="cs-panel-header flex items-center justify-between">
-            <span>Active Operations ({activeScans.length})</span>
-            {activeScans.length > 0 && (
-              <span className="text-[var(--grok-recon-blue)] animate-pulse-glow flex items-center gap-1">
-                <Radio className="w-3 h-3" /> LIVE
-              </span>
-            )}
+            <span className="flex items-center gap-1.5">
+              <Target className="w-3 h-3 text-[var(--grok-recon-blue)]" />
+              Targets
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--grok-recon-blue)]/10 text-[var(--grok-recon-blue)]">
+              {targets.length} hosts
+            </span>
           </div>
-          <div className="p-3 space-y-2">
-            {activeScans.length === 0 ? (
-              <div className="text-center py-6 text-xs text-[var(--grok-text-muted)]">
-                No active scans. Launch a scan above to begin.
-              </div>
+          <div className="p-2 space-y-1.5 overflow-y-auto">
+            {targets.length === 0 ? (
+              <p className="text-xs text-[var(--grok-text-muted)] text-center py-6">
+                No targets — launch a scan above
+              </p>
             ) : (
-              activeScans.map((scan) => (
-                <ScanCard
-                  key={scan.scan_id}
-                  scan={scan}
-                  onPause={async () => {
-                    try {
-                      await apiService.pauseScan(scan.scan_id);
-                      addToast({ type: 'info', message: `Pausing scan: ${scan.target}`, duration: 3000 });
-                    } catch (err: any) {
-                      addToast({ type: 'error', message: err.message || 'Pause failed', duration: 5000 });
-                    }
-                  }}
-                  onResume={async () => {
-                    try {
-                      await apiService.resumeScan(scan.scan_id);
-                      addToast({ type: 'info', message: `Resuming scan: ${scan.target}`, duration: 3000 });
-                    } catch (err: any) {
-                      addToast({ type: 'error', message: err.message || 'Resume failed', duration: 5000 });
-                    }
-                  }}
-                  onStop={async () => {
-                    try {
-                      await apiService.stopRecon(scan.scan_id);
-                      addToast({ type: 'info', message: `Stopping scan: ${scan.target}`, duration: 3000 });
-                    } catch (err: any) {
-                      addToast({ type: 'error', message: err.message || 'Stop failed', duration: 5000 });
-                    }
-                  }}
-                  onDelete={async () => {
-                    if (!window.confirm(`Delete scan for ${scan.target} and all its data? This cannot be undone.`)) return;
-                    try {
-                      await apiService.deleteRecon(scan.scan_id);
-                      addToast({ type: 'success', message: `Deleted scan: ${scan.target}`, duration: 3000 });
-                      setActiveScans(prev => prev.filter(s => s.scan_id !== scan.scan_id));
-                    } catch (err: any) {
-                      addToast({ type: 'error', message: err.message || 'Delete failed', duration: 5000 });
-                    }
-                  }}
-                />
-              ))
+              targets.map((tgt) => {
+                const scan = activeScans.find((s) =>
+                  s.target === tgt.url || s.target.includes(tgt.url) || tgt.url.includes(s.target)
+                );
+                const currentPhase = scan?.current_phase || scan?.phase;
+                const activeStageIdx = scan ? phaseToStageIndex(currentPhase) : -2;
+                const scanStatus = getTargetScanStatus(tgt.url);
+                const isPausedScan = scan?.status === 'paused';
+
+                return (
+                  <div
+                    key={tgt.id}
+                    className="flex items-center gap-2 px-2 py-2 bg-[var(--grok-surface-2)] rounded border border-[var(--grok-border)] hover:border-[var(--grok-border-glow)] transition-colors"
+                  >
+                    {/* IP / URL */}
+                    <span className="text-[11px] font-mono font-bold text-[var(--grok-text-heading)] w-32 truncate flex-shrink-0">
+                      {tgt.ip || tgt.url.replace(/^https?:\/\//, '').split('/')[0]}
+                    </span>
+
+                    {/* Hostname (url) */}
+                    <span className="text-[10px] text-[var(--grok-text-muted)] truncate w-28 flex-shrink-0 hidden lg:block">
+                      {tgt.url.replace(/^https?:\/\//, '').split('/')[0]}
+                    </span>
+
+                    {/* 6-stage pipeline bars */}
+                    <div className="flex flex-col flex-1 gap-0.5 min-w-0">
+                      <div className="flex gap-px">
+                        {PIPELINE_STAGES.map((stage, idx) => {
+                          const isComplete = activeStageIdx > idx || activeStageIdx === 5;
+                          const isActive = activeStageIdx === idx && !isPausedScan;
+                          const isPausedStage = activeStageIdx === idx && isPausedScan;
+                          let bg = '#21262d'; // pending grey
+                          if (isComplete) bg = '#3fb950';
+                          else if (isActive) bg = '#58a6ff';
+                          else if (isPausedStage) bg = '#d29922';
+                          return (
+                            <div
+                              key={stage}
+                              className={`h-[3px] flex-1 rounded-sm transition-colors ${isActive ? 'animate-pulse' : ''}`}
+                              style={{ backgroundColor: bg }}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="flex gap-px">
+                        {PIPELINE_STAGES.map((stage, idx) => {
+                          const isComplete = activeStageIdx > idx || activeStageIdx === 5;
+                          const isActive = activeStageIdx === idx;
+                          let labelColor = '#4a4a5a'; // pending
+                          if (isComplete) labelColor = '#3fb950';
+                          else if (isActive) labelColor = '#58a6ff';
+                          return (
+                            <span
+                              key={stage}
+                              className="flex-1 text-center"
+                              style={{ fontSize: '6px', color: labelColor, lineHeight: '1.2', fontFamily: 'monospace', textTransform: 'uppercase' }}
+                            >
+                              {STAGE_LABELS[stage]}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Status pill */}
+                    {scanStatus ? (
+                      <span
+                        className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                        style={{
+                          color: scanStatus.color,
+                          backgroundColor: `${scanStatus.color}18`,
+                          border: `1px solid ${scanStatus.color}40`,
+                        }}
+                      >
+                        {scanStatus.label}
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-mono text-[var(--grok-text-muted)] flex-shrink-0 w-16 text-right">
+                        {tgt.status.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
 
-        {/* Recent Findings */}
+        {/* Findings panel */}
         <div className="cs-panel">
           <div className="cs-panel-header flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Shield className="w-3 h-3 text-[var(--grok-warning)]" />
-              Recent Findings
+              Findings
             </span>
-            <button
-              onClick={() => setActiveView('results')}
-              className="text-[10px] text-[var(--grok-warning)] hover:underline"
-            >
-              View All
-            </button>
+            <div className="flex items-center gap-2">
+              {resultsData.vulns.length > 0 && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--grok-exploit-red)]/10 text-[var(--grok-exploit-red)]">
+                  {resultsData.vulns.length} new
+                </span>
+              )}
+              <button
+                onClick={() => setActiveView('results')}
+                className="text-[10px] text-[var(--grok-warning)] hover:underline"
+              >
+                View All
+              </button>
+            </div>
           </div>
           <div className="p-2 space-y-1 overflow-y-auto">
             {resultsData.vulns.length === 0 && resultsData.ports.length === 0 ? (
-              <p className="text-xs text-[var(--grok-text-muted)] text-center py-4">
+              <p className="text-xs text-[var(--grok-text-muted)] text-center py-6">
                 No findings yet — run a scan
               </p>
             ) : (
               <>
-                {resultsData.vulns.slice(0, 4).map((v, i) => (
-                  <FindingRow key={`v-${i}`} type="vuln" severity={v.severity} />
-                ))}
-                {resultsData.ports.filter((p) => p.state === 'open').slice(0, 3).map((p, i) => (
-                  <FindingRow key={`p-${i}`} type="port" label={`${p.port} ${p.service}`} />
-                ))}
+                {resultsData.vulns.slice(0, 6).map((v, i) => {
+                  const sev = (v.severity || 'info').toLowerCase();
+                  const sevColor = SEVERITY_COLORS[sev] || '#6a6a80';
+                  const targetLabel = targets[0]?.ip || targets[0]?.url.replace(/^https?:\/\//, '').split('/')[0] || '---';
+                  return (
+                    <div key={`v-${i}`} className="flex items-center gap-2 py-1 px-2 bg-[var(--grok-surface-2)] rounded">
+                      <span
+                        className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded flex-shrink-0 w-10 text-center"
+                        style={{ color: sevColor, backgroundColor: `${sevColor}18`, border: `1px solid ${sevColor}40` }}
+                      >
+                        {sev === 'critical' ? 'CRIT' : sev.slice(0, 4).toUpperCase()}
+                      </span>
+                      <span className="text-[11px] font-mono text-[var(--grok-scan-cyan)] flex-shrink-0 w-24 truncate">
+                        {targetLabel}
+                      </span>
+                      <span className="text-[11px] text-[var(--grok-text-body)] truncate">
+                        {sev.charAt(0).toUpperCase() + sev.slice(1)} vulnerability detected
+                      </span>
+                    </div>
+                  );
+                })}
+                {resultsData.ports.filter((p) => p.state === 'open').slice(0, 4).map((p, i) => {
+                  const targetLabel = targets[0]?.ip || targets[0]?.url.replace(/^https?:\/\//, '').split('/')[0] || '---';
+                  return (
+                    <div key={`p-${i}`} className="flex items-center gap-2 py-1 px-2 bg-[var(--grok-surface-2)] rounded">
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded flex-shrink-0 w-10 text-center text-[var(--grok-recon-blue)] bg-[var(--grok-recon-blue)]/10 border border-[var(--grok-recon-blue)]/30">
+                        PORT
+                      </span>
+                      <span className="text-[11px] font-mono text-[var(--grok-scan-cyan)] flex-shrink-0 w-24 truncate">
+                        {targetLabel}
+                      </span>
+                      <span className="text-[11px] text-[var(--grok-text-body)] truncate font-mono">
+                        :{p.port} {p.service || 'unknown'}
+                      </span>
+                    </div>
+                  );
+                })}
               </>
             )}
           </div>
@@ -639,13 +796,14 @@ export function DashboardView() {
         <ExploitTrackPanel tracks={exploitTracks} className="overflow-y-auto" />
       )}
 
-      {/* ── Row 8: Bottom 3-column row ──────────────────────────── */}
+      {/* ── Row 8: Bottom 3-column (Loot / AI Stream / Activity) ── */}
       <div className="grid grid-cols-3 gap-3">
-        {/* Loot Breakdown */}
+
+        {/* Loot panel */}
         <div className="cs-panel p-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)]">
-              Loot Breakdown
+              Loot
             </span>
             <button
               onClick={() => setActiveView('loot')}
@@ -655,65 +813,20 @@ export function DashboardView() {
             </button>
           </div>
           <div className="space-y-1.5">
-            <LootRow
-              icon={<Lock className="w-3 h-3" />}
-              label="Credentials"
-              value={lootStats.byCategory.credential || 0}
-              color="var(--grok-warning)"
-            />
-            <LootRow
-              icon={<Unlock className="w-3 h-3" />}
-              label="Passwords"
-              value={lootStats.byCategory.password || 0}
-              color="var(--grok-exploit-red)"
-            />
-            <LootRow
-              icon={<Hash className="w-3 h-3" />}
-              label="Hashes"
-              value={lootStats.byCategory.hash || 0}
-              color="var(--grok-ai-purple)"
-            />
-            <LootRow
-              icon={<Globe className="w-3 h-3" />}
-              label="URLs"
-              value={lootStats.byCategory.url || 0}
-              color="var(--grok-scan-cyan)"
-            />
-            <LootRow
-              icon={<Zap className="w-3 h-3" />}
-              label="Ports"
-              value={lootStats.byCategory.port || 0}
-              color="var(--grok-recon-blue)"
-            />
-            <LootRow
-              icon={<FileText className="w-3 h-3" />}
-              label="Files"
-              value={lootStats.byCategory.file || 0}
-              color="var(--grok-loot-green)"
-            />
+            <LootRow icon={<Lock className="w-3 h-3" />} label="Credentials" value={lootStats.byCategory.credential || 0} color="var(--grok-warning)" />
+            <LootRow icon={<Unlock className="w-3 h-3" />} label="Passwords" value={lootStats.byCategory.password || 0} color="var(--grok-exploit-red)" />
+            <LootRow icon={<Hash className="w-3 h-3" />} label="Hashes" value={lootStats.byCategory.hash || 0} color="var(--grok-ai-purple)" />
+            <LootRow icon={<Globe className="w-3 h-3" />} label="URLs" value={lootStats.byCategory.url || 0} color="var(--grok-scan-cyan)" />
+            <LootRow icon={<Zap className="w-3 h-3" />} label="Ports" value={lootStats.byCategory.port || 0} color="var(--grok-recon-blue)" />
+            <LootRow icon={<FileText className="w-3 h-3" />} label="Files" value={lootStats.byCategory.file || 0} color="var(--grok-loot-green)" />
             {(lootStats.byCategory.token || 0) > 0 && (
-              <LootRow
-                icon={<Key className="w-3 h-3" />}
-                label="Tokens"
-                value={lootStats.byCategory.token}
-                color="var(--grok-warning)"
-              />
+              <LootRow icon={<Key className="w-3 h-3" />} label="Tokens" value={lootStats.byCategory.token} color="var(--grok-warning)" />
             )}
             {(lootStats.byCategory.api_key || 0) > 0 && (
-              <LootRow
-                icon={<Key className="w-3 h-3" />}
-                label="API Keys"
-                value={lootStats.byCategory.api_key}
-                color="var(--grok-exploit-red)"
-              />
+              <LootRow icon={<Key className="w-3 h-3" />} label="API Keys" value={lootStats.byCategory.api_key} color="var(--grok-exploit-red)" />
             )}
             {(lootStats.byCategory.session || 0) > 0 && (
-              <LootRow
-                icon={<Key className="w-3 h-3" />}
-                label="Sessions"
-                value={lootStats.byCategory.session}
-                color="var(--grok-ai-purple)"
-              />
+              <LootRow icon={<Key className="w-3 h-3" />} label="Sessions" value={lootStats.byCategory.session} color="var(--grok-ai-purple)" />
             )}
           </div>
           <div className="pt-2 border-t border-[var(--grok-border)]">
@@ -726,70 +839,94 @@ export function DashboardView() {
           </div>
         </div>
 
-        {/* AI Activity Feed */}
+        {/* AI Stream panel */}
         <div className="cs-panel flex flex-col">
           <div className="cs-panel-header flex items-center justify-between flex-shrink-0">
             <span className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-[var(--grok-ai-purple)] animate-pulse" />
               <Brain className="w-3 h-3 text-[var(--grok-ai-purple)]" />
-              AI Feed
+              AI Stream
             </span>
-            <button
-              onClick={() => setActiveView('ai-stream')}
-              className="text-[10px] text-[var(--grok-ai-purple)] hover:underline"
-            >
-              View All
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[var(--grok-ai-purple)]/15 text-[var(--grok-ai-purple)] border border-[var(--grok-ai-purple)]/30">
+                Analyzing
+              </span>
+              <button
+                onClick={() => setActiveView('ai-stream')}
+                className="text-[10px] text-[var(--grok-ai-purple)] hover:underline"
+              >
+                View All
+              </button>
+            </div>
           </div>
-          <div className="p-2 space-y-1.5 overflow-y-auto">
+          <div className="p-2 space-y-1 overflow-y-auto flex-1">
             {recentThoughts.length === 0 ? (
               <p className="text-xs text-[var(--grok-text-muted)] text-center py-4">
                 No AI activity yet
               </p>
             ) : (
-              recentThoughts.map((t) => (
+              recentThoughts.slice(-12).map((t) => (
                 <div
                   key={t.id}
-                  className="text-[11px] text-[var(--grok-text-body)] font-mono p-2 bg-[var(--grok-surface-2)] rounded border-l-2 border-[var(--grok-ai-purple)] animate-fade-in"
+                  className="text-[10px] font-mono leading-relaxed animate-fade-in"
                 >
-                  {t.content.length > 300 ? t.content.slice(0, 300) + '...' : t.content}
+                  <span className="text-[var(--grok-text-muted)] mr-1">
+                    {new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                  {colorizeThought(t.content, t.thoughtType)}
                 </div>
               ))
             )}
           </div>
         </div>
 
-        {/* Exploit Track summary / placeholder */}
-        <div className="cs-panel p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)] mb-3 flex items-center gap-1.5">
-            <Zap className="w-3 h-3 text-[var(--grok-exploit-red)]" />
-            Exploit Tracks
+        {/* Activity feed panel */}
+        <div className="cs-panel flex flex-col">
+          <div className="cs-panel-header flex items-center justify-between flex-shrink-0">
+            <span className="flex items-center gap-1.5">
+              <Activity className="w-3 h-3 text-[var(--grok-loot-green)]" />
+              Activity
+            </span>
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[var(--grok-loot-green)]/10 text-[var(--grok-loot-green)] border border-[var(--grok-loot-green)]/30 flex items-center gap-1">
+              <Radio className="w-2.5 h-2.5" /> Live
+            </span>
           </div>
-          {exploitTracks.length === 0 ? (
-            <div className="flex items-center justify-center h-20 text-xs text-[var(--grok-text-muted)]">
-              No active exploit tracks
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {exploitTracks.slice(0, 4).map((track) => (
-                <div
-                  key={track.scanId}
-                  className="flex items-center justify-between py-1.5 px-2 bg-[var(--grok-surface-2)] rounded"
-                >
-                  <span className="text-[11px] font-mono text-[var(--grok-text-body)] truncate max-w-[60%]">
-                    {track.trigger}
-                  </span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase text-[var(--grok-warning)] bg-[var(--grok-warning)]/10">
-                    {track.mode}
-                  </span>
-                </div>
-              ))}
-              {exploitTracks.length > 4 && (
-                <p className="text-[10px] text-[var(--grok-text-muted)] text-center pt-1">
-                  +{exploitTracks.length - 4} more tracks
-                </p>
-              )}
-            </div>
-          )}
+          <div className="p-2 space-y-1 overflow-y-auto flex-1">
+            {recentActivity.length === 0 ? (
+              <p className="text-xs text-[var(--grok-text-muted)] text-center py-4">
+                No activity yet
+              </p>
+            ) : (
+              recentActivity.map((item) => {
+                const catColors: Record<string, string> = {
+                  credential: 'var(--grok-warning)',
+                  password: 'var(--grok-exploit-red)',
+                  hash: 'var(--grok-ai-purple)',
+                  url: 'var(--grok-scan-cyan)',
+                  port: 'var(--grok-recon-blue)',
+                  file: 'var(--grok-loot-green)',
+                  token: 'var(--grok-warning)',
+                  api_key: 'var(--grok-exploit-red)',
+                  session: 'var(--grok-ai-purple)',
+                  username: 'var(--grok-scan-cyan)',
+                };
+                const color = catColors[item.category] || 'var(--grok-text-body)';
+                return (
+                  <div key={item.id} className="text-[10px] font-mono leading-relaxed">
+                    <span className="text-[var(--grok-text-muted)] mr-1">
+                      {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                    <span style={{ color }} className="mr-1 uppercase font-bold text-[9px]">
+                      [{item.category}]
+                    </span>
+                    <span className="text-[var(--grok-text-body)]">
+                      {item.value.length > 60 ? item.value.slice(0, 60) + '...' : item.value}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -885,36 +1022,7 @@ function LootRow({
   );
 }
 
-function FindingRow({
-  type,
-  severity,
-  label,
-}: {
-  type: 'vuln' | 'port';
-  severity?: string;
-  label?: string;
-}) {
-  if (type === 'vuln') {
-    const sevColor = SEVERITY_COLORS[(severity || 'info').toLowerCase()] || '#6a6a80';
-    return (
-      <div className="flex items-center justify-between py-1 px-2 bg-[var(--grok-surface-2)] rounded">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="w-3 h-3" style={{ color: sevColor }} />
-          <span className="text-[11px] text-[var(--grok-text-body)] capitalize">{severity} vulnerability</span>
-        </div>
-        <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold" style={{ color: sevColor, backgroundColor: `${sevColor}15` }}>
-          {(severity || 'INFO').toUpperCase()}
-        </span>
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center gap-2 py-1 px-2 bg-[var(--grok-surface-2)] rounded">
-      <Zap className="w-3 h-3 text-[var(--grok-recon-blue)]" />
-      <span className="text-[11px] font-mono text-[var(--grok-text-body)]">{label}</span>
-    </div>
-  );
-}
+/* FindingRow removed — inline finding rows used in dashboard layout */
 
 function EmptyChart({ label }: { label: string }) {
   return (
@@ -924,166 +1032,8 @@ function EmptyChart({ label }: { label: string }) {
   );
 }
 
-const SCAN_PIPELINE_PHASES = ['recon', 'ai_analysis_1', 'web_scans', 'exploitation', 'post_exploitation', 'complete'] as const;
-const PHASE_LABELS: Record<string, string> = {
-  idle: 'Idle',
-  recon: 'Recon',
-  ai_analysis_1: 'AI',
-  web_scans: 'Web',
-  vulnapi: 'API',
-  metasploit: 'MSF',
-  ai_analysis_2: 'AI-2',
-  exploitation: 'Exploit',
-  post_exploitation: 'Shells',
-  post_exploit: 'Shells',
-  reporting: 'Report',
-  complete: 'Done',
-};
+/* Pipeline phases moved inline to DashboardView component */
 
-function ScanCard({
-  scan,
-  onPause,
-  onResume,
-  onStop,
-  onDelete,
-}: {
-  scan: ActiveScan;
-  onPause: () => void;
-  onResume: () => void;
-  onStop: () => void;
-  onDelete: () => void;
-}) {
-  const isRunning = scan.status === 'running';
-  const isPaused = scan.status === 'paused';
-  const isFinished = ['completed', 'failed', 'cancelled'].includes(scan.status);
-  const currentPhase = scan.current_phase || scan.phase || 'idle';
-
-  const statusColor = isPaused
-    ? 'var(--grok-warning)'
-    : isRunning
-    ? 'var(--grok-recon-blue)'
-    : isFinished
-    ? 'var(--grok-success)'
-    : 'var(--grok-text-muted)';
-
-  return (
-    <div className="p-3 bg-[var(--grok-surface-2)] rounded border border-[var(--grok-border)] animate-fade-in">
-      {/* Header: target + controls */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div
-            className={`w-2 h-2 rounded-full ${isRunning ? 'animate-pulse' : ''}`}
-            style={{ backgroundColor: statusColor }}
-          />
-          <span className="text-sm font-mono font-semibold text-[var(--grok-text-heading)]">
-            {scan.target}
-          </span>
-          {isPaused && (
-            <span className="text-[9px] font-mono px-1.5 py-0.5 bg-[var(--grok-warning)]/15 text-[var(--grok-warning)] rounded uppercase font-bold">
-              Paused
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          {scan.progress && (
-            <span className="text-[10px] font-mono text-[var(--grok-text-muted)]">
-              {scan.progress}
-            </span>
-          )}
-          {isRunning && (
-            <>
-              <button
-                onClick={onPause}
-                className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-warning)] transition-colors"
-                title="Pause scan"
-              >
-                <Pause className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={onStop}
-                className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-exploit-red)] transition-colors"
-                title="Stop scan"
-              >
-                <Square className="w-3.5 h-3.5" />
-              </button>
-            </>
-          )}
-          {isPaused && (
-            <>
-              <button
-                onClick={onResume}
-                className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-success)] transition-colors"
-                title="Resume scan"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={onStop}
-                className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-exploit-red)] transition-colors"
-                title="Stop scan"
-              >
-                <Square className="w-3.5 h-3.5" />
-              </button>
-            </>
-          )}
-          <button
-            onClick={onDelete}
-            className="p-1 rounded hover:bg-[var(--grok-surface-3)] text-[var(--grok-text-muted)] hover:text-[var(--grok-exploit-red)] transition-colors"
-            title="Delete scan and all data"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Per-target pipeline mini-phase indicator */}
-      <div className="flex items-center gap-1 mb-2">
-        {SCAN_PIPELINE_PHASES.map((phase) => {
-          const phaseIdx = SCAN_PIPELINE_PHASES.indexOf(phase);
-          const currentIdx = SCAN_PIPELINE_PHASES.indexOf(
-            SCAN_PIPELINE_PHASES.find((p) => p === currentPhase) ?? 'recon'
-          );
-          const isPhaseComplete = currentIdx > phaseIdx || currentPhase === 'complete';
-          const isPhaseActive = currentPhase === phase || (currentIdx === -1 && phase === 'recon');
-
-          return (
-            <div key={phase} className="flex items-center gap-1">
-              <div
-                className={`w-4 h-4 rounded-full border flex items-center justify-center text-[6px] font-bold transition-all ${
-                  isPhaseComplete
-                    ? 'bg-[var(--grok-success)] border-[var(--grok-success)] text-black'
-                    : isPhaseActive
-                    ? isPaused
-                      ? 'border-[var(--grok-warning)] text-[var(--grok-warning)]'
-                      : 'border-[var(--grok-recon-blue)] text-[var(--grok-recon-blue)] animate-pulse'
-                    : 'border-[var(--grok-border)] text-[var(--grok-text-muted)]'
-                }`}
-              >
-                {isPhaseComplete ? '\u2713' : ''}
-              </div>
-              <span className="text-[7px] text-[var(--grok-text-muted)] mr-1">
-                {PHASE_LABELS[phase] || phase}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Running tools */}
-      {scan.running_tools && scan.running_tools.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {scan.running_tools.map((tool) => (
-            <span
-              key={tool}
-              className="text-[10px] font-mono px-2 py-0.5 bg-[var(--grok-recon-blue)]/10 text-[var(--grok-recon-blue)] rounded border border-[var(--grok-recon-blue)]/20"
-            >
-              {tool}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+/* ScanCard removed — inline target rows with pipeline bars used in dashboard layout */
 
 
