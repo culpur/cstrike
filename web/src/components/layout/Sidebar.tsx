@@ -211,6 +211,7 @@ export function Sidebar() {
               src={cstrikeLogo}
               alt="CStrike"
               className="w-8 h-8 rounded-[7px] flex-shrink-0 object-cover"
+              style={{ mixBlendMode: 'screen' }}
             />
             <div className="flex flex-col leading-tight">
               <span className="font-bold text-[14px] text-[var(--grok-text-heading)] tracking-wide">
