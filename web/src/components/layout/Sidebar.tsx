@@ -33,6 +33,7 @@ import { useSystemStore, type OperationMode } from '@stores/systemStore';
 import { useUpdateStore } from '@stores/updateStore';
 import { apiService } from '@services/api';
 import { cn } from '@utils/index';
+import cstrikeLogo from '@assets/cstrike-icon-64.png';
 
 const navigationItems = [
   {
@@ -206,12 +207,11 @@ export function Sidebar() {
       <div className="h-14 flex items-center justify-between px-3 border-b border-[var(--grok-border)]">
         {!sidebarCollapsed && (
           <div className="flex items-center gap-2.5">
-            <div
-              className="w-8 h-8 rounded-[7px] flex items-center justify-center flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #58a6ff, #39d2c0)' }}
-            >
-              <span className="text-white font-bold text-sm leading-none">C</span>
-            </div>
+            <img
+              src={cstrikeLogo}
+              alt="CStrike"
+              className="w-8 h-8 rounded-[7px] flex-shrink-0 object-cover"
+            />
             <div className="flex flex-col leading-tight">
               <span className="font-bold text-[14px] text-[var(--grok-text-heading)] tracking-wide">
                 CStrike
@@ -223,12 +223,11 @@ export function Sidebar() {
           </div>
         )}
         {sidebarCollapsed && (
-          <div
-            className="w-8 h-8 rounded-[7px] flex items-center justify-center mx-auto"
-            style={{ background: 'linear-gradient(135deg, #58a6ff, #39d2c0)' }}
-          >
-            <span className="text-white font-bold text-sm leading-none">C</span>
-          </div>
+          <img
+            src={cstrikeLogo}
+            alt="CStrike"
+            className="w-8 h-8 rounded-[7px] mx-auto object-cover"
+          />
         )}
         {!sidebarCollapsed && (
           <button
