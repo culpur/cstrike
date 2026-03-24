@@ -253,8 +253,8 @@ export function DashboardView() {
   ];
 
   return (
-    <div className="h-full overflow-hidden p-5 flex flex-col gap-5">
-      {/* ── Header with scan launcher ──────────────────────────── */}
+    <div className="h-full overflow-y-auto p-5 flex flex-col gap-5">
+      {/* ── Row 1: Header with scan launcher ───────────────────── */}
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-lg font-bold text-[var(--grok-text-heading)] flex items-center gap-2">
@@ -290,7 +290,7 @@ export function DashboardView() {
         </div>
       </div>
 
-      {/* ── Telemetry strip ────────────────────────────────────── */}
+      {/* ── Row 2: Telemetry strip ──────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
         {/* Combined CPU / RAM / Uptime / Date-Time */}
         <div className="cs-panel p-3 relative overflow-hidden">
@@ -353,7 +353,7 @@ export function DashboardView() {
         />
       </div>
 
-      {/* ── Service health (full width) ─────────────────────────── */}
+      {/* ── Row 3: Service health (full width) ─────────────────── */}
       <div className="cs-panel p-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)]">
@@ -386,9 +386,8 @@ export function DashboardView() {
         </div>
       </div>
 
-      {/* ── Main grid: Charts + Active ops ─────────────────────── */}
+      {/* ── Row 4: Quick stats ──────────────────────────────────── */}
       <div className="grid grid-cols-4 gap-3">
-        {/* Quick stats row */}
         <QuickStat
           icon={<Server className="w-4 h-4" />}
           label="Open Ports"
@@ -419,347 +418,378 @@ export function DashboardView() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-1 gap-4 flex-1 min-h-0">
-        {/* ── Left column: Charts ──────────────────────────────── */}
-        <div className="lg:col-span-2 flex flex-col gap-3 overflow-y-auto min-h-0">
-          <div className="grid grid-cols-2 gap-3">
-            {/* Vulnerability Severity Distribution */}
-            <div className="cs-panel p-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)] mb-3">
-                Vulnerability Severity
+      {/* ── Row 5: Charts (3-column) ────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-3">
+        {/* Vulnerability Severity Distribution */}
+        <div className="cs-panel p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)] mb-3">
+            Vulnerability Severity
+          </div>
+          {sevCounts.length > 0 ? (
+            <div className="flex items-center gap-4">
+              <div className="w-28 h-28">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={sevCounts}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={28}
+                      outerRadius={48}
+                      paddingAngle={3}
+                      dataKey="value"
+                      strokeWidth={0}
+                    >
+                      {sevCounts.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
-              {sevCounts.length > 0 ? (
-                <div className="flex items-center gap-4">
-                  <div className="w-28 h-28">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={sevCounts}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={28}
-                          outerRadius={48}
-                          paddingAngle={3}
-                          dataKey="value"
-                          strokeWidth={0}
-                        >
-                          {sevCounts.map((entry, i) => (
-                            <Cell key={i} fill={entry.color} />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
+              <div className="space-y-1.5 flex-1">
+                {sevCounts.map((s) => (
+                  <div key={s.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                      <span className="text-[11px] text-[var(--grok-text-body)] capitalize">{s.name}</span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-[var(--grok-text-heading)]">{s.value}</span>
                   </div>
-                  <div className="space-y-1.5 flex-1">
-                    {sevCounts.map((s) => (
-                      <div key={s.name} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                          <span className="text-[11px] text-[var(--grok-text-body)] capitalize">{s.name}</span>
-                        </div>
-                        <span className="text-xs font-mono font-bold text-[var(--grok-text-heading)]">{s.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <EmptyChart label="No vulnerabilities detected" />
-              )}
-            </div>
-
-            {/* Port / Service Distribution */}
-            <div className="cs-panel p-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)] mb-3">
-                Open Services
+                ))}
               </div>
-              {portDistribution.length > 0 ? (
-                <div className="h-28">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={portDistribution} barSize={16}>
-                      <XAxis
-                        dataKey="name"
-                        tick={{ fontSize: 9, fill: '#6a6a80' }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <YAxis hide />
-                      <Tooltip
-                        contentStyle={{
-                          background: '#12121a',
-                          border: '1px solid #2a2a3a',
-                          borderRadius: 6,
-                          fontSize: 11,
-                          color: '#e8e8f0',
-                        }}
-                      />
-                      <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                        {portDistribution.map((_, i) => (
-                          <Cell key={i} fill={PORT_COLORS[i % PORT_COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <EmptyChart label="No open ports detected" />
-              )}
             </div>
-          </div>
-
-          {/* Scan Activity Timeline */}
-          <div className="cs-panel p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)]">
-                Findings Activity
-              </span>
-              <span className="text-[10px] text-[var(--grok-text-muted)]">Last 60 min</span>
-            </div>
-            <div className="h-20">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={scanHistory}>
-                  <defs>
-                    <linearGradient id="activityGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#2266ff" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#2266ff" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis
-                    dataKey="time"
-                    tick={{ fontSize: 8, fill: '#6a6a80' }}
-                    axisLine={false}
-                    tickLine={false}
-                    interval="preserveStartEnd"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="scans"
-                    stroke="#2266ff"
-                    fill="url(#activityGrad)"
-                    strokeWidth={1.5}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Active Operations */}
-          <div className="cs-panel">
-            <div className="cs-panel-header flex items-center justify-between">
-              <span>Active Operations ({activeScans.length})</span>
-              {activeScans.length > 0 && (
-                <span className="text-[var(--grok-recon-blue)] animate-pulse-glow flex items-center gap-1">
-                  <Radio className="w-3 h-3" /> LIVE
-                </span>
-              )}
-            </div>
-            <div className="p-3 space-y-2">
-              {activeScans.length === 0 ? (
-                <div className="text-center py-6 text-xs text-[var(--grok-text-muted)]">
-                  No active scans. Launch a scan above to begin.
-                </div>
-              ) : (
-                activeScans.map((scan) => (
-                  <ScanCard
-                    key={scan.scan_id}
-                    scan={scan}
-                    onPause={async () => {
-                      try {
-                        await apiService.pauseScan(scan.scan_id);
-                        addToast({ type: 'info', message: `Pausing scan: ${scan.target}`, duration: 3000 });
-                      } catch (err: any) {
-                        addToast({ type: 'error', message: err.message || 'Pause failed', duration: 5000 });
-                      }
-                    }}
-                    onResume={async () => {
-                      try {
-                        await apiService.resumeScan(scan.scan_id);
-                        addToast({ type: 'info', message: `Resuming scan: ${scan.target}`, duration: 3000 });
-                      } catch (err: any) {
-                        addToast({ type: 'error', message: err.message || 'Resume failed', duration: 5000 });
-                      }
-                    }}
-                    onStop={async () => {
-                      try {
-                        await apiService.stopRecon(scan.scan_id);
-                        addToast({ type: 'info', message: `Stopping scan: ${scan.target}`, duration: 3000 });
-                      } catch (err: any) {
-                        addToast({ type: 'error', message: err.message || 'Stop failed', duration: 5000 });
-                      }
-                    }}
-                    onDelete={async () => {
-                      if (!window.confirm(`Delete scan for ${scan.target} and all its data? This cannot be undone.`)) return;
-                      try {
-                        await apiService.deleteRecon(scan.scan_id);
-                        addToast({ type: 'success', message: `Deleted scan: ${scan.target}`, duration: 3000 });
-                        setActiveScans(prev => prev.filter(s => s.scan_id !== scan.scan_id));
-                      } catch (err: any) {
-                        addToast({ type: 'error', message: err.message || 'Delete failed', duration: 5000 });
-                      }
-                    }}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Exploitation Tracks (shown during active scans) */}
-          {exploitTracks.length > 0 && (
-            <div className="flex-1 min-h-0 flex flex-col">
-              <ExploitTrackPanel tracks={exploitTracks} className="flex-1 min-h-0 overflow-y-auto" />
-            </div>
+          ) : (
+            <EmptyChart label="No vulnerabilities detected" />
           )}
         </div>
 
-        {/* ── Right column: Loot + AI + Findings ───────────────── */}
-        <div className="flex flex-col gap-3 min-h-0">
-          {/* Loot Breakdown */}
-          <div className="cs-panel p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)]">
-                Loot Breakdown
-              </span>
-              <button
-                onClick={() => setActiveView('loot')}
-                className="text-[10px] text-[var(--grok-loot-green)] hover:underline flex items-center gap-0.5"
-              >
-                View All <ChevronRight className="w-3 h-3" />
-              </button>
+        {/* Port / Service Distribution */}
+        <div className="cs-panel p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)] mb-3">
+            Open Services
+          </div>
+          {portDistribution.length > 0 ? (
+            <div className="h-28">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={portDistribution} barSize={16}>
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 9, fill: '#6a6a80' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis hide />
+                  <Tooltip
+                    contentStyle={{
+                      background: '#12121a',
+                      border: '1px solid #2a2a3a',
+                      borderRadius: 6,
+                      fontSize: 11,
+                      color: '#e8e8f0',
+                    }}
+                  />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {portDistribution.map((_, i) => (
+                      <Cell key={i} fill={PORT_COLORS[i % PORT_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="space-y-1.5">
+          ) : (
+            <EmptyChart label="No open ports detected" />
+          )}
+        </div>
+
+        {/* Findings Activity area chart */}
+        <div className="cs-panel p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)]">
+              Findings Activity
+            </span>
+            <span className="text-[10px] text-[var(--grok-text-muted)]">Last 60 min</span>
+          </div>
+          <div className="h-28">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={scanHistory}>
+                <defs>
+                  <linearGradient id="activityGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2266ff" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#2266ff" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="time"
+                  tick={{ fontSize: 8, fill: '#6a6a80' }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="scans"
+                  stroke="#2266ff"
+                  fill="url(#activityGrad)"
+                  strokeWidth={1.5}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Row 6: Active Operations + Recent Findings (50/50) ─── */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Active Operations */}
+        <div className="cs-panel">
+          <div className="cs-panel-header flex items-center justify-between">
+            <span>Active Operations ({activeScans.length})</span>
+            {activeScans.length > 0 && (
+              <span className="text-[var(--grok-recon-blue)] animate-pulse-glow flex items-center gap-1">
+                <Radio className="w-3 h-3" /> LIVE
+              </span>
+            )}
+          </div>
+          <div className="p-3 space-y-2">
+            {activeScans.length === 0 ? (
+              <div className="text-center py-6 text-xs text-[var(--grok-text-muted)]">
+                No active scans. Launch a scan above to begin.
+              </div>
+            ) : (
+              activeScans.map((scan) => (
+                <ScanCard
+                  key={scan.scan_id}
+                  scan={scan}
+                  onPause={async () => {
+                    try {
+                      await apiService.pauseScan(scan.scan_id);
+                      addToast({ type: 'info', message: `Pausing scan: ${scan.target}`, duration: 3000 });
+                    } catch (err: any) {
+                      addToast({ type: 'error', message: err.message || 'Pause failed', duration: 5000 });
+                    }
+                  }}
+                  onResume={async () => {
+                    try {
+                      await apiService.resumeScan(scan.scan_id);
+                      addToast({ type: 'info', message: `Resuming scan: ${scan.target}`, duration: 3000 });
+                    } catch (err: any) {
+                      addToast({ type: 'error', message: err.message || 'Resume failed', duration: 5000 });
+                    }
+                  }}
+                  onStop={async () => {
+                    try {
+                      await apiService.stopRecon(scan.scan_id);
+                      addToast({ type: 'info', message: `Stopping scan: ${scan.target}`, duration: 3000 });
+                    } catch (err: any) {
+                      addToast({ type: 'error', message: err.message || 'Stop failed', duration: 5000 });
+                    }
+                  }}
+                  onDelete={async () => {
+                    if (!window.confirm(`Delete scan for ${scan.target} and all its data? This cannot be undone.`)) return;
+                    try {
+                      await apiService.deleteRecon(scan.scan_id);
+                      addToast({ type: 'success', message: `Deleted scan: ${scan.target}`, duration: 3000 });
+                      setActiveScans(prev => prev.filter(s => s.scan_id !== scan.scan_id));
+                    } catch (err: any) {
+                      addToast({ type: 'error', message: err.message || 'Delete failed', duration: 5000 });
+                    }
+                  }}
+                />
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Recent Findings */}
+        <div className="cs-panel">
+          <div className="cs-panel-header flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Shield className="w-3 h-3 text-[var(--grok-warning)]" />
+              Recent Findings
+            </span>
+            <button
+              onClick={() => setActiveView('results')}
+              className="text-[10px] text-[var(--grok-warning)] hover:underline"
+            >
+              View All
+            </button>
+          </div>
+          <div className="p-2 space-y-1 overflow-y-auto">
+            {resultsData.vulns.length === 0 && resultsData.ports.length === 0 ? (
+              <p className="text-xs text-[var(--grok-text-muted)] text-center py-4">
+                No findings yet — run a scan
+              </p>
+            ) : (
+              <>
+                {resultsData.vulns.slice(0, 4).map((v, i) => (
+                  <FindingRow key={`v-${i}`} type="vuln" severity={v.severity} />
+                ))}
+                {resultsData.ports.filter((p) => p.state === 'open').slice(0, 3).map((p, i) => (
+                  <FindingRow key={`p-${i}`} type="port" label={`${p.port} ${p.service}`} />
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Row 7: Exploitation Tracks (conditional) ───────────── */}
+      {exploitTracks.length > 0 && (
+        <ExploitTrackPanel tracks={exploitTracks} className="overflow-y-auto" />
+      )}
+
+      {/* ── Row 8: Bottom 3-column row ──────────────────────────── */}
+      <div className="grid grid-cols-3 gap-3">
+        {/* Loot Breakdown */}
+        <div className="cs-panel p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)]">
+              Loot Breakdown
+            </span>
+            <button
+              onClick={() => setActiveView('loot')}
+              className="text-[10px] text-[var(--grok-loot-green)] hover:underline flex items-center gap-0.5"
+            >
+              View All <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            <LootRow
+              icon={<Lock className="w-3 h-3" />}
+              label="Credentials"
+              value={lootStats.byCategory.credential || 0}
+              color="var(--grok-warning)"
+            />
+            <LootRow
+              icon={<Unlock className="w-3 h-3" />}
+              label="Passwords"
+              value={lootStats.byCategory.password || 0}
+              color="var(--grok-exploit-red)"
+            />
+            <LootRow
+              icon={<Hash className="w-3 h-3" />}
+              label="Hashes"
+              value={lootStats.byCategory.hash || 0}
+              color="var(--grok-ai-purple)"
+            />
+            <LootRow
+              icon={<Globe className="w-3 h-3" />}
+              label="URLs"
+              value={lootStats.byCategory.url || 0}
+              color="var(--grok-scan-cyan)"
+            />
+            <LootRow
+              icon={<Zap className="w-3 h-3" />}
+              label="Ports"
+              value={lootStats.byCategory.port || 0}
+              color="var(--grok-recon-blue)"
+            />
+            <LootRow
+              icon={<FileText className="w-3 h-3" />}
+              label="Files"
+              value={lootStats.byCategory.file || 0}
+              color="var(--grok-loot-green)"
+            />
+            {(lootStats.byCategory.token || 0) > 0 && (
               <LootRow
-                icon={<Lock className="w-3 h-3" />}
-                label="Credentials"
-                value={lootStats.byCategory.credential || 0}
+                icon={<Key className="w-3 h-3" />}
+                label="Tokens"
+                value={lootStats.byCategory.token}
                 color="var(--grok-warning)"
               />
+            )}
+            {(lootStats.byCategory.api_key || 0) > 0 && (
               <LootRow
-                icon={<Unlock className="w-3 h-3" />}
-                label="Passwords"
-                value={lootStats.byCategory.password || 0}
+                icon={<Key className="w-3 h-3" />}
+                label="API Keys"
+                value={lootStats.byCategory.api_key}
                 color="var(--grok-exploit-red)"
               />
+            )}
+            {(lootStats.byCategory.session || 0) > 0 && (
               <LootRow
-                icon={<Hash className="w-3 h-3" />}
-                label="Hashes"
-                value={lootStats.byCategory.hash || 0}
+                icon={<Key className="w-3 h-3" />}
+                label="Sessions"
+                value={lootStats.byCategory.session}
                 color="var(--grok-ai-purple)"
               />
-              <LootRow
-                icon={<Globe className="w-3 h-3" />}
-                label="URLs"
-                value={lootStats.byCategory.url || 0}
-                color="var(--grok-scan-cyan)"
-              />
-              <LootRow
-                icon={<Zap className="w-3 h-3" />}
-                label="Ports"
-                value={lootStats.byCategory.port || 0}
-                color="var(--grok-recon-blue)"
-              />
-              <LootRow
-                icon={<FileText className="w-3 h-3" />}
-                label="Files"
-                value={lootStats.byCategory.file || 0}
-                color="var(--grok-loot-green)"
-              />
-              {(lootStats.byCategory.token || 0) > 0 && (
-                <LootRow
-                  icon={<Key className="w-3 h-3" />}
-                  label="Tokens"
-                  value={lootStats.byCategory.token}
-                  color="var(--grok-warning)"
-                />
-              )}
-              {(lootStats.byCategory.api_key || 0) > 0 && (
-                <LootRow
-                  icon={<Key className="w-3 h-3" />}
-                  label="API Keys"
-                  value={lootStats.byCategory.api_key}
-                  color="var(--grok-exploit-red)"
-                />
-              )}
-              {(lootStats.byCategory.session || 0) > 0 && (
-                <LootRow
-                  icon={<Key className="w-3 h-3" />}
-                  label="Sessions"
-                  value={lootStats.byCategory.session}
-                  color="var(--grok-ai-purple)"
-                />
-              )}
-            </div>
-            <div className="pt-2 border-t border-[var(--grok-border)]">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-[var(--grok-text-body)]">Validated Creds</span>
-                <span className="text-xs font-mono font-bold text-[var(--grok-success)]">
-                  {lootStats.validatedCredentials}
-                </span>
-              </div>
-            </div>
+            )}
           </div>
-
-          {/* Recent Findings */}
-          <div className="cs-panel">
-            <div className="cs-panel-header flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Shield className="w-3 h-3 text-[var(--grok-warning)]" />
-                Recent Findings
+          <div className="pt-2 border-t border-[var(--grok-border)]">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-[var(--grok-text-body)]">Validated Creds</span>
+              <span className="text-xs font-mono font-bold text-[var(--grok-success)]">
+                {lootStats.validatedCredentials}
               </span>
-              <button
-                onClick={() => setActiveView('results')}
-                className="text-[10px] text-[var(--grok-warning)] hover:underline"
-              >
-                View All
-              </button>
-            </div>
-            <div className="p-2 space-y-1 max-h-40 overflow-y-auto">
-              {resultsData.vulns.length === 0 && resultsData.ports.length === 0 ? (
-                <p className="text-xs text-[var(--grok-text-muted)] text-center py-4">
-                  No findings yet — run a scan
-                </p>
-              ) : (
-                <>
-                  {resultsData.vulns.slice(0, 4).map((v, i) => (
-                    <FindingRow key={`v-${i}`} type="vuln" severity={v.severity} />
-                  ))}
-                  {resultsData.ports.filter((p) => p.state === 'open').slice(0, 3).map((p, i) => (
-                    <FindingRow key={`p-${i}`} type="port" label={`${p.port} ${p.service}`} />
-                  ))}
-                </>
-              )}
             </div>
           </div>
+        </div>
 
-          {/* AI Activity Feed */}
-          <div className="cs-panel flex-1 min-h-0 flex flex-col">
-            <div className="cs-panel-header flex items-center justify-between flex-shrink-0">
-              <span className="flex items-center gap-1.5">
-                <Brain className="w-3 h-3 text-[var(--grok-ai-purple)]" />
-                AI Feed
-              </span>
-              <button
-                onClick={() => setActiveView('ai-stream')}
-                className="text-[10px] text-[var(--grok-ai-purple)] hover:underline"
-              >
-                View All
-              </button>
+        {/* AI Activity Feed */}
+        <div className="cs-panel flex flex-col">
+          <div className="cs-panel-header flex items-center justify-between flex-shrink-0">
+            <span className="flex items-center gap-1.5">
+              <Brain className="w-3 h-3 text-[var(--grok-ai-purple)]" />
+              AI Feed
+            </span>
+            <button
+              onClick={() => setActiveView('ai-stream')}
+              className="text-[10px] text-[var(--grok-ai-purple)] hover:underline"
+            >
+              View All
+            </button>
+          </div>
+          <div className="p-2 space-y-1.5 overflow-y-auto">
+            {recentThoughts.length === 0 ? (
+              <p className="text-xs text-[var(--grok-text-muted)] text-center py-4">
+                No AI activity yet
+              </p>
+            ) : (
+              recentThoughts.map((t) => (
+                <div
+                  key={t.id}
+                  className="text-[11px] text-[var(--grok-text-body)] font-mono p-2 bg-[var(--grok-surface-2)] rounded border-l-2 border-[var(--grok-ai-purple)] animate-fade-in"
+                >
+                  {t.content.length > 300 ? t.content.slice(0, 300) + '...' : t.content}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Exploit Track summary / placeholder */}
+        <div className="cs-panel p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--grok-text-muted)] mb-3 flex items-center gap-1.5">
+            <Zap className="w-3 h-3 text-[var(--grok-exploit-red)]" />
+            Exploit Tracks
+          </div>
+          {exploitTracks.length === 0 ? (
+            <div className="flex items-center justify-center h-20 text-xs text-[var(--grok-text-muted)]">
+              No active exploit tracks
             </div>
-            <div className="p-2 space-y-1.5 flex-1 overflow-y-auto">
-              {recentThoughts.length === 0 ? (
-                <p className="text-xs text-[var(--grok-text-muted)] text-center py-4">
-                  No AI activity yet
+          ) : (
+            <div className="space-y-2">
+              {exploitTracks.slice(0, 4).map((track) => (
+                <div
+                  key={track.scanId}
+                  className="flex items-center justify-between py-1.5 px-2 bg-[var(--grok-surface-2)] rounded"
+                >
+                  <span className="text-[11px] font-mono text-[var(--grok-text-body)] truncate max-w-[60%]">
+                    {track.trigger}
+                  </span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase text-[var(--grok-warning)] bg-[var(--grok-warning)]/10">
+                    {track.mode}
+                  </span>
+                </div>
+              ))}
+              {exploitTracks.length > 4 && (
+                <p className="text-[10px] text-[var(--grok-text-muted)] text-center pt-1">
+                  +{exploitTracks.length - 4} more tracks
                 </p>
-              ) : (
-                recentThoughts.map((t) => (
-                  <div
-                    key={t.id}
-                    className="text-[11px] text-[var(--grok-text-body)] font-mono p-2 bg-[var(--grok-surface-2)] rounded border-l-2 border-[var(--grok-ai-purple)] animate-fade-in"
-                  >
-                    {t.content.length > 300 ? t.content.slice(0, 300) + '...' : t.content}
-                  </div>
-                ))
               )}
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
