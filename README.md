@@ -1,14 +1,10 @@
 <p align="center">
-  <img src="assets/cstrike-banner-800.png" alt="CStrike v2" width="800" />
+  <img src="assets/cstrike-banner-800.png" alt="CStrike" width="600" />
 </p>
 
 <p align="center">
   <strong>Autonomous Offensive Security Platform</strong><br>
-  <sub>9-container Docker stack | 35+ integrated tools | AI-driven 9-phase attack pipeline | VPN IP rotation</sub>
-</p>
-
-<p align="center">
-  <img src="assets/cstrike-icon-100.png" alt="" width="40" />
+  <sub>Culpur Defense | 9-container Docker stack | 35+ integrated tools | AI-driven 9-phase attack pipeline | VPN IP rotation</sub>
 </p>
 
 <p align="center">
