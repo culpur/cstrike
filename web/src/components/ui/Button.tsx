@@ -25,17 +25,17 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseStyles =
-      'inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-grok-recon-blue disabled:opacity-50 disabled:cursor-not-allowed';
+      'inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-grok-recon-blue disabled:opacity-50 disabled:cursor-not-allowed';
 
     const variants = {
       primary:
-        'bg-grok-recon-blue text-white hover:bg-blue-600 active:bg-blue-700',
+        'bg-[rgba(88,166,255,0.1)] text-grok-recon-blue border border-[rgba(88,166,255,0.3)] hover:bg-[rgba(88,166,255,0.15)] active:bg-[rgba(88,166,255,0.2)]',
       secondary:
-        'bg-grok-surface-2 text-grok-text-body hover:bg-grok-surface-3 border border-grok-border',
+        'bg-grok-surface-2 text-grok-text-body hover:bg-grok-surface-3 border border-grok-border hover:text-grok-text-heading',
       danger:
-        'bg-grok-exploit-red text-white hover:bg-red-700 active:bg-red-800',
+        'bg-[rgba(248,81,73,0.1)] text-grok-error border border-[rgba(248,81,73,0.3)] hover:bg-[rgba(248,81,73,0.15)] active:bg-[rgba(248,81,73,0.2)]',
       ghost:
-        'text-grok-text-body hover:bg-grok-surface-2 hover:text-grok-text-heading',
+        'text-grok-text-body border border-grok-border hover:bg-grok-hover hover:text-grok-text-heading',
     };
 
     const sizes = {

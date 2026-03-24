@@ -22,14 +22,14 @@ export function Panel({
   return (
     <div
       className={cn(
-        'bg-grok-surface-1 border border-grok-border rounded-lg overflow-hidden',
+        'bg-grok-surface-1 border border-grok-border rounded-[7px] overflow-hidden',
         className
       )}
       {...props}
     >
       {title && (
-        <div className="flex items-center justify-between px-4 py-3 border-b border-grok-border">
-          <h3 className="text-sm font-semibold text-grok-text-heading uppercase tracking-wide">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-grok-border">
+          <h3 className="text-[11px] font-semibold text-grok-text-muted uppercase tracking-[0.08em]">
             {title}
           </h3>
           {action && <div>{action}</div>}

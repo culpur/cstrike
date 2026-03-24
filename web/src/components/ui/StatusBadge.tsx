@@ -67,7 +67,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium border',
+        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[10px] text-[9px] font-medium border',
         getStatusColor(),
         className
       )}
@@ -76,7 +76,7 @@ export function StatusBadge({
       {showDot && (
         <span
           className={cn(
-            'w-1.5 h-1.5 rounded-full',
+            'w-1 h-1 rounded-full',
             'bg-current',
             getDotAnimation()
           )}

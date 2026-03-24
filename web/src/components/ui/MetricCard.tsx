@@ -40,7 +40,7 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        'bg-grok-surface-1 border rounded-lg p-4 transition-colors hover:bg-grok-surface-2',
+        'bg-grok-surface-1 border rounded-[7px] p-4 transition-colors hover:bg-grok-surface-2',
         variantStyles[variant],
         className
       )}
@@ -48,14 +48,14 @@ export function MetricCard({
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-xs text-grok-text-muted uppercase tracking-wide mb-1">
+          <p className="text-[9px] text-grok-text-muted uppercase tracking-[0.1em] mb-1.5">
             {label}
           </p>
-          <p className="text-2xl font-semibold text-grok-text-heading">
+          <p className="text-[21px] font-bold text-grok-text-heading font-mono leading-none">
             {value}
           </p>
           {trend && trendValue && (
-            <p className={cn('text-xs mt-1', trendStyles[trend])}>
+            <p className={cn('text-[9px] mt-1.5', trendStyles[trend])}>
               {trendValue}
             </p>
           )}

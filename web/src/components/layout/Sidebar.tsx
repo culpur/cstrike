@@ -33,7 +33,6 @@ import { useSystemStore, type OperationMode } from '@stores/systemStore';
 import { useUpdateStore } from '@stores/updateStore';
 import { apiService } from '@services/api';
 import { cn } from '@utils/index';
-import cstrikeIcon from '@assets/cstrike-icon-64.png';
 
 const navigationItems = [
   {
@@ -206,15 +205,30 @@ export function Sidebar() {
       {/* Logo */}
       <div className="h-14 flex items-center justify-between px-3 border-b border-[var(--grok-border)]">
         {!sidebarCollapsed && (
-          <div className="flex items-center gap-2">
-            <img src={cstrikeIcon} alt="CStrike" className="w-10 h-10 rounded ml-1" />
-            <span className="font-bold text-sm text-[var(--grok-text-heading)] tracking-wide">
-              CSTRIKE<span className="text-[var(--grok-exploit-red)]">v2</span>
-            </span>
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-[7px] flex items-center justify-center flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #58a6ff, #39d2c0)' }}
+            >
+              <span className="text-white font-bold text-sm leading-none">C</span>
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="font-bold text-[14px] text-[var(--grok-text-heading)] tracking-wide">
+                CStrike
+              </span>
+              <span className="text-[9px] uppercase tracking-[0.12em] text-[var(--grok-text-muted)] font-medium">
+                Culpur Defense
+              </span>
+            </div>
           </div>
         )}
         {sidebarCollapsed && (
-          <img src={cstrikeIcon} alt="CStrike" className="w-10 h-10 rounded mx-auto" />
+          <div
+            className="w-8 h-8 rounded-[7px] flex items-center justify-center mx-auto"
+            style={{ background: 'linear-gradient(135deg, #58a6ff, #39d2c0)' }}
+          >
+            <span className="text-white font-bold text-sm leading-none">C</span>
+          </div>
         )}
         {!sidebarCollapsed && (
           <button
@@ -241,8 +255,8 @@ export function Sidebar() {
                   className={cn(
                     'w-full flex items-center justify-center p-2.5 rounded transition-all',
                     isActive
-                      ? 'bg-[var(--grok-recon-blue)] text-white glow-blue'
-                      : 'text-[var(--grok-text-muted)] hover:text-[var(--grok-text-body)] hover:bg-[var(--grok-surface-2)]'
+                      ? 'bg-[rgba(88,166,255,0.12)] text-[var(--grok-recon-blue)]'
+                      : 'text-[var(--grok-text-muted)] hover:text-[var(--grok-text-heading)] hover:bg-[var(--grok-hover)]'
                   )}
                   title={item.label}
                 >
@@ -266,7 +280,7 @@ export function Sidebar() {
               return (
                 <div key={section.id}>
                   <div className="px-2 py-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--grok-text-muted)]">
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--grok-text-muted)]">
                       {section.label}
                     </span>
                   </div>
@@ -278,14 +292,14 @@ export function Sidebar() {
                         key={item.id}
                         onClick={() => setActiveView(item.id)}
                         className={cn(
-                          'w-full flex items-center gap-2.5 px-2.5 py-2 rounded transition-all text-left',
+                          'w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[4px] transition-all text-left border-l-2',
                           isActive
-                            ? 'bg-[var(--grok-recon-blue)]/15 text-[var(--grok-recon-blue)] border-l-2 border-[var(--grok-recon-blue)]'
-                            : 'text-[var(--grok-text-body)] hover:bg-[var(--grok-surface-2)] border-l-2 border-transparent'
+                            ? 'bg-[rgba(88,166,255,0.08)] text-[var(--grok-recon-blue)] border-[var(--grok-recon-blue)]'
+                            : 'text-[var(--grok-text-body)] hover:bg-[var(--grok-hover)] hover:text-[var(--grok-text-heading)] border-transparent'
                         )}
                       >
-                        <Icon className="w-4 h-4 flex-shrink-0" />
-                        <span className="text-xs font-medium">{item.label}</span>
+                        <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="text-[12px] font-medium">{item.label}</span>
                       </button>
                     );
                   })}
@@ -345,7 +359,7 @@ export function Sidebar() {
         ) : (
           /* Expanded — 3-segment toggle */
           <div>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--grok-text-muted)] px-0.5">
+            <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--grok-text-muted)] px-0.5">
               Operation Mode
             </span>
             <div className="flex mt-1.5 rounded-md overflow-hidden border border-[var(--grok-border)]">
@@ -385,10 +399,10 @@ export function Sidebar() {
         <div className="flex items-center gap-2.5">
           <div
             className={cn(
-              'w-2.5 h-2.5 rounded-full flex-shrink-0',
+              'w-2 h-2 rounded-full flex-shrink-0',
               connected
-                ? 'bg-[var(--grok-success)] shadow-[0_0_8px_var(--grok-success)]'
-                : 'bg-[var(--grok-error)] shadow-[0_0_8px_var(--grok-error)] animate-pulse'
+                ? 'bg-[var(--grok-success)] shadow-[0_0_6px_rgba(63,185,80,0.2)]'
+                : 'bg-[var(--grok-error)] shadow-[0_0_6px_rgba(248,81,73,0.2)] animate-pulse'
             )}
           />
           {!sidebarCollapsed && (

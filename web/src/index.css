@@ -1,39 +1,39 @@
 @import "tailwindcss";
 
 :root {
-  /* CStrike Dark Ops Theme */
-  --grok-void: #000000;
-  --grok-surface-1: #0a0a0f;
-  --grok-surface-2: #12121a;
-  --grok-surface-3: #1a1a26;
-  --grok-border: #2a2a3a;
-  --grok-border-glow: #3a3a5a;
-  --grok-text-heading: #e8e8f0;
-  --grok-text-body: #b8b8c8;
-  --grok-text-muted: #6a6a80;
-  --grok-hover: #1e1e2e;
-  --grok-rail-bg: #060609;
+  /* CStrike — Culpur Defense Theme */
+  --grok-void: #0d1117;
+  --grok-surface-1: #161b22;
+  --grok-surface-2: #1c2128;
+  --grok-surface-3: #21262d;
+  --grok-border: #30363d;
+  --grok-border-glow: #3b4048;
+  --grok-text-heading: #e6edf3;
+  --grok-text-body: #8b949e;
+  --grok-text-muted: #6e7681;
+  --grok-hover: #1c2128;
+  --grok-rail-bg: #0d1117;
 
-  /* Status — neon accents */
-  --grok-success: #00ff88;
-  --grok-warning: #ffaa00;
-  --grok-error: #ff3344;
-  --grok-info: #4488ff;
+  /* Status — Culpur accents */
+  --grok-success: #3fb950;
+  --grok-warning: #d29922;
+  --grok-error: #f85149;
+  --grok-info: #58a6ff;
 
-  /* Offensive security — signature colors */
-  --grok-exploit-red: #ff2040;
-  --grok-recon-blue: #2266ff;
-  --grok-loot-green: #00cc66;
-  --grok-ai-purple: #8844ff;
-  --grok-scan-cyan: #00ccdd;
-  --grok-crit-red: #ff0033;
+  /* Offensive security — Culpur palette */
+  --grok-exploit-red: #f85149;
+  --grok-recon-blue: #58a6ff;
+  --grok-loot-green: #3fb950;
+  --grok-ai-purple: #bc8cff;
+  --grok-scan-cyan: #39d2c0;
+  --grok-crit-red: #f85149;
 
-  /* Glow effects */
-  --glow-red: 0 0 12px rgba(255, 32, 64, 0.3);
-  --glow-blue: 0 0 12px rgba(34, 102, 255, 0.3);
-  --glow-green: 0 0 12px rgba(0, 255, 136, 0.3);
-  --glow-purple: 0 0 12px rgba(136, 68, 255, 0.3);
-  --glow-cyan: 0 0 12px rgba(0, 204, 221, 0.3);
+  /* Glow effects — subtle, status dots only */
+  --glow-red: 0 0 8px rgba(248, 81, 73, 0.15);
+  --glow-blue: 0 0 8px rgba(88, 166, 255, 0.15);
+  --glow-green: 0 0 8px rgba(63, 185, 80, 0.15);
+  --glow-purple: 0 0 8px rgba(188, 140, 255, 0.15);
+  --glow-cyan: 0 0 8px rgba(57, 210, 192, 0.15);
 
   /* Typography */
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -85,7 +85,7 @@ body {
 }
 
 ::selection {
-  background-color: rgba(34, 102, 255, 0.4);
+  background-color: rgba(88, 166, 255, 0.25);
   color: var(--grok-text-heading);
 }
 
@@ -161,9 +161,9 @@ pre,
 .glow-purple { box-shadow: var(--glow-purple); }
 .glow-cyan { box-shadow: var(--glow-cyan); }
 
-.text-glow-red { text-shadow: 0 0 8px rgba(255, 32, 64, 0.5); }
-.text-glow-green { text-shadow: 0 0 8px rgba(0, 255, 136, 0.5); }
-.text-glow-blue { text-shadow: 0 0 8px rgba(34, 102, 255, 0.5); }
+.text-glow-red { text-shadow: 0 0 8px rgba(248, 81, 73, 0.3); }
+.text-glow-green { text-shadow: 0 0 8px rgba(63, 185, 80, 0.3); }
+.text-glow-blue { text-shadow: 0 0 8px rgba(88, 166, 255, 0.3); }
 
 /* ── Status dot ──────────────────────────────────────────────── */
 
@@ -176,7 +176,7 @@ pre,
 
 .status-dot-running {
   background: var(--grok-success);
-  box-shadow: 0 0 6px var(--grok-success);
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.2);
 }
 
 .status-dot-stopped {
@@ -185,7 +185,7 @@ pre,
 
 .status-dot-error {
   background: var(--grok-error);
-  box-shadow: 0 0 6px var(--grok-error);
+  box-shadow: 0 0 6px rgba(248, 81, 73, 0.2);
   animation: pulse-glow 1.5s ease-in-out infinite;
 }
 
@@ -199,7 +199,7 @@ pre,
 .cs-panel {
   background: var(--grok-surface-1);
   border: 1px solid var(--grok-border);
-  border-radius: 8px;
+  border-radius: 7px;
   transition: border-color 0.2s;
 }
 
@@ -284,33 +284,34 @@ pre,
 }
 
 .cs-btn-primary {
-  background: var(--grok-recon-blue);
-  border-color: var(--grok-recon-blue);
-  color: white;
+  background: rgba(88, 166, 255, 0.1);
+  border-color: rgba(88, 166, 255, 0.3);
+  color: var(--grok-recon-blue);
 }
 
 .cs-btn-primary:hover {
+  background: rgba(88, 166, 255, 0.15);
   box-shadow: var(--glow-blue);
 }
 
 .cs-btn-danger {
-  background: transparent;
-  border-color: var(--grok-error);
+  background: rgba(248, 81, 73, 0.1);
+  border-color: rgba(248, 81, 73, 0.3);
   color: var(--grok-error);
 }
 
 .cs-btn-danger:hover {
-  background: rgba(255, 51, 68, 0.1);
+  background: rgba(248, 81, 73, 0.15);
   box-shadow: var(--glow-red);
 }
 
 .cs-btn-success {
-  background: transparent;
-  border-color: var(--grok-success);
+  background: rgba(63, 185, 80, 0.1);
+  border-color: rgba(63, 185, 80, 0.3);
   color: var(--grok-success);
 }
 
 .cs-btn-success:hover {
-  background: rgba(0, 255, 136, 0.1);
+  background: rgba(63, 185, 80, 0.15);
   box-shadow: var(--glow-green);
 }

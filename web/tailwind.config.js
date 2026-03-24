@@ -8,29 +8,29 @@ export default {
     extend: {
       colors: {
         grok: {
-          void: '#000000',
-          'surface-1': '#0a0a0f',
-          'surface-2': '#12121a',
-          'surface-3': '#1a1a26',
-          border: '#2a2a3a',
-          'border-glow': '#3a3a5a',
-          'text-heading': '#e8e8f0',
-          'text-body': '#b8b8c8',
-          'text-muted': '#6a6a80',
-          hover: '#1e1e2e',
-          'rail-bg': '#060609',
-          // Neon status
-          success: '#00ff88',
-          warning: '#ffaa00',
-          error: '#ff3344',
-          info: '#4488ff',
-          // Offensive security
-          'exploit-red': '#ff2040',
-          'recon-blue': '#2266ff',
-          'loot-green': '#00cc66',
-          'ai-purple': '#8844ff',
-          'scan-cyan': '#00ccdd',
-          'crit-red': '#ff0033',
+          void: '#0d1117',
+          'surface-1': '#161b22',
+          'surface-2': '#1c2128',
+          'surface-3': '#21262d',
+          border: '#30363d',
+          'border-glow': '#3b4048',
+          'text-heading': '#e6edf3',
+          'text-body': '#8b949e',
+          'text-muted': '#6e7681',
+          hover: '#1c2128',
+          'rail-bg': '#0d1117',
+          // Culpur Defense status
+          success: '#3fb950',
+          warning: '#d29922',
+          error: '#f85149',
+          info: '#58a6ff',
+          // Culpur Defense palette
+          'exploit-red': '#f85149',
+          'recon-blue': '#58a6ff',
+          'loot-green': '#3fb950',
+          'ai-purple': '#bc8cff',
+          'scan-cyan': '#39d2c0',
+          'crit-red': '#f85149',
         }
       },
       fontFamily: {
@@ -53,8 +53,8 @@ export default {
           to: { opacity: 1, transform: 'translateY(0)' },
         },
         'border-glow': {
-          '0%, 100%': { borderColor: '#2a2a3a' },
-          '50%': { borderColor: '#3a3a5a' },
+          '0%, 100%': { borderColor: '#30363d' },
+          '50%': { borderColor: '#3b4048' },
         },
       }
     },
