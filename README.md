@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/culpur-cstrike-badge.png)](https://mseep.ai/app/culpur-cstrike)
+
 <p align="center">
   <img src="assets/cstrike-banner-800.png" alt="CStrike" width="600" />
 </p>
